@@ -1,0 +1,22 @@
+title: ".NET Learning Lab"
+description: "Практические уроки C# 13–15 и .NET 9–11"
+lang: ru
+url: "https://boyarincev.github.io"
+baseurl: "/dotnet-learning"
+markdown: kramdown
+highlighter: rouge
+collections:
+  lessons:
+    output: true
+    permalink: /lessons/:name/
+defaults:
+  - scope:
+      path: ""
+      type: lessons
+    values:
+      layout: lesson
+exclude:
+  - README.md
+  - Gemfile
+  - Gemfile.lock
+  - vendor

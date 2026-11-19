@@ -114,8 +114,8 @@ Sum = 60
 using System.Collections.Generic;
 using System.Linq;
 
-static IEnumerable<(string Method, int Count)> GetTopMethods(
-    IEnumerable<string> methods)
+static IEnumerable&lt;(string Method, int Count)&gt; GetTopMethods(
+    IEnumerable&lt;string&gt; methods)
 {
     // Твоя реализация
     throw new NotImplementedException();

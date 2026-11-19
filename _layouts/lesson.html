@@ -1,0 +1,9 @@
+---
+layout: default
+---
+<div class="eyebrow">Урок {{ page.lesson_number }} · {{ page.lesson_date }}</div>
+<h1>{{ page.title | escape }}</h1>
+<p class="lead">{{ page.summary | escape }}</p>
+<div class="chips"><span>{{ page.csharp_feature }}</span><span>{{ page.dotnet_feature }}</span><span>{{ page.series }}</span></div>
+<div class="content prose">{{ content }}</div>
+<div class="next"><h2>Теперь повторение</h2><p>Вопросы по уже изученным фичам имеют постоянные ID. Ответы можно экспортировать для проверки.</p><a class="button primary" href="{{ '/quiz/' | relative_url }}">Открыть квиз →</a></div>

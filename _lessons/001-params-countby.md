@@ -1,6 +1,6 @@
 ---
 lesson_number: 1
-lesson_date: '19 ноября 2026'
+lesson_date: '20 ноября 2026'
 title: 'Коллекции без лишней работы: params и CountBy'
 summary: 'Принимаем произвольное число аргументов и считаем частоты элементов на одном практическом примере.'
 csharp_feature: 'C# 13 · params collections'

@@ -49,10 +49,39 @@
         status.textContent = "Запуск пока недоступен; проверь компилятор.";
       }
     });
+    const copyButton = document.createElement("button");
+    copyButton.type = "button";
+    copyButton.textContent = "Копировать весь код";
+    copyButton.style.cssText = "cursor:pointer;border:1px solid #a4b7bb;border-radius:9px;padding:11px 14px;font-size:13px;background:transparent;color:inherit;";
+    copyButton.addEventListener("click", async () => {
+      const code = window.DotnetBrowserEditor.getCode();
+      try {
+        await navigator.clipboard.writeText(code);
+        status.textContent = "Весь текущий код скопирован.";
+      } catch {
+        status.textContent = "Не удалось скопировать: выдели код в редакторе.";
+      }
+    });
+    const downloadButton = document.createElement("button");
+    downloadButton.type = "button";
+    downloadButton.textContent = "Скачать .cs";
+    downloadButton.style.cssText = "cursor:pointer;border:1px solid #a4b7bb;border-radius:9px;padding:11px 14px;font-size:13px;background:transparent;color:inherit;";
+    downloadButton.addEventListener("click", () => {
+      const blob = new Blob([window.DotnetBrowserEditor.getCode()], {type:"text/plain;charset=utf-8"});
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "Program.cs";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      status.textContent = "Текущий код сохранён в Program.cs.";
+    });
     const shortcut = document.createElement("small");
     shortcut.textContent = "Ctrl+Enter";
     shortcut.style.cssText = "opacity:.7;";
-    bar.append(button, shortcut, status);
+    bar.append(button, copyButton, downloadButton, shortcut, status);
     wrapper.insertAdjacentElement("afterend", bar);
   }
 

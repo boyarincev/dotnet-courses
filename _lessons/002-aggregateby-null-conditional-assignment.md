@@ -177,6 +177,8 @@ Failure[] calls =
 
 <details><summary>Необязательная подсказка</summary><p>После AggregateBy используй OrderByDescending, ThenBy и Take(2). Сначала материализуй результат, затем формируй строку только внутри условного присваивания.</p></details>
 
+**Проверка решения:** кнопка «Запустить и проверить Assert» скомпилирует твой метод вместе с тестами на обычный, пустой и пограничный ввод. При ошибке увидишь нарушенное условие; готовое решение не показывается.
+
 <label for="solution-TASK-002" class="editor-label">Твой код:</label>
 <textarea id="solution-TASK-002" class="code-editor" data-practice-id="TASK-002" spellcheck="false" rows="13">static IReadOnlyList&lt;(string Client, int Count, long TotalBytes)&gt; GetNoisiestClients(
     IEnumerable&lt;Failure&gt; calls, AuditReport? audit)
@@ -185,7 +187,7 @@ Failure[] calls =
     throw new NotImplementedException();
 }</textarea>
 <div class="practice-actions"><button type="button" class="button" data-copy-practice="TASK-002">Скопировать код</button> <button type="button" class="button" data-download-practice="TASK-002">Скачать .cs</button> <span class="practice-feedback" role="status"></span></div>
-<p class="muted">Черновик хранится только в браузере. Отправь код в ChatGPT для проверки. Решение можно запустить в браузерном компиляторе ниже, но автоматической оценки нет.</p>
+<p class="muted">Черновик хранится только в браузере. Отправь код в ChatGPT для проверки. Браузерные Assert проверят корректность результата; оценка подхода и проверка кода остаются в чате.</p>
 
 ## 5. Повторение и официальные источники
 

@@ -58,6 +58,8 @@ jobs:
         run: |
           node --check assets/js/compiler-editor.js
           node --check assets/js/course-runner.js
+          node --check assets/js/practice-tests.js
+          node --check _browser/verify_practice_assertions.cjs
           node --check assets/js/browser-snippets-lesson002.js
           node --check assets/js/browser-snippets-memory001.js
           node --check assets/js/quiz.js
@@ -84,6 +86,34 @@ jobs:
           diff -u "$RUNNER_TEMP/memory001-expected.txt" "$RUNNER_TEMP/memory001-output.txt"
           node -e "const p=require('./assets/js/browser-snippets-memory001.js'); if(p.exampleCount!==1) process.exit(1)"
           node -e "const f=require('fs');if(!f.readFileSync('_memory_lessons/001-allocations-copies-retention.md','utf8').includes(f.readFileSync('_browser/memory-lesson001-program.cs','utf8').trim())) process.exit(1)"
+      - name: Compile practice Assert harnesses and reject intentionally wrong solutions
+        run: |
+          for task in task001 task002 alloc001; do
+            framework=net10.0
+            if test "$task" = task001; then framework=net9.0; fi
+            dotnet new console -n "Practice_${task}" -f "$framework" -o "$RUNNER_TEMP/practice/$task"
+          done
+          node _browser/verify_practice_assertions.cjs "$RUNNER_TEMP/practice"
+          for task in task001 task002 alloc001; do
+            folder="$RUNNER_TEMP/practice/$task"
+            dotnet build "$folder" --no-restore
+            if dotnet run --no-build --project "$folder" > "$folder/run.log" 2>&1; then
+              echo "ERROR: intentionally wrong $task solution passed its assertions"
+              exit 1
+            fi
+            grep -q "TASK-001:" "$folder/run.log" || {
+              if test "$task" != task001; then
+                grep -q "TASK-002:" "$folder/run.log" || grep -q "ALLOC-TASK-001:" "$folder/run.log" || {
+                  cat "$folder/run.log"
+                  exit 1
+                }
+              else
+                cat "$folder/run.log"
+                exit 1
+              fi
+            }
+            echo "$task: invalid solution correctly rejected"
+          done
       - name: Prepare C# 13 browser compiler (cache miss)
         if: steps.wasm9.outputs.cache-hit != 'true'
         run: |
@@ -148,6 +178,9 @@ jobs:
           if test -f "$RUNNER_TEMP/cm/node_modules/codemirror/LICENSE"; then cp "$RUNNER_TEMP/cm/node_modules/codemirror/LICENSE" _site/assets/vendor/codemirror/LICENSE.txt; fi
           test -s _site/assets/js/compiler-editor.js
           test -s _site/assets/js/course-runner.js
+          test -s _site/assets/js/practice-tests.js
+          grep -q 'practice-tests.js' _site/courses/csharp-dotnet-9-11/lessons/001-params-countby/index.html
+          grep -q 'practice-tests.js' _site/courses/memory/lessons/001-allocations-copies-retention/index.html
           grep -q 'course-compiler' _site/courses/csharp-dotnet-9-11/lessons/001-params-countby/index.html
           grep -q 'course-compiler' _site/courses/csharp-dotnet-9-11/lessons/002-aggregateby-null-conditional-assignment/index.html
           grep -q 'course-compiler' _site/courses/memory/lessons/001-allocations-copies-retention/index.html

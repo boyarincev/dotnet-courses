@@ -67,66 +67,24 @@
     }
   }
 
-  function taskProgram001(input) {
-    if (/\b(?:class|struct)\s+Program\b/.test(input)) return input;
-    const code = stripImports(input);
-    return commonImports + "\npublic static class Program\n{\n" +
-      "    public static void Main()\n    {\n" +
-      '        string[] methods = ["get","POST","GET","put","post","DELETE","delete","GET"];\n' +
-      '        foreach (var (method,count) in GetTopMethods(methods)) Console.WriteLine($"{method}: {count}");\n' +
-      '        Console.WriteLine($"Empty: {GetTopMethods(Array.Empty<string>()).Count()}");\n' +
-      "    }\n    // BEGIN TASK-001\n" + code + "\n    // END TASK-001\n}\n";
-  }
-  function taskProgram002(input) {
-    if (/\b(?:class|struct)\s+Program\b/.test(input)) return input;
-    const code = stripImports(input);
-    return commonImports + "\npublic static class Program\n{\n" +
-      "    public static void Main()\n    {\n" +
-      '        Failure[] calls = [new("api-A",500,150),new("API-a",404,50),new("api-b",503,400),new("api-b",200,900),new("api-c",500,400)];\n' +
-      "        var audit = new AuditReport();\n" +
-      "        foreach (var (client,count,bytes) in GetNoisiestClients(calls,audit))\n" +
-      '            Console.WriteLine($"{client}: Count={count}, TotalBytes={bytes}");\n' +
-      '        Console.WriteLine("Audit: " + audit.Text);\n' +
-      '        Console.WriteLine($"Empty: {GetNoisiestClients(Array.Empty<Failure>(), new AuditReport()).Count}");\n' +
-      "    }\n    // BEGIN TASK-002\n" + code + "\n    // END TASK-002\n}\n" +
-      'sealed record Failure(string Client, int StatusCode, long ResponseBytes);\n' +
-      'sealed class AuditReport { public string Text { get; set; } = ""; }\n';
-  }
-
-  const commonImports="using System;\nusing System.Collections.Generic;\nusing System.Linq;\n";
-
-  function taskProgramMemory001(input) {
-    if (/\bclass\s+Program\b/.test(input)) return input;
-    const code = stripImports(input);
-    return commonImports + "\nusing System.Globalization;\n\n" +
-      "public static class Program\n{\n" +
-      "    public static void Main()\n    {\n" +
-      '        string[] rows = ["ORD-1042;paid;1499.90","ORD-1043;new;250.00","ORD-1044;paid;80.00","broken","ORD-1045;paid;not-a-number","ORD-1046;PAID;30.00"];\n' +
-      '        var summary = SummarizePaid(rows);\n' +
-      '        Console.WriteLine($"Paid: {summary.PaidCount}");\n' +
-      '        Console.WriteLine($"Total: {summary.Total.ToString("F2", CultureInfo.InvariantCulture)}");\n' +
-      '        Console.WriteLine($"Empty: {SummarizePaid(Array.Empty<string>()).PaidCount}");\n' +
-      "    }\n    // BEGIN ALLOC-TASK-001\n" + code +
-      "\n    // END ALLOC-TASK-001\n}\n";
-  }
-
-  function stripImports(raw) {
-    return String(raw).replace(/\r\n?/g,"\n").split("\n")
-      .filter(line=>!/^\s*using\s+[\w.]+\s*;\s*$/.test(line)).join("\n").trim();
-  }
   function addTaskButtons() {
     if (!task) return;
     const actions = task.nextElementSibling;
     if (!actions?.classList.contains("practice-actions")) return;
     const load = document.createElement("button");
     load.type = "button"; load.className = "button primary";
-    load.textContent = "▶ Запустить моё решение в браузере";
+    load.textContent = "▶ Запустить и проверить Assert";
     const save = document.createElement("button");
     save.type="button"; save.className="button";
     save.textContent="Сохранить решение из редактора в задание";
     actions.append(load,save);
     load.addEventListener("click",()=>{
-      const code=course==="memory"?taskProgramMemory001(task.value):(lesson===1?taskProgram001(task.value):taskProgram002(task.value));
+      let code;
+      try {
+        if(!window.DotnetPracticeTests?.makeProgram)
+          throw Error("Проверочный модуль не загрузился. Обнови страницу.");
+        code=window.DotnetPracticeTests.makeProgram(course,lesson,task.value);
+      } catch(error) {show(load,error.message);return;}
       send(load,code,true);
     });
     save.addEventListener("click",()=>{

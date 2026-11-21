@@ -112,6 +112,8 @@ Sum = 60
 
 <details><summary>Необязательная подсказка</summary><p>После CountBy подумай о двух ключах сортировки и Take(3).</p></details>
 
+**Проверка решения:** кнопка «Запустить и проверить Assert» скомпилирует твой метод вместе с тестами на обычный, пустой и пограничный ввод. При ошибке увидишь нарушенное условие; готовое решение не показывается.
+
 <label for="solution-TASK-001" class="editor-label">Твой код:</label>
 <textarea id="solution-TASK-001" class="code-editor" data-practice-id="TASK-001" spellcheck="false" rows="12">using System;
 using System.Collections.Generic;
@@ -124,7 +126,7 @@ static IEnumerable&lt;(string Method, int Count)&gt; GetTopMethods(
     throw new NotImplementedException();
 }</textarea>
 <div class="practice-actions"><button type="button" class="button" data-copy-practice="TASK-001">Скопировать код</button> <button type="button" class="button" data-download-practice="TASK-001">Скачать .cs</button> <span class="practice-feedback" role="status"></span></div>
-<p class="muted">Черновик сохраняется только в этом браузере. Для проверки пришли код в ChatGPT. Код можно запустить ниже в браузерном компиляторе; сайт не проверяет задание автоматически.</p>
+<p class="muted">Черновик сохраняется только в этом браузере. Для проверки пришли код в ChatGPT. Код запускается в браузерном компиляторе вместе с Assert. Прохождение тестов не заменяет проверку твоего решения в чате.</p>
 
 ## 5. Что запомнить
 - C# 13 `params` может принимать коллекционные типы помимо массива, в том числе `ReadOnlySpan<T>`.

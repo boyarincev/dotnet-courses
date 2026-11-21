@@ -125,6 +125,8 @@ ORD-1046;PAID;30.00
 
 <details><summary>Необязательная подсказка</summary><p>Достаточно двух локальных переменных: счётчика и суммы. Для каждой строки проверь длину массива полей, статус и результат TryParse. Подумай, какие данные после обработки не нужно сохранять.</p></details>
 
+**Проверка решения:** кнопка «Запустить и проверить Assert» скомпилирует твой метод вместе с тестами на обычный, пустой и пограничный ввод. При ошибке увидишь нарушенное условие; готовое решение не показывается.
+
 <label for="solution-ALLOC-TASK-001" class="editor-label">Твой код:</label>
 <textarea id="solution-ALLOC-TASK-001" class="code-editor" data-practice-id="ALLOC-TASK-001" spellcheck="false" rows="12">static (int PaidCount, decimal Total) SummarizePaid(
     IEnumerable&lt;string&gt; rows)
@@ -133,7 +135,7 @@ ORD-1046;PAID;30.00
     throw new NotImplementedException();
 }</textarea>
 <div class="practice-actions"><button type="button" class="button" data-copy-practice="ALLOC-TASK-001">Скопировать код</button> <button type="button" class="button" data-download-practice="ALLOC-TASK-001">Скачать .cs</button><span class="practice-feedback" role="status"></span></div>
-<p class="muted">Черновик сохраняется только в браузере. Кнопка «Запустить моё решение» передаст реализацию в WebAssembly-компилятор вместе с входными данными. Там можно исправлять код и повторно запускать его отдельной кнопкой «Запустить мой код». Для проверки результата и рекомендаций отправь код в чат.</p>
+<p class="muted">Черновик сохраняется только в браузере. Кнопка «Запустить и проверить Assert» передаст реализацию в WebAssembly-компилятор вместе с тестами. Там можно исправлять код и повторно запускать его отдельной кнопкой «Запустить мой код». Для проверки результата и рекомендаций отправь код в чат.</p>
 
 ## Что запомнить
 

@@ -1,7 +1,7 @@
 ---
 lesson_number: 2
 lesson_date: '21 ноября 2026'
-title: 'Сводка запросов: AggregateBy и null-conditional assignment'
+title: 'Агрегация HTTP-запросов: AggregateBy и null-conditional assignment'
 summary: 'Агрегируем HTTP-метрики по маршрутам и создаём отчёт только при наличии получателя.'
 csharp_feature: 'C# 14 · null-conditional assignment'
 dotnet_feature: '.NET 9 · AggregateBy'
@@ -12,7 +12,7 @@ browser_runtime: '10'
 
 ## Зачем это нужно
 
-В [уроке №1]({{ '/courses/whats-new/lessons/001-params-countby/' | relative_url }}) мы использовали `CountBy` для подсчёта HTTP-методов. Теперь нужна сводка по маршрутам: **количество запросов и общее время**. Кроме того, диагностический отчёт нужно формировать лишь при наличии объекта, в который его записывать.
+В [уроке №1]({{ '/courses/csharp-dotnet-9-11/lessons/001-params-countby/' | relative_url }}) мы использовали `CountBy` для подсчёта HTTP-методов. Теперь нужна сводка по маршрутам: **количество запросов и общее время**. Кроме того, диагностический отчёт нужно формировать лишь при наличии объекта, в который его записывать.
 
 ## 1. .NET 9: Enumerable.AggregateBy
 

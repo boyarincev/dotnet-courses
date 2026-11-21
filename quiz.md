@@ -1,9 +1,9 @@
 ---
 layout: default
 title: Повторение
-permalink: /courses/whats-new/quiz/
+permalink: /courses/csharp-dotnet-9-11/quiz/
 ---
-<div class="eyebrow"><a href="{{ '/courses/whats-new/' | relative_url }}">C# 13–15 и .NET 9–11</a> · интервальное повторение</div>
+<div class="eyebrow"><a href="{{ '/courses/csharp-dotnet-9-11/' | relative_url }}">C# 13–15 и .NET 9–11</a> · интервальное повторение</div>
 <h1>Вспоминай, а не перечитывай.</h1>
 <p class="lead">Короткие вопросы по уже изученному. Каждый имеет собственный ID, поэтому сложный аспект можно повторять чаще, чем простые.</p>
 <div class="notice"><strong>Ответы остаются у тебя.</strong> Черновики сохраняются только в браузере. Копируй или скачивай ответы для отправки в ChatGPT, где я их проверю и обновлю личный журнал.</div>

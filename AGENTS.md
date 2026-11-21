@@ -20,8 +20,8 @@
 | Раздел | Источник в репозитории | Путь на сайте |
 | --- | --- | --- |
 | Выбор курсов | index.md | /dotnet-courses/ |
-| C# 13–15 и .NET 9–11 | _lessons/NNN-slug.md | /dotnet-courses/courses/whats-new/lessons/NNN-slug/ |
-| Квиз этого курса | _data/questions.yml + quiz.md | /dotnet-courses/courses/whats-new/quiz/ |
+| C# 13–15 и .NET 9–11 | _lessons/NNN-slug.md | /dotnet-courses/courses/csharp-dotnet-9-11/lessons/NNN-slug/ |
+| Квиз этого курса | _data/questions.yml + quiz.md | /dotnet-courses/courses/csharp-dotnet-9-11/quiz/ |
 | Память и аллокации .NET | _memory_lessons/NNN-slug.md | /dotnet-courses/courses/memory/lessons/NNN-slug/ |
 | Квиз по памяти | _data/memory_questions.yml + courses/memory/quiz.md | /dotnet-courses/courses/memory/quiz/ |
 | Общая навигация и урок | _layouts/default.html, _layouts/lesson.html | общие шаблоны |
@@ -30,7 +30,7 @@
 
 - Репозиторий: https://github.com/boyarincev/dotnet-courses (ветка main).
 - Публичный адрес: https://boyarincev.net/dotnet-courses/ . Для ссылок внутри Jekyll использовать Liquid `relative_url`, а не жёстко прописывать старые адреса.
-- **Текущая** папка URL первого курса называется `whats-new`, хотя название обсуждалось. Не переименовывать маршруты мимоходом: при переименовании обновлять _config.yml, страницы каталога, ссылки в уроках/квизах, CI и навигацию; проверять все URL.
+- Публичный адрес первого курса — `/courses/csharp-dotnet-9-11/`. Старые `/courses/whats-new/` и `/lessons/` оставлены только как перенаправления; новые внутренние ссылки должны вести на новый адрес. Внутреннее значение `course: whats-new` сохранено ради браузерных черновиков; оно не влияет на адрес.
 - В _config.yml заданы две Jekyll collections: `lessons` и `memory_lessons`. Не складывать новые уроки второго курса в первую коллекцию.
 - Журнал и правила курса нововведений: https://docs.google.com/document/d/1Z-hd2DbED0K48V5c0lrUDMBEYk0u6RjrsHGkuEvWOp8/edit .
 - Программа курса памяти (45 основных тем, 9 по readonly, 8 точек закрепления и углубления): https://docs.google.com/document/d/1K-N5uCScMxR-Y6r5xuPiOPGBm1U96L8Gj9BFJBLd1DY/edit .

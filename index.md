@@ -10,7 +10,7 @@ permalink: /
 </div>
 <h2>Выбери курс</h2>
 <div class="course-grid">
-  <a class="course-card" href="{{ '/courses/whats-new/' | relative_url }}">
+  <a class="course-card" href="{{ '/courses/csharp-dotnet-9-11/' | relative_url }}">
     <span class="course-number">КУРС 01 · НОВОЕ В ПЛАТФОРМЕ</span>
     <h3>C# 13–15 и .NET 9–11</h3>
     <p>Полезные нововведения языка и библиотек, сгруппированные в связанные учебные цепочки.</p>

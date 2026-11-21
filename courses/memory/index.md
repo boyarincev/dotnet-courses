@@ -9,7 +9,7 @@ permalink: /courses/memory/
 <div class="course-nav">
 <a class="button primary" href="{{ '/courses/memory/lessons/001-allocations-copies-retention/' | relative_url }}">Начать с первого урока</a>
 <a class="button" href="{{ '/courses/memory/quiz/' | relative_url }}">Квиз и повторение</a>
-<a class="button" href="{{ '/courses/whats-new/' | relative_url }}">Связанный курс: новинки .NET</a>
+<a class="button" href="{{ '/courses/csharp-dotnet-9-11/' | relative_url }}">Связанный курс: новинки .NET</a>
 </div>
 <div class="features"><div><b>До 30 минут</b><p>Одна идея на занятие вместе с практикой и повторением.</p></div><div><b>Свой код</b><p>Небольшая задача на реальном примере.</p></div><div><b>Цепочки тем</b><p>Возвращаемся к знакомому коду в новых условиях.</p></div><div><b>Измерения</b><p>Проверяем, что оптимизация действительно полезна.</p></div></div>
 <h2>Опубликованные уроки · {{ site.memory_lessons.size }}</h2>

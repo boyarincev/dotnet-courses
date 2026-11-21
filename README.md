@@ -7,8 +7,8 @@ Jekyll + GitHub Pages · репозиторий **boyarincev/dotnet-courses**.
 | Раздел | Jekyll-источник | Публичный адрес |
 | --- | --- | --- |
 | Каталог курсов | `index.md` | `/` |
-| Новое: C# 13–15 и .NET 9–11 | `_lessons/` | `/courses/whats-new/lessons/NNN-slug/` |
-| Повторение по новинкам | `quiz.md`, `_data/questions.yml` | `/courses/whats-new/quiz/` |
+| Новое: C# 13–15 и .NET 9–11 | `_lessons/` | `/courses/csharp-dotnet-9-11/lessons/NNN-slug/` |
+| Повторение по новинкам | `quiz.md`, `_data/questions.yml` | `/courses/csharp-dotnet-9-11/quiz/` |
 | Память и аллокации | `_memory_lessons/` | `/courses/memory/lessons/NNN-slug/` |
 | Повторение по памяти | `courses/memory/quiz.md`, `_data/memory_questions.yml` | `/courses/memory/quiz/` |
 

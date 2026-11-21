@@ -8,7 +8,7 @@ highlighter: rouge
 collections:
   lessons:
     output: true
-    permalink: /courses/whats-new/lessons/:name/
+    permalink: /courses/csharp-dotnet-9-11/lessons/:name/
   memory_lessons:
     output: true
     permalink: /courses/memory/lessons/:name/

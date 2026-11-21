@@ -7,7 +7,7 @@ permalink: /about/
 <h1>Учиться, а не коллекционировать фичи.</h1>
 <p class="lead">Практические курсы для опытного C#/.NET-разработчика. У каждого курса — собственные уроки, задачи, постоянные ID вопросов и квиз. Между связанными уроками есть перекрёстные ссылки.</p>
 <div class="course-grid">
-<a class="course-card" href="{{ '/courses/whats-new/' | relative_url }}"><span class="course-number">КУРС 01</span><h3>C# 13–15 и .NET 9–11</h3><p>Новые полезные возможности языка и платформы.</p><strong>Перейти ↗</strong></a>
+<a class="course-card" href="{{ '/courses/csharp-dotnet-9-11/' | relative_url }}"><span class="course-number">КУРС 01</span><h3>C# 13–15 и .NET 9–11</h3><p>Новые полезные возможности языка и платформы.</p><strong>Перейти ↗</strong></a>
 <a class="course-card" href="{{ '/courses/memory/' | relative_url }}"><span class="course-number">КУРС 02</span><h3>Память и аллокации</h3><p>Уменьшаем выделения памяти, копии и лишнее удержание данных.</p><strong>Перейти ↗</strong></a>
 </div>
 <div class="prose">

@@ -148,16 +148,16 @@ jobs:
           if test -f "$RUNNER_TEMP/cm/node_modules/codemirror/LICENSE"; then cp "$RUNNER_TEMP/cm/node_modules/codemirror/LICENSE" _site/assets/vendor/codemirror/LICENSE.txt; fi
           test -s _site/assets/js/compiler-editor.js
           test -s _site/assets/js/course-runner.js
-          grep -q 'course-compiler' _site/courses/whats-new/lessons/001-params-countby/index.html
-          grep -q 'course-compiler' _site/courses/whats-new/lessons/002-aggregateby-null-conditional-assignment/index.html
+          grep -q 'course-compiler' _site/courses/csharp-dotnet-9-11/lessons/001-params-countby/index.html
+          grep -q 'course-compiler' _site/courses/csharp-dotnet-9-11/lessons/002-aggregateby-null-conditional-assignment/index.html
           grep -q 'course-compiler' _site/courses/memory/lessons/001-allocations-copies-retention/index.html
           test -s _site/courses/memory/quiz/index.html
-          test -s _site/courses/whats-new/quiz/index.html
+          test -s _site/courses/csharp-dotnet-9-11/quiz/index.html
           test -s _site/courses/memory/index.html
-          test -s _site/courses/whats-new/index.html
+          test -s _site/courses/csharp-dotnet-9-11/index.html
           test -s _site/sw.js
           node --check _site/sw.js
-          grep -q 'id="page-editor-run"' _site/courses/whats-new/lessons/001-params-countby/index.html
+          grep -q 'id="page-editor-run"' _site/courses/csharp-dotnet-9-11/lessons/001-params-countby/index.html
           grep -q 'id="page-editor-run"' _site/courses/memory/lessons/001-allocations-copies-retention/index.html
           grep -q "$GITHUB_SHA" _site/index.html
           grep -q "$GITHUB_SHA" _site/sw.js

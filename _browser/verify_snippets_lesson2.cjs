@@ -23,7 +23,7 @@ const expected=[
 for(let i=0;i<exampleCount;i++){
   const source=makeRunnable(snippets[i],i);
   fs.writeFileSync(path.join(project,"Program.cs"),source,"utf8");
-  const build=cp.spawnSync("dotnet",["build","--no-restore","--project",project],
+  const build=cp.spawnSync("dotnet",["build",project,"--no-restore"],
     {encoding:"utf8",timeout:120000});
   if(build.status!==0)
     throw Error("Lesson 002 snippet "+(i+1)+" did not compile:\n"+build.stdout+"\n"+build.stderr+"\n"+source);

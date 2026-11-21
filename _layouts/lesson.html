@@ -35,7 +35,6 @@ layout: default
 {% elsif page.course != 'memory' and page.lesson_number == 2 %}
 <script defer src="{{ '/assets/js/browser-snippets-lesson002.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
 {% endif %}
-<script defer src="{{ '/assets/js/practice-tests.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
 <script defer src="{{ '/assets/js/course-runner.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
 {% endif %}
 <div class="next"><h2>Теперь повторение</h2><p>Вопросы этого курса имеют собственные постоянные ID. Ответы можно экспортировать для проверки — без публикации личной истории.</p><a class="button primary" href="{{ quiz_url | relative_url }}">Открыть квиз курса →</a><a class="button" href="{{ course_url | relative_url }}">К списку уроков</a></div>

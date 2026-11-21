@@ -125,7 +125,59 @@ ORD-1046;PAID;30.00
 
 <details><summary>Необязательная подсказка</summary><p>Достаточно двух локальных переменных: счётчика и суммы. Для каждой строки проверь длину массива полей, статус и результат TryParse. Подумай, какие данные после обработки не нужно сохранять.</p></details>
 
-**Проверка решения:** кнопка «Запустить и проверить Assert» скомпилирует твой метод вместе с тестами на обычный, пустой и пограничный ввод. При ошибке увидишь нарушенное условие; готовое решение не показывается.
+**Проверка решения:** кнопка «Запустить и проверить Assert» откроет в браузерном редакторе полный `Program.cs`: твой метод, тестовые данные и видимые C#-проверки `Assert` на обычный, пустой и пограничный ввод. При ошибке увидишь нарушенное условие; готовое решение не показывается.
+
+<script type="text/plain" id="practice-program-template">
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+
+public static class Program
+{
+    public static void Main()
+    {
+        string[] rows =
+        [
+            "ORD-1042;paid;1499.90", "ORD-1043;new;250.00",
+            "ORD-1044;paid;80.00", "broken",
+            "ORD-1045;paid;not-a-number", "ORD-1046;PAID;30.00"
+        ];
+        var summary = SummarizePaid(rows);
+        Assert(summary.PaidCount == 2 && summary.Total == 1579.90m,
+            "Два оплаченных заказа дают сумму 1579.90");
+
+        var empty = SummarizePaid(Array.Empty<string>());
+        Assert(empty.PaidCount == 0 && empty.Total == 0m,
+            "Пустой ввод возвращает (0, 0)");
+
+        var invalid = SummarizePaid(
+            ["broken", "ORD-3;paid;not-a-number", "ORD-4;paid;4;extra"]);
+        Assert(invalid.PaidCount == 0 && invalid.Total == 0m,
+            "Некорректные записи пропускаются");
+
+        var strict = SummarizePaid(["ORD-1;PAID;10.00", "ORD-2;paid;5.25"]);
+        Assert(strict.PaidCount == 1 && strict.Total == 5.25m,
+            "Статус paid учитывает регистр");
+
+        var mixed = SummarizePaid(
+            ["ORD-5;paid;-20.50", "ORD-6;new;999.00", "ORD-7;paid;30.75"]);
+        Assert(mixed.PaidCount == 2 && mixed.Total == 10.25m,
+            "Суммы decimal и фильтрация статуса");
+
+        Console.WriteLine("Все проверки пройдены");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException("❌ ALLOC-TASK-001: " + message);
+        Console.WriteLine("✓ " + message);
+    }
+
+    // BEGIN ALLOC-TASK-001
+    // INSERT_SOLUTION_HERE
+    // END ALLOC-TASK-001
+}
+</script>
 
 <label for="solution-ALLOC-TASK-001" class="editor-label">Твой код:</label>
 <textarea id="solution-ALLOC-TASK-001" class="code-editor" data-practice-id="ALLOC-TASK-001" spellcheck="false" rows="12">static (int PaidCount, decimal Total) SummarizePaid(

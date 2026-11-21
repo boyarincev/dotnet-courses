@@ -177,7 +177,76 @@ Failure[] calls =
 
 <details><summary>Необязательная подсказка</summary><p>После AggregateBy используй OrderByDescending, ThenBy и Take(2). Сначала материализуй результат, затем формируй строку только внутри условного присваивания.</p></details>
 
-**Проверка решения:** кнопка «Запустить и проверить Assert» скомпилирует твой метод вместе с тестами на обычный, пустой и пограничный ввод. При ошибке увидишь нарушенное условие; готовое решение не показывается.
+**Проверка решения:** кнопка «Запустить и проверить Assert» откроет в браузерном редакторе полный `Program.cs`: твой метод, тестовые данные и видимые C#-проверки `Assert` на обычный, пустой и пограничный ввод. При ошибке увидишь нарушенное условие; готовое решение не показывается.
+
+<script type="text/plain" id="practice-program-template">
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+public static class Program
+{
+    public static void Main()
+    {
+        Failure[] calls =
+        [
+            new("api-A", 500, 150), new("API-a", 404, 50),
+            new("api-b", 503, 400), new("api-b", 200, 900),
+            new("api-c", 500, 400)
+        ];
+
+        var audit = new AuditReport();
+        var actual = GetNoisiestClients(calls, audit);
+
+        Assert(actual.Count == 2, "Вернуть двух клиентов");
+        Assert(actual[0].Count == 1 && actual[0].TotalBytes == 400
+            && string.Equals(actual[0].Client, "api-b", StringComparison.OrdinalIgnoreCase),
+            "Первый клиент — api-b с одной ошибкой и 400 байтами");
+        Assert(actual[1].Count == 1 && actual[1].TotalBytes == 400
+            && string.Equals(actual[1].Client, "api-c", StringComparison.OrdinalIgnoreCase),
+            "При равной сумме api-b идёт перед api-c");
+        Assert(audit.Text == "api-b=400; api-c=400",
+            "Отчёт записан в audit.Text");
+
+        var emptyAudit = new AuditReport { Text = "старый отчёт" };
+        Assert(GetNoisiestClients(Array.Empty<Failure>(), emptyAudit).Count == 0
+            && emptyAudit.Text == "",
+            "Пустой ввод возвращает пустой результат и очищает отчёт");
+
+        Failure[] mixed =
+        [
+            new("Api-X", 500, 300), new("API-x", 404, 50),
+            new("small", 500, 10), new("ignored", 200, 9000)
+        ];
+        var withoutAudit = GetNoisiestClients(mixed, null);
+        Assert(withoutAudit.Count == 2 && withoutAudit[0].Count == 2
+            && withoutAudit[0].TotalBytes == 350
+            && string.Equals(withoutAudit[0].Client, "Api-X", StringComparison.OrdinalIgnoreCase),
+            "Склеить Api-X и API-x, поддержать audit=null");
+        Assert(withoutAudit[1].TotalBytes == 10
+            && string.Equals(withoutAudit[1].Client, "small", StringComparison.OrdinalIgnoreCase),
+            "Ответ 200 не учитывается при агрегации ошибок");
+
+        Console.WriteLine("Все проверки пройдены");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException("❌ TASK-002: " + message);
+        Console.WriteLine("✓ " + message);
+    }
+
+    // BEGIN TASK-002
+    // INSERT_SOLUTION_HERE
+    // END TASK-002
+}
+
+sealed record Failure(string Client, int StatusCode, long ResponseBytes);
+sealed class AuditReport
+{
+    public string Text { get; set; } = "";
+}
+</script>
 
 <label for="solution-TASK-002" class="editor-label">Твой код:</label>
 <textarea id="solution-TASK-002" class="code-editor" data-practice-id="TASK-002" spellcheck="false" rows="13">static IReadOnlyList&lt;(string Client, int Count, long TotalBytes)&gt; GetNoisiestClients(

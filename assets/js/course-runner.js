@@ -4,6 +4,33 @@
  */
 (() => {
   "use strict";
+
+  // Only assembles visible C# from the lesson with the student's method.
+  // All Assert checks are plain C# in each lesson's practice-program-template.
+  function buildTaskProgram(template, source, taskId) {
+    const text = String(template).trim();
+    const value = String(source).replace(/\r\n?/g, "\n");
+    const marker = "// INSERT_SOLUTION_HERE";
+    if (text.split(marker).length !== 2 ||
+        !text.includes("// BEGIN " + taskId) ||
+        !text.includes("// END " + taskId)) {
+      throw Error("Проверочный C#-пример урока отсутствует или повреждён.");
+    }
+    if (/\b(?:class|struct)\s+Program\b/.test(value)) {
+      throw Error("В поле задания нужна только реализация метода, без собственного Program. Для полного файла используй редактор ниже.");
+    }
+    const importPattern = /^\s*using\s+[\w.]+\s*;\s*$/;
+    const lines = value.split("\n");
+    const extraImports = [...new Set(lines.filter(line => importPattern.test(line)).map(line => line.trim()))]
+      .filter(line => !text.includes(line));
+    const body = lines.filter(line => !importPattern.test(line)).join("\n").trim();
+    if (!body) throw Error("Сначала напиши метод в поле задания.");
+    return (extraImports.length ? extraImports.join("\n") + "\n" : "") +
+      text.replace(marker, body) + "\n";
+  }
+  // Expose the same assembly routine to CI without creating a separate JS test engine.
+  if (typeof module === "object" && module.exports) module.exports = {buildTaskProgram};
+  if (typeof document === "undefined") return;
   const frame = document.getElementById("course-compiler");
   if (!frame) return;
   const lesson = Number(frame.dataset.lesson);
@@ -81,9 +108,8 @@
     load.addEventListener("click",()=>{
       let code;
       try {
-        if(!window.DotnetPracticeTests?.makeProgram)
-          throw Error("Проверочный модуль не загрузился. Обнови страницу.");
-        code=window.DotnetPracticeTests.makeProgram(course,lesson,task.value);
+        const template = document.getElementById("practice-program-template")?.textContent;
+        code = buildTaskProgram(template, task.value, taskId);
       } catch(error) {show(load,error.message);return;}
       send(load,code,true);
     });
@@ -94,7 +120,7 @@
       const start=code.indexOf("// BEGIN "+taskId);
       const stop=code.indexOf("// END "+taskId);
       if(start<0 || stop<=start){
-        show(save,"Сейчас в редакторе открыт обычный пример, а не решение задания. Чтобы сохранить весь пример, используй кнопку «Скачать .cs» в редакторе. Для переноса решения сначала нажми «Запустить моё решение в браузере».");
+        show(save,"Сейчас в редакторе открыт обычный пример, а не решение задания. Чтобы сохранить весь пример, используй кнопку «Скачать .cs» в редакторе. Для переноса решения сначала нажми «Запустить и проверить Assert».");
         return;
       }
       const imports=[...code.matchAll(/^\s*using\s+[\w.]+\s*;\s*$/gm)].map(x=>x[0].trim());

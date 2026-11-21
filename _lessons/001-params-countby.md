@@ -112,7 +112,56 @@ Sum = 60
 
 <details><summary>Необязательная подсказка</summary><p>После CountBy подумай о двух ключах сортировки и Take(3).</p></details>
 
-**Проверка решения:** кнопка «Запустить и проверить Assert» скомпилирует твой метод вместе с тестами на обычный, пустой и пограничный ввод. При ошибке увидишь нарушенное условие; готовое решение не показывается.
+**Проверка решения:** кнопка «Запустить и проверить Assert» откроет в браузерном редакторе полный `Program.cs`: твой метод, тестовые данные и видимые C#-проверки `Assert` на обычный, пустой и пограничный ввод. При ошибке увидишь нарушенное условие; готовое решение не показывается.
+
+<script type="text/plain" id="practice-program-template">
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+public static class Program
+{
+    public static void Main()
+    {
+        string[] methods = ["get", "POST", "GET", "put", "post", "DELETE", "delete", "GET"];
+        var actual = GetTopMethods(methods).ToArray();
+
+        Assert(actual.Length == 3, "Вернуть три самых частых метода");
+        Assert(actual[0].Count == 3
+            && string.Equals(actual[0].Method, "get", StringComparison.OrdinalIgnoreCase),
+            "Объединить GET и get: 3 обращения");
+        Assert(actual[1].Count == 2 && actual[2].Count == 2
+            && string.Equals(actual[1].Method, "DELETE", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(actual[2].Method, "POST", StringComparison.OrdinalIgnoreCase),
+            "При равной частоте отсортировать методы по имени");
+
+        Assert(!GetTopMethods(Array.Empty<string>()).Any(),
+            "Пустой ввод возвращает пустой результат");
+
+        var mixed = GetTopMethods(["X", "x", "y"]).ToArray();
+        Assert(mixed.Length == 2 && mixed[0].Count == 2
+            && string.Equals(mixed[0].Method, "x", StringComparison.OrdinalIgnoreCase),
+            "Имена X и x считаются одним методом");
+
+        var tie = GetTopMethods(["z", "A", "Z", "a"]).ToArray();
+        Assert(tie.Length == 2 && tie[0].Count == 2 && tie[1].Count == 2
+            && string.Equals(tie[0].Method, "a", StringComparison.OrdinalIgnoreCase),
+            "При равной частоте имя A идёт перед Z");
+
+        Console.WriteLine("Все проверки пройдены");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException("❌ TASK-001: " + message);
+        Console.WriteLine("✓ " + message);
+    }
+
+    // BEGIN TASK-001
+    // INSERT_SOLUTION_HERE
+    // END TASK-001
+}
+</script>
 
 <label for="solution-TASK-001" class="editor-label">Твой код:</label>
 <textarea id="solution-TASK-001" class="code-editor" data-practice-id="TASK-001" spellcheck="false" rows="12">using System;

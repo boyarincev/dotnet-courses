@@ -12,7 +12,7 @@ const snippets=[...markdown.matchAll(fence)].map(m=>m[1]);
 if(snippets.length!==exampleCount)
   throw Error("Expected "+exampleCount+" snippets, found "+snippets.length);
 const expected=[
-  "/orders: 2/100\n",
+  "/orders: 3/190\n",
   "Audit: ready\n",
   "Builds when null: 0\nBuilds when present: 1\nAudit: ready\n",
   "/health: Count=1, TotalMs=5\n/orders: Count=4, TotalMs=220\nBuilds when null: 0\nBuilds when present: 1\nAudit: /health=1/5; /orders=4/220\n",

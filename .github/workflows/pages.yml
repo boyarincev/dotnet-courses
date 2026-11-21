@@ -31,6 +31,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Check editor JavaScript syntax
+        run: |
+          node --check assets/js/compiler-editor.js
+          node --check assets/js/course-runner.js
+          node --check assets/js/browser-snippets-lesson002.js
       - name: Verify lesson C# examples on .NET 9 and .NET 10
         run: |
           dotnet new console -n Lesson001Smoke -f net9.0 -o "$RUNNER_TEMP/lesson001smoke"
@@ -84,6 +89,7 @@ jobs:
           cp "$RUNNER_TEMP/cm/node_modules/codemirror/addon/hint/show-hint.css" _site/assets/vendor/codemirror/addon/hint/
           cp "$RUNNER_TEMP/cm/node_modules/codemirror/addon/edit/matchbrackets.js" _site/assets/vendor/codemirror/addon/edit/
           cp "$RUNNER_TEMP/cm/node_modules/codemirror/addon/edit/closebrackets.js" _site/assets/vendor/codemirror/addon/edit/
+          if test -f "$RUNNER_TEMP/cm/node_modules/codemirror/LICENSE"; then cp "$RUNNER_TEMP/cm/node_modules/codemirror/LICENSE" _site/assets/vendor/codemirror/LICENSE.txt; fi
           test -s _site/assets/js/compiler-editor.js
           test -s _site/assets/js/course-runner.js
           grep -q 'course-compiler' _site/lessons/001-params-countby/index.html

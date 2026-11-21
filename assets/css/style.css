@@ -33,3 +33,12 @@ h1,h2,h3{line-height:1.2;letter-spacing:-.045em}h1{font-size:clamp(35px,6vw,60px
 .live-editor-toolbar .button{margin:4px}
 .live-editor-toolbar .practice-feedback{display:block;flex-basis:100%;margin:2px 4px 0}
 .draft-status{color:var(--muted);font-size:13px;line-height:1.5;margin:7px 0 15px}
+
+/* Persistent FSRS study mode */
+.question-status{font-size:13px;color:var(--muted);margin:0 0 12px}
+.question-grade-actions{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 7px}
+.question-grade-actions .button{margin:2px 4px 3px 0;padding:8px 13px}
+.question-grade-actions .button:disabled{opacity:.50;cursor:not-allowed;transform:none}
+.quiz-progress-actions{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 8px}
+.quiz-toolbar>div{display:flex;gap:6px;flex-wrap:wrap}
+@media(max-width:650px){.quiz-toolbar{align-items:flex-start;flex-direction:column}}

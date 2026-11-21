@@ -85,7 +85,9 @@ jobs:
           node -e "const f=require('fs');if(!f.readFileSync('_memory_lessons/001-allocations-copies-retention.md','utf8').includes(f.readFileSync('_browser/memory-lesson001-program.cs','utf8').trim())) process.exit(1)"
       - name: Prepare C# 13 browser compiler (cache miss)
         if: steps.wasm9.outputs.cache-hit != 'true'
-        run: python3 _browser/prepare_compiler.py 9 _compiler_src/CSharpCompilerWasm
+        run: |
+          cp -a _compiler_src _compiler_src_net9
+          python3 _browser/prepare_compiler.py 9 _compiler_src_net9/CSharpCompilerWasm
       - name: Prepare C# 14 browser compiler (cache miss)
         if: steps.wasm10.outputs.cache-hit != 'true'
         run: |
@@ -94,8 +96,8 @@ jobs:
       - name: Build C# 13 browser compiler on .NET 9 (cache miss)
         if: steps.wasm9.outputs.cache-hit != 'true'
         run: |
-          dotnet publish _compiler_src/CSharpCompilerWasm/CSharpCompilerWasm.csproj --configuration Release --output "$RUNNER_TEMP/compiler-net9"
-          cp _compiler_src/LICENSE "$RUNNER_TEMP/compiler-net9/LICENSE.txt"
+          dotnet publish _compiler_src_net9/CSharpCompilerWasm/CSharpCompilerWasm.csproj --configuration Release --output "$RUNNER_TEMP/compiler-net9"
+          cp _compiler_src_net9/LICENSE "$RUNNER_TEMP/compiler-net9/LICENSE.txt"
       - name: Build C# 14 browser compiler on .NET 10 (cache miss)
         if: steps.wasm10.outputs.cache-hit != 'true'
         run: |

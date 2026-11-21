@@ -26,6 +26,13 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
+      - name: Smoke test lesson 001 C# 13 and CountBy
+        run: |
+          dotnet new console -n Lesson001Smoke -f net9.0 -o "$RUNNER_TEMP/lesson001smoke"
+          cp _browser/lesson001-program.cs "$RUNNER_TEMP/lesson001smoke/Program.cs"
+          dotnet run --project "$RUNNER_TEMP/lesson001smoke" > "$RUNNER_TEMP/lesson001-output.txt"
+          printf 'HTTP methods\nGET: 3\nPOST: 2\nPUT: 1\nSum = 60\n' > "$RUNNER_TEMP/lesson001-expected.txt"
+          diff -u "$RUNNER_TEMP/lesson001-expected.txt" "$RUNNER_TEMP/lesson001-output.txt"
       - name: Adapt browser compiler for lesson 001
         run: python3 _browser/prepare_compiler.py
       - name: Build real C# compiler for WebAssembly

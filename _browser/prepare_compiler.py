@@ -23,6 +23,10 @@ for pattern, value in replacements:
     source, count = re.subn(pattern, lambda _: value, source, count=1, flags=re.DOTALL)
     if count != 1:
         raise RuntimeError("Upstream compiler source changed; cannot safely patch: " + pattern)
+needle = '            var result = await CompileCSharpCode(sourceCode);'
+if source.count(needle) != 1:
+    raise RuntimeError("Upstream compilation entry point changed")
+source = source.replace(needle, '            // Fix editor binding: when full source is visible, use the current text.\n            if (showFullCode)\n            {\n                sourceCode = displayCode;\n            }\n\n            var result = await CompileCSharpCode(sourceCode);')
 razor.write_text(source, encoding="utf-8")
 
 index = html.read_text(encoding="utf-8")

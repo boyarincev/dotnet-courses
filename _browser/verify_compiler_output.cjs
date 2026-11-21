@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const { inflateRawSync } = require("node:zlib");
 const { chromium } = require("playwright");
 
 const site = process.argv[2];
@@ -69,6 +70,82 @@ async function checkFailure(page, expectedStdout, error) {
     assert.equal(await output.locator("input").count(), 0);
 }
 
+function readLengthDelimitedFields(bytes) {
+    const fields = new Map();
+    let offset = 0;
+
+    function readVarint() {
+        let value = 0;
+        for (let shift = 0; shift < 28 && offset < bytes.length; shift += 7) {
+            const byte = bytes[offset++];
+            value += (byte & 0x7f) * 2 ** shift;
+            if (byte < 0x80) return value;
+        }
+        throw new Error("Invalid Protobuf varint in .NET Lab link");
+    }
+
+    while (offset < bytes.length) {
+        const tag = readVarint();
+        assert.equal(tag % 8, 2, "Expected a length-delimited Protobuf field");
+        const length = readVarint();
+        assert.ok(length <= bytes.length - offset, "Truncated Protobuf field");
+        fields.set(Math.floor(tag / 8), bytes.subarray(offset, offset + length));
+        offset += length;
+    }
+    return fields;
+}
+
+async function verifyDotnetLabLink(browser) {
+    const context = await browser.newContext({ serviceWorkers: "block" });
+    try {
+        await context.route("https://lab.razor.fyi/**", route => route.fulfill({
+            contentType: "text/html",
+            body: "<!doctype html><title>.NET Lab test</title>"
+        }));
+        const page = await context.newPage();
+        page.setDefaultTimeout(timeout);
+        const url = new URL("courses/memory/lessons/001-allocations-copies-retention/", site);
+        await page.goto(url.href, { waitUntil: "domcontentloaded" });
+        const compiler = page.frameLocator("#course-compiler");
+        await compiler.locator("#editor-run-current").waitFor({ state: "attached" });
+        const source = [
+            "",
+            "using System;",
+            "",
+            "// Изменено в редакторе. Код содержит кириллицу и символы UTF-8. 🧪",
+            'Console.WriteLine("Текущий текст #<>&");',
+            "",
+            ""
+        ].join("\n");
+        assert.ok(await page.locator("#course-compiler").evaluate(
+            (iframe, code) => iframe.contentWindow.DotnetBrowserEditor.setCode(code),
+            source
+        ));
+
+        const [popup] = await Promise.all([
+            context.waitForEvent("page", { timeout: 10_000 }),
+            page.locator("#page-editor-dotnet-lab").click()
+        ]);
+        await popup.waitForURL(target => target.origin === "https://lab.razor.fyi" && Boolean(target.hash), {
+            timeout: 10_000
+        });
+        const slug = new URL(popup.url()).hash.slice(1);
+        assert.match(slug, /^[a-zA-Z0-9_-]+$/);
+
+        // SavedState stores the input file as field 1 and the selected output as field 9.
+        const state = readLengthDelimitedFields(inflateRawSync(Buffer.from(slug, "base64url")));
+        const input = state.get(1);
+        assert.ok(input, ".NET Lab link must contain the input file");
+        const file = readLengthDelimitedFields(input);
+        assert.equal(file.get(1)?.toString("utf8"), "Program.cs");
+        assert.equal(file.get(2)?.toString("utf8"), source, ".NET Lab must receive the edited source");
+        assert.equal(state.get(9)?.toString("utf8"), "run");
+        console.log(".NET Lab: checked the current editor text and output selection in the popup link");
+    } finally {
+        await context.close();
+    }
+}
+
 async function verify() {
     const browser = await chromium.launch();
     try {
@@ -107,6 +184,7 @@ async function verify() {
             console.log(".NET " + runtime + ": checked Assert output, compiler diagnostics, rerun, and interactive exception output");
             await page.close();
         }
+        await verifyDotnetLabLink(browser);
     } finally {
         await browser.close();
     }

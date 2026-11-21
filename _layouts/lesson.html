@@ -23,10 +23,11 @@ layout: default
     <button type="button" class="button primary" id="page-editor-run">▶ Запустить текущий код</button>
     <button type="button" class="button" id="page-editor-copy">Копировать весь код</button>
     <button type="button" class="button" id="page-editor-download">Скачать Program.cs</button>
+    <button type="button" class="button" id="page-editor-dotnet-lab">Открыть в .NET Lab</button>
     <span class="practice-feedback" id="page-editor-feedback" role="status">Кнопки работают с текущим текстом в редакторе ниже.</span>
   </div>
   <iframe id="course-compiler" data-lesson="{{ page.lesson_number }}" data-course="{{ page.course | default: 'whats-new' }}" title="C#-редактор и компилятор Roslyn для .NET {{ page.browser_runtime }}" src="{{ '/browser-compiler-net' | append: page.browser_runtime | append: '/' | relative_url }}?course={{ page.course | default: 'whats-new' }}&amp;lesson={{ page.lesson_number }}&amp;v={{ site.data.build.revision | default: 'dev' }}" loading="eager" style="display:block;width:100%;min-height:890px;border:1px solid var(--border);border-radius:14px;background:#fff" referrerpolicy="strict-origin-when-cross-origin"></iframe>
-  <p class="muted">Изменения кода в редакторе автоматически сохраняются в локальном хранилище этого браузера для конкретного урока. После обновления страницы черновик восстанавливается, пока ты не очистишь данные сайта. На сервер или в GitHub твой код не отправляется. Для резервной копии используй «Скачать Program.cs». Рабочие секреты в браузер не вставляй.</p>
+  <p class="muted">Изменения кода в редакторе автоматически сохраняются в локальном хранилище этого браузера для конкретного урока. После обновления страницы черновик восстанавливается, пока ты не очистишь данные сайта. Кнопка «Открыть в .NET Lab» открывает текущий код во внешнем редакторе в новой вкладке. Для резервной копии используй «Скачать Program.cs». Рабочие секреты в браузер не вставляй.</p>
 </section>
 {% if page.course == 'memory' and page.lesson_number == 1 %}
 <script defer src="{{ '/assets/js/browser-snippets-memory001.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>

@@ -45,12 +45,13 @@
     try {
       const win = frame.contentWindow;
       if (!win || win.location.origin !== location.origin) return null;
+      const editor = win.document.getElementById("code-editor");
+      if (!editor) return null;
       const api = win.DotnetBrowserEditor;
       if (api && typeof api.setCode === "function") return api;
       // Plain textarea fallback if CodeMirror scripts are unavailable.
-      const editor = win.document.getElementById("code-editor");
       const run = win.document.querySelector(".compile-btn");
-      if (!editor || !run) return null;
+      if (!run) return null;
       return {
         setCode(value) {
           const setter = Object.getOwnPropertyDescriptor(win.HTMLTextAreaElement.prototype, "value")?.set;
@@ -162,12 +163,59 @@
     });
   }
 
+  function protobufBytes(fieldNumber, bytes) {
+    const header = [(fieldNumber << 3) | 2];
+    let length = bytes.length;
+    while (length >= 128) {
+      header.push((length & 127) | 128);
+      length = Math.floor(length / 128);
+    }
+    header.push(length);
+    const field = new Uint8Array(header.length + bytes.length);
+    field.set(header);
+    field.set(bytes, header.length);
+    return field;
+  }
+
+  async function dotnetLabUrl(source) {
+    // .NET Lab's share links use raw DEFLATE and Base64URL around a protobuf
+    // SavedState. InputCode has filename/text fields 1/2. SavedState has
+    // inputs in field 1 and the selected output (the console) in field 9.
+    const encoder = new TextEncoder();
+    const fileName = protobufBytes(1, encoder.encode("Program.cs"));
+    const fileText = protobufBytes(2, encoder.encode(source));
+    const input = new Uint8Array(fileName.length + fileText.length);
+    input.set(fileName);
+    input.set(fileText, fileName.length);
+    const state = new Blob([protobufBytes(1, input), protobufBytes(9, encoder.encode("run"))]);
+
+    let compressor;
+    let hasZlibWrapper = false;
+    try {
+      compressor = new CompressionStream("deflate-raw");
+    } catch {
+      compressor = new CompressionStream("deflate");
+      hasZlibWrapper = true;
+    }
+    const compressed = new Uint8Array(await new Response(state.stream().pipeThrough(compressor)).arrayBuffer());
+    // Older implementations support DEFLATE in a zlib wrapper. Remove the
+    // two-byte header and four-byte Adler-32 checksum for the raw format.
+    const raw = hasZlibWrapper ? compressed.subarray(2, -4) : compressed;
+    let binary = "";
+    for (let start = 0; start < raw.length; start += 8192) {
+      binary += String.fromCharCode(...raw.subarray(start, start + 8192));
+    }
+    const slug = btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+    return "https://lab.razor.fyi/#" + slug;
+  }
+
   // Controls live on the lesson page, outside the iframe. They work even if
   // the embedded CodeMirror's own toolbar is hidden by the compiler layout.
   function addEditorToolbar() {
     const run = document.getElementById("page-editor-run");
     const copy = document.getElementById("page-editor-copy");
     const download = document.getElementById("page-editor-download");
+    const dotnetLab = document.getElementById("page-editor-dotnet-lab");
     const status = document.getElementById("page-editor-feedback");
     if (!run || !copy || !download || !status) return;
     const getEditor = () => {
@@ -197,6 +245,27 @@
       if (!api) return;
       window.DotnetLearning.download("Program.cs", api.getCode());
       status.textContent = "Текущий код сохранён в Program.cs.";
+    });
+    dotnetLab?.addEventListener("click", async () => {
+      const api = getEditor();
+      if (!api) return;
+      const source = api.getCode();
+      // Open during the click, before async compression loses user activation.
+      const tab = window.open("about:blank", "_blank");
+      if (!tab) {
+        status.textContent = "Браузер заблокировал новую вкладку .NET Lab.";
+        return;
+      }
+      try {
+        tab.opener = null;
+        const url = await dotnetLabUrl(source);
+        if (tab.closed) return;
+        tab.location.replace(url);
+        status.textContent = "Текущий код открыт в новой вкладке .NET Lab.";
+      } catch {
+        tab.close();
+        status.textContent = "Не удалось открыть .NET Lab. Код можно перенести кнопкой «Копировать весь код».";
+      }
     });
   }
 

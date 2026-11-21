@@ -27,3 +27,9 @@ h1,h2,h3{line-height:1.2;letter-spacing:-.045em}h1{font-size:clamp(35px,6vw,60px
 .course-nav{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:20px 0 32px}
 .eyebrow a{color:var(--primary);text-decoration:underline;text-underline-offset:3px}
 @media(max-width:750px){.course-grid{grid-template-columns:1fr}.course-card{min-height:250px}}
+
+/* A visible editor toolbar lives on the lesson page, independent of the iframe. */
+.live-editor-toolbar{border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:12px 14px;margin:18px 0 14px}
+.live-editor-toolbar .button{margin:4px}
+.live-editor-toolbar .practice-feedback{display:block;flex-basis:100%;margin:2px 4px 0}
+.draft-status{color:var(--muted);font-size:13px;line-height:1.5;margin:7px 0 15px}

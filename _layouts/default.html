@@ -2,9 +2,10 @@
 <html lang="ru">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
+<meta name="site-revision" content="{{ site.data.build.revision | default: 'dev' }}">
 <meta name="description" content="{{ page.description | default: site.description | escape }}">
 <title>{% if page.title %}{{ page.title | escape }} · {% endif %}{{ site.title | escape }}</title>
-<link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}"></head>
+<link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></head>
 <body>
 <a class="skip-link" href="#main">К содержимому</a>
 <header><div class="shell header-inner"><a class="brand" href="{{ '/' | relative_url }}"><span class="logo">{ }</span>.NET Courses</a>
@@ -16,4 +17,15 @@
 </nav></div></header>
 <main id="main" class="shell main">{{ content }}</main>
 <footer><div class="shell">C#/.NET · Два практических курса · <a href="https://github.com/boyarincev/dotnet-courses">Исходники на GitHub</a></div></footer>
-<script defer src="{{ '/assets/js/site.js' | relative_url }}"></script></body></html>
+<script defer src="{{ '/assets/js/site.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
+<script>
+// GitHub Pages controls HTTP cache headers; this worker requests fresh HTML
+// without putting pages or learner code in Cache Storage.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("{{ '/sw.js' | relative_url }}", {
+      scope: "{{ '/' | relative_url }}", updateViaCache: "none"
+    }).then(registration => registration.update()).catch(() => {});
+  });
+}
+</script></body></html>

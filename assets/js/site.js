@@ -18,8 +18,28 @@
   });
   document.querySelectorAll("[data-practice-id]").forEach(editor=>{
     const key="dotnet-learning:practice:"+editor.dataset.practiceId;
-    try {const saved=localStorage.getItem(key);if(saved!==null) editor.value=saved;}catch{}
-    editor.addEventListener("input",()=>{try{localStorage.setItem(key,editor.value);}catch{}});
+    const note=document.createElement("p");
+    note.className="draft-status";
+    note.setAttribute("role","status");
+    note.textContent="Автосохранение включено: черновик остаётся в браузере на этом устройстве.";
+    editor.insertAdjacentElement("afterend",note);
+    try {
+      const saved=localStorage.getItem(key);
+      if(saved!==null){
+        editor.value=saved;
+        note.textContent="✓ Черновик восстановлен из локального хранилища этого браузера.";
+      }
+    } catch {
+      note.textContent="⚠ Локальное сохранение недоступно. Скачай код в .cs.";
+    }
+    editor.addEventListener("input",()=>{
+      try {
+        localStorage.setItem(key,editor.value);
+        note.textContent="✓ Черновик автоматически сохранён в этом браузере.";
+      } catch {
+        note.textContent="⚠ Черновик не сохранён. Скачай .cs, чтобы не потерять код.";
+      }
+    });
   });
   document.querySelectorAll("[data-copy-practice], [data-download-practice]").forEach(btn=>{
     const id=btn.dataset.copyPractice||btn.dataset.downloadPractice;

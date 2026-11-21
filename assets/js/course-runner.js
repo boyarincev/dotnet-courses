@@ -178,7 +178,45 @@
     });
   }
 
-  const init=()=>{addCodeButtons();addTaskButtons();};
+  // Controls live on the lesson page, outside the iframe. They work even if
+  // the embedded CodeMirror's own toolbar is hidden by the compiler layout.
+  function addEditorToolbar() {
+    const run = document.getElementById("page-editor-run");
+    const copy = document.getElementById("page-editor-copy");
+    const download = document.getElementById("page-editor-download");
+    const status = document.getElementById("page-editor-feedback");
+    if (!run || !copy || !download || !status) return;
+    const getEditor = () => {
+      const api = bridge();
+      if (!api) status.textContent = "Редактор ещё загружается. Попробуй после появления кода.";
+      return api;
+    };
+    run.addEventListener("click", () => {
+      const api = getEditor();
+      if (!api) return;
+      if (api.busy()) { status.textContent = "Компилятор ещё загружается или занят."; return; }
+      if (api.run()) status.textContent = "Выполняется текущий код, включая твои изменения.";
+      else status.textContent = "Запуск пока недоступен. Проверь состояние компилятора.";
+    });
+    copy.addEventListener("click", async () => {
+      const api = getEditor();
+      if (!api) return;
+      try {
+        await window.DotnetLearning.copy(api.getCode());
+        status.textContent = "Весь текущий код скопирован.";
+      } catch {
+        status.textContent = "Не удалось скопировать. Выдели код вручную.";
+      }
+    });
+    download.addEventListener("click", () => {
+      const api = getEditor();
+      if (!api) return;
+      window.DotnetLearning.download("Program.cs", api.getCode());
+      status.textContent = "Текущий код сохранён в Program.cs.";
+    });
+  }
+
+  const init=()=>{addCodeButtons();addTaskButtons();addEditorToolbar();};
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
   else init();
 })();

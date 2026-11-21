@@ -18,6 +18,24 @@
   ];
   let instance = null;
   let original = null;
+  // The iframe URL carries a stable course + lesson identity. Keep authored
+  // drafts separate across lessons and courses, without server-side storage.
+  const pageParams = new URLSearchParams(location.search);
+  const courseId = pageParams.get("course") || "standalone";
+  const lessonId = pageParams.get("lesson") || "0";
+  const storageKey = "dotnet-courses:compiler-draft:" + courseId + ":" + lessonId;
+  let draftNotice = null;
+  function showDraft(text) {
+    if (draftNotice) draftNotice.textContent = text;
+  }
+  function saveDraft(source) {
+    try {
+      localStorage.setItem(storageKey, source);
+      showDraft("✓ Код автоматически сохранён в этом браузере.");
+    } catch {
+      showDraft("⚠ Не удалось сохранить черновик. Используй «Скачать .cs».");
+    }
+  }
   const cmReady = () => typeof window.CodeMirror === "function";
 
   // A real "run current code" control next to the CodeMirror editor:
@@ -81,7 +99,12 @@
     const shortcut = document.createElement("small");
     shortcut.textContent = "Ctrl+Enter";
     shortcut.style.cssText = "opacity:.7;";
-    bar.append(button, copyButton, downloadButton, shortcut, status);
+    draftNotice = document.createElement("small");
+    draftNotice.id = "editor-draft-status";
+    draftNotice.setAttribute("role", "status");
+    draftNotice.style.cssText = "display:block;flex-basis:100%;opacity:.8;";
+    draftNotice.textContent = "Черновик сохраняется автоматически в браузере на этом устройстве.";
+    bar.append(button, copyButton, downloadButton, shortcut, status, draftNotice);
     wrapper.insertAdjacentElement("afterend", bar);
   }
 
@@ -129,7 +152,10 @@
       }
     });
     instance.setSize("100%", 430);
-    instance.on("change", cm => synchronize(cm));
+    instance.on("change", cm => {
+      synchronize(cm);
+      saveDraft(cm.getValue());
+    });
     instance.on("inputRead", (cm, change) => {
       if (change.origin !== "+input" || !/^[\w]+$/.test(change.text?.join("") || "")) return;
       if (cm.state.completionActive) return;
@@ -138,6 +164,18 @@
     });
     textarea.closest(".editor-container")?.classList.add("enhanced-csharp-editor");
     installRunButton();
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved !== null) {
+        instance.setValue(saved);
+        synchronize(instance);
+        showDraft("✓ Восстановлен черновик этого урока из браузера.");
+      } else {
+        showDraft("Автосохранение включено. Код останется в этом браузере.");
+      }
+    } catch {
+      showDraft("⚠ Локальное хранилище недоступно. Для сохранения используй «Скачать .cs».");
+    }
   }
 
   const watcher = new MutationObserver(() => ensure());

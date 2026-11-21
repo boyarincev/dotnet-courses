@@ -61,6 +61,7 @@ jobs:
           node --check assets/js/browser-snippets-lesson002.js
           node --check assets/js/browser-snippets-memory001.js
           node --check assets/js/quiz.js
+          node --check assets/js/site.js
       - name: Verify lesson C# examples on .NET 9 and .NET 10
         run: |
           dotnet new console -n Lesson001Smoke -f net9.0 -o "$RUNNER_TEMP/lesson001smoke"
@@ -113,6 +114,9 @@ jobs:
         if: steps.codemirror.outputs.cache-hit != 'true'
         run: npm install --prefix "$RUNNER_TEMP/cm" --no-save --no-package-lock --no-audit --no-fund codemirror@5.65.21
       - uses: actions/configure-pages@v6
+      - name: Set revision for fresh page assets and navigation
+        run: |
+          printf 'revision: "%s"\n' "$GITHUB_SHA" > _data/build.yml
       - name: Build Jekyll course
         uses: actions/jekyll-build-pages@v1
         with:
@@ -125,6 +129,8 @@ jobs:
             mkdir -p "_site/browser-compiler-net$runtime"
             cp -a "$RUNNER_TEMP/compiler-net$runtime/wwwroot/." "_site/browser-compiler-net$runtime/"
             cp "$RUNNER_TEMP/compiler-net$runtime/LICENSE.txt" "_site/browser-compiler-net$runtime/LICENSE.txt"
+            # The compiler shell is cached, but this editor JS changes separately.
+            sed -i "s#../assets/js/compiler-editor.js#../assets/js/compiler-editor.js?v=$GITHUB_SHA#g" "_site/browser-compiler-net$runtime/index.html"
             test -s "_site/browser-compiler-net$runtime/index.html"
             test -s "_site/browser-compiler-net$runtime/_framework/blazor.webassembly.js"
           done
@@ -149,6 +155,13 @@ jobs:
           test -s _site/courses/whats-new/quiz/index.html
           test -s _site/courses/memory/index.html
           test -s _site/courses/whats-new/index.html
+          test -s _site/sw.js
+          node --check _site/sw.js
+          grep -q 'id="page-editor-run"' _site/courses/whats-new/lessons/001-params-countby/index.html
+          grep -q 'id="page-editor-run"' _site/courses/memory/lessons/001-allocations-copies-retention/index.html
+          grep -q "$GITHUB_SHA" _site/index.html
+          grep -q "$GITHUB_SHA" _site/sw.js
+          grep -q "$GITHUB_SHA" _site/courses/memory/lessons/001-allocations-copies-retention/index.html
       - uses: actions/upload-pages-artifact@v5
   deploy:
     environment:

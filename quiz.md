@@ -12,4 +12,4 @@ permalink: /courses/whats-new/quiz/
 <div id="quiz-actions" hidden class="quiz-actions"><button type="button" id="quiz-copy" class="button primary">Скопировать ответы</button><button type="button" id="quiz-download" class="button">Скачать .txt</button><span id="quiz-feedback" role="status"></span></div>
 <p class="muted">Сайт не оценивает правильность самостоятельно. Пропущенный вопрос не считается неправильным.</p>
 <script type="application/json" id="question-bank">{{ site.data.questions | jsonify }}</script>
-<script defer src="{{ '/assets/js/quiz.js' | relative_url }}"></script>
+<script defer src="{{ '/assets/js/quiz.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>

@@ -17,18 +17,24 @@ layout: default
 {% if page.browser_runtime %}
 <section class="lesson-browser" id="browser-runner">
   <h2>Практика: настоящий C# в браузере</h2>
-  <p>Кнопка под примером переносит код в компилятор ниже. <strong>У самого редактора есть кнопка «Запустить мой код»</strong> — после изменения текста она запускает его заново без повторной подстановки примера.</p>
+  <p>Кнопка под примером переносит код в компилятор ниже. <strong>«Запустить текущий код» над редактором</strong> запускает именно твою изменённую версию, не подставляя исходный пример.</p>
   <p><strong>C# {% if page.browser_runtime == '9' %}13{% elsif page.browser_runtime == '10' %}14{% else %}неизвестная версия{% endif %} / .NET {{ page.browser_runtime }}</strong> · Roslyn + WebAssembly. Базовая подсветка и подсказки, но не полноценный IntelliSense.</p>
-  <iframe id="course-compiler" data-lesson="{{ page.lesson_number }}" data-course="{{ page.course | default: 'whats-new' }}" title="C#-редактор и компилятор Roslyn для .NET {{ page.browser_runtime }}" src="{{ '/browser-compiler-net' | append: page.browser_runtime | append: '/' | relative_url }}" loading="eager" style="display:block;width:100%;min-height:890px;border:1px solid var(--border);border-radius:14px;background:#fff" referrerpolicy="strict-origin-when-cross-origin"></iframe>
-  <p class="muted">Нажми «Запустить этот пример», чтобы загрузить код текущего урока; затем редактируй и запускай его прямо в компиляторе. Рабочие секреты в браузер не вставляй.</p>
+  <div class="practice-actions live-editor-toolbar" aria-label="Действия редактора C#">
+    <button type="button" class="button primary" id="page-editor-run">▶ Запустить текущий код</button>
+    <button type="button" class="button" id="page-editor-copy">Копировать весь код</button>
+    <button type="button" class="button" id="page-editor-download">Скачать Program.cs</button>
+    <span class="practice-feedback" id="page-editor-feedback" role="status">Кнопки работают с текущим текстом в редакторе ниже.</span>
+  </div>
+  <iframe id="course-compiler" data-lesson="{{ page.lesson_number }}" data-course="{{ page.course | default: 'whats-new' }}" title="C#-редактор и компилятор Roslyn для .NET {{ page.browser_runtime }}" src="{{ '/browser-compiler-net' | append: page.browser_runtime | append: '/' | relative_url }}?course={{ page.course | default: 'whats-new' }}&amp;lesson={{ page.lesson_number }}&amp;v={{ site.data.build.revision | default: 'dev' }}" loading="eager" style="display:block;width:100%;min-height:890px;border:1px solid var(--border);border-radius:14px;background:#fff" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+  <p class="muted">Изменения кода в редакторе автоматически сохраняются в локальном хранилище этого браузера для конкретного урока. После обновления страницы черновик восстанавливается, пока ты не очистишь данные сайта. На сервер или в GitHub твой код не отправляется. Для резервной копии используй «Скачать Program.cs». Рабочие секреты в браузер не вставляй.</p>
 </section>
 {% if page.course == 'memory' and page.lesson_number == 1 %}
-<script defer src="{{ '/assets/js/browser-snippets-memory001.js' | relative_url }}"></script>
+<script defer src="{{ '/assets/js/browser-snippets-memory001.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
 {% elsif page.course != 'memory' and page.lesson_number == 1 %}
-<script defer src="{{ '/assets/js/browser-snippets.js' | relative_url }}"></script>
+<script defer src="{{ '/assets/js/browser-snippets.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
 {% elsif page.course != 'memory' and page.lesson_number == 2 %}
-<script defer src="{{ '/assets/js/browser-snippets-lesson002.js' | relative_url }}"></script>
+<script defer src="{{ '/assets/js/browser-snippets-lesson002.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
 {% endif %}
-<script defer src="{{ '/assets/js/course-runner.js' | relative_url }}"></script>
+<script defer src="{{ '/assets/js/course-runner.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
 {% endif %}
 <div class="next"><h2>Теперь повторение</h2><p>Вопросы этого курса имеют собственные постоянные ID. Ответы можно экспортировать для проверки — без публикации личной истории.</p><a class="button primary" href="{{ quiz_url | relative_url }}">Открыть квиз курса →</a><a class="button" href="{{ course_url | relative_url }}">К списку уроков</a></div>

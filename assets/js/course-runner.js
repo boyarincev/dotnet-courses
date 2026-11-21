@@ -123,7 +123,7 @@
     load.textContent = "▶ Запустить моё решение в браузере";
     const save = document.createElement("button");
     save.type="button"; save.className="button";
-    save.textContent="Вернуть код из компилятора";
+    save.textContent="Сохранить решение из редактора в задание";
     actions.append(load,save);
     load.addEventListener("click",()=>{
       const code=course==="memory"?taskProgramMemory001(task.value):(lesson===1?taskProgram001(task.value):taskProgram002(task.value));
@@ -136,7 +136,7 @@
       const start=code.indexOf("// BEGIN "+taskId);
       const stop=code.indexOf("// END "+taskId);
       if(start<0 || stop<=start){
-        show(save,"Маркеры задания не найдены. Скопируй код вручную.");
+        show(save,"Сейчас в редакторе открыт обычный пример, а не решение задания. Чтобы сохранить весь пример, используй кнопку «Скачать .cs» в редакторе. Для переноса решения сначала нажми «Запустить моё решение в браузере».");
         return;
       }
       const imports=[...code.matchAll(/^\s*using\s+[\w.]+\s*;\s*$/gm)].map(x=>x[0].trim());

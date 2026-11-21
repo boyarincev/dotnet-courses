@@ -20,6 +20,42 @@
   let original = null;
   const cmReady = () => typeof window.CodeMirror === "function";
 
+  // A real "run current code" control next to the CodeMirror editor:
+  // the example-loader can replace the source, but this button never does.
+  function installRunButton() {
+    const wrapper = instance?.getWrapperElement();
+    if (!wrapper?.isConnected || wrapper.nextElementSibling?.id === "editor-run-bar") return;
+
+    const bar = document.createElement("div");
+    bar.id = "editor-run-bar";
+    bar.style.cssText = "display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0 18px;";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.id = "editor-run-current";
+    button.textContent = "▶ Запустить мой код";
+    button.title = "Запуск текущего кода в редакторе (Ctrl+Enter)";
+    button.style.cssText = "cursor:pointer;border:0;border-radius:9px;padding:12px 18px;font-size:14px;font-weight:700;background:#087c70;color:#fff;";
+    const status = document.createElement("span");
+    status.setAttribute("role", "status");
+    status.style.cssText = "font-size:13px;color:inherit;";
+    button.addEventListener("click", () => {
+      if (window.DotnetBrowserEditor.busy()) {
+        status.textContent = "Компилятор ещё занят или загружается.";
+        return;
+      }
+      if (window.DotnetBrowserEditor.run()) {
+        status.textContent = "Запускается текущая версия кода из редактора.";
+      } else {
+        status.textContent = "Запуск пока недоступен; проверь компилятор.";
+      }
+    });
+    const shortcut = document.createElement("small");
+    shortcut.textContent = "Ctrl+Enter";
+    shortcut.style.cssText = "opacity:.7;";
+    bar.append(button, shortcut, status);
+    wrapper.insertAdjacentElement("afterend", bar);
+  }
+
   function hint(cm) {
     const cursor = cm.getCursor();
     const line = cm.getLine(cursor.line).slice(0, cursor.ch);
@@ -43,7 +79,11 @@
   function ensure() {
     if (!cmReady()) return;
     const textarea = document.getElementById("code-editor");
-    if (!textarea || (original === textarea && instance)) return;
+    if (!textarea) return;
+    if (original === textarea && instance && instance.getWrapperElement().isConnected) {
+      installRunButton();
+      return;
+    }
     original = textarea;
     instance = window.CodeMirror.fromTextArea(textarea, {
       mode: "text/x-csharp",
@@ -68,6 +108,7 @@
       if (suggestions.list.length) cm.showHint({hint,completeSingle:false});
     });
     textarea.closest(".editor-container")?.classList.add("enhanced-csharp-editor");
+    installRunButton();
   }
 
   const watcher = new MutationObserver(() => ensure());

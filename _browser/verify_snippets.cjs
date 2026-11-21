@@ -8,7 +8,7 @@ const {makeRunnable, exampleCount} = require("../assets/js/browser-snippets.js")
 
 const project = process.argv[2];
 if (!project) throw Error("Usage: node _browser/verify_snippets.cjs <path-to-net9-console-project>");
-const markdown = fs.readFileSync("browser-labs/lesson-001.md", "utf8");
+const markdown = fs.readFileSync("_lessons/001-params-countby.md", "utf8");
 const fence = new RegExp("^\\x60\\x60\\x60csharp\\n([\\s\\S]*?)\\n\\x60\\x60\\x60", "gm");
 const snippets = [...markdown.matchAll(fence)].map(m => m[1]);
 if (snippets.length !== exampleCount) {

@@ -6,8 +6,9 @@ summary: 'Принимаем произвольное число аргумен�
 csharp_feature: 'C# 13 · params collections'
 dotnet_feature: '.NET 9 · CountBy'
 series: 'Коллекции и LINQ'
+browser_runtime: '9'
 ---
-> **Новая возможность для практики:** [открыть экспериментальную версию этого же урока с запуском C# прямо в браузере]({{ '/labs/001-browser/' | relative_url }}). Оригинальная версия и номер урока сохраняются.
+> **Браузерный запуск включён.** Под каждым C#-примером доступна кнопка запуска, а ниже находится общий редактор с Roslyn.
 
 ## Зачем это нужно
 Допустим, мы хотим анализировать HTTP-методы: удобно передавать их в метод и считать количество каждого значения, не создавая лишних групп.
@@ -123,7 +124,7 @@ static IEnumerable&lt;(string Method, int Count)&gt; GetTopMethods(
     throw new NotImplementedException();
 }</textarea>
 <div class="practice-actions"><button type="button" class="button" data-copy-practice="TASK-001">Скопировать код</button> <button type="button" class="button" data-download-practice="TASK-001">Скачать .cs</button> <span class="practice-feedback" role="status"></span></div>
-<p class="muted">Черновик сохраняется только в этом браузере. Для проверки пришли код в ChatGPT. Сайт не компилирует C#.</p>
+<p class="muted">Черновик сохраняется только в этом браузере. Для проверки пришли код в ChatGPT. Код можно запустить ниже в браузерном компиляторе; сайт не проверяет задание автоматически.</p>
 
 ## 5. Что запомнить
 - C# 13 `params` может принимать коллекционные типы помимо массива, в том числе `ReadOnlySpan<T>`.

@@ -6,7 +6,10 @@ summary: 'Агрегируем HTTP-метрики по маршрутам и с
 csharp_feature: 'C# 14 · null-conditional assignment'
 dotnet_feature: '.NET 9 · AggregateBy'
 series: 'Коллекции и LINQ'
+browser_runtime: '10'
 ---
+> **Браузерный запуск включён.** Все C#-примеры можно открывать в редакторе на .NET 10 и проверять без локальной установки SDK.
+
 ## Зачем это нужно
 
 В [уроке №1]({{ '/lessons/001-params-countby/' | relative_url }}) мы использовали `CountBy` для подсчёта HTTP-методов. Теперь нужна сводка по маршрутам: **количество запросов и общее время**. Кроме того, диагностический отчёт нужно формировать лишь при наличии объекта, в который его записывать.
@@ -182,7 +185,7 @@ Failure[] calls =
     throw new NotImplementedException();
 }</textarea>
 <div class="practice-actions"><button type="button" class="button" data-copy-practice="TASK-002">Скопировать код</button> <button type="button" class="button" data-download-practice="TASK-002">Скачать .cs</button> <span class="practice-feedback" role="status"></span></div>
-<p class="muted">Черновик хранится только в браузере. Отправь код в ChatGPT для проверки; сайт не компилирует C#.</p>
+<p class="muted">Черновик хранится только в браузере. Отправь код в ChatGPT для проверки. Решение можно запустить в браузерном компиляторе ниже, но автоматической оценки нет.</p>
 
 ## 5. Повторение и официальные источники
 
@@ -190,4 +193,4 @@ Failure[] calls =
 
 Microsoft Learn: [C# 14](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14), [null-conditional operators](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/member-access-operators#null-conditional-operators--and-), [Enumerable.AggregateBy](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.aggregateby?view=net-9.0), [.NET 9 LINQ](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-9/libraries#linq).
 
-*Пример составлен для указанного SDK; автоматическая компиляция C# при сборке Jekyll не выполняется.*
+*Примеры этого урока проверяются на .NET 10 при сборке сайта; браузерный компилятор использует C# 14 и .NET 10.*

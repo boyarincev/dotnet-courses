@@ -1,29 +1,34 @@
 # Public questions only; never publish personal answers or answer keys.
 - id: ALLOC-001-Q01
+  lesson_number: 1
   topic: ALLOC-001
   tag: 'Память · выделение и копирование'
   type: понимание
   available_from: '2026-11-21'
   prompt: 'Чем выделение памяти (allocation) отличается от копирования значимого типа? Приведи по одному примеру.'
 - id: ALLOC-001-Q02
+  lesson_number: 1
   topic: ALLOC-001
   tag: 'Память · источники аллокаций'
   type: анализ кода
   available_from: '2026-11-21'
   prompt: "Какие новые объекты обычно создаёт вызов line.Split(';') для строки с несколькими полями?"
 - id: ALLOC-001-Q03
+  lesson_number: 1
   topic: ALLOC-001
   tag: 'Память · семантика struct'
   type: прогноз результата
   available_from: '2026-11-21'
   prompt: 'Order — struct. После Order copy = orders[0]; copy.Amount = 0; изменится ли orders[0].Amount? Почему?'
 - id: ALLOC-001-Q04
+  lesson_number: 1
   topic: ALLOC-001
   tag: 'Память · удержание'
   type: сравнение
   available_from: '2026-11-21'
   prompt: 'Почему возврат List<Order> может дольше удерживать данные, чем возврат пары (Count, Total)?'
 - id: ALLOC-001-Q05
+  lesson_number: 1
   topic: ALLOC-001
   tag: 'Память · стек и куча'
   type: объяснение

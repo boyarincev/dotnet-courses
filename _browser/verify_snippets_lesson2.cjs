@@ -23,10 +23,14 @@ const expected=[
 for(let i=0;i<exampleCount;i++){
   const source=makeRunnable(snippets[i],i);
   fs.writeFileSync(path.join(project,"Program.cs"),source,"utf8");
-  const out=cp.spawnSync("dotnet",["run","--no-restore","--project",project],
+  const build=cp.spawnSync("dotnet",["build","--no-restore","--project",project],
+    {encoding:"utf8",timeout:120000});
+  if(build.status!==0)
+    throw Error("Lesson 002 snippet "+(i+1)+" did not compile:\n"+build.stdout+"\n"+build.stderr+"\n"+source);
+  const out=cp.spawnSync("dotnet",["run","--no-build","--project",project],
     {encoding:"utf8",timeout:120000});
   if(out.status!==0)
-    throw Error("Lesson 002 snippet "+(i+1)+" failed:\n"+out.stdout+"\n"+out.stderr+"\n"+source);
+    throw Error("Lesson 002 snippet "+(i+1)+" failed at runtime:\n"+out.stdout+"\n"+out.stderr+"\n"+source);
   const stdout=out.stdout.replace(/\r\n/g,"\n");
   if(stdout!==expected[i])
     throw Error("Lesson 002 snippet "+(i+1)+": expected "+JSON.stringify(expected[i])+", got "+JSON.stringify(stdout)+"\n"+source);

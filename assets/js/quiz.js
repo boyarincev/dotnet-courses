@@ -49,12 +49,36 @@
   }
 
   const currentTime=()=>new Date();
-  const prettyDate=value=>{
+  const prettyDate=(value,options={})=>{
     const d=new Date(value);
     return isNaN(d.valueOf())?"неизвестна":d.toLocaleString("ru-RU",{
-      day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"
+      day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",...options
     });
   };
+
+  function renderAnswerHistory(details,attempts) {
+    const answers=Array.isArray(attempts)?attempts.filter(attempt=>
+      typeof attempt?.answer==="string" && attempt.answer.trim()):[];
+    details.hidden=answers.length===0;
+    if(details.hidden)return;
+
+    const summary=document.createElement("summary");
+    summary.textContent="История ответов";
+    const list=document.createElement("ol");
+    list.reversed=true;
+    for(const attempt of answers.reverse()) {
+      const item=document.createElement("li");
+      const date=document.createElement("span");
+      date.className="muted";
+      const timestamp=typeof attempt.at==="string"?attempt.at:undefined;
+      date.textContent="Дата попытки · "+prettyDate(timestamp,{year:"numeric"});
+      const answer=document.createElement("pre");
+      answer.textContent=attempt.answer;
+      item.append(date,answer);
+      list.append(item);
+    }
+    details.replaceChildren(summary,list);
+  }
 
   function getEligible() {return engine.eligible(bank,currentTime(),through);}
   function choose() {
@@ -110,6 +134,9 @@
       });
       const controls=document.createElement("div");
       controls.className="question-grade-actions";
+      const answerHistory=document.createElement("details");
+      answerHistory.className="question-answer-history";
+      renderAnswerHistory(answerHistory,record?.history);
       const message=document.createElement("span");
       message.className="practice-feedback";
       message.setAttribute("role","status");
@@ -142,13 +169,14 @@
               " · Попыток: "+updated.history.length;
             message.textContent="Оценка сохранена локально. Дату рассчитал FSRS-7.";
             controls.querySelectorAll("button").forEach(b=>b.disabled=true);
+            renderAnswerHistory(answerHistory,updated.history);
           } catch (error) {
             message.textContent="Не удалось оценить: "+error.message;
           }
         });
         controls.append(button);
       });
-      box.append(meta,heading,status,label,input,controls,message);
+      box.append(meta,heading,status,label,input,controls,message,answerHistory);
       root.append(box);
     });
   }

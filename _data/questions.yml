@@ -47,3 +47,52 @@
   type: сравнение
   available_from: '2026-11-22'
   prompt: "Чем CountBy отличается от GroupBy(...).Select(...Count())?"
+
+- id: CS14-NCA-01
+  topic: CS14-NULL-ASSIGN
+  tag: 'C# 14 · null-conditional assignment'
+  type: прогноз выполнения
+  available_from: '2026-11-22'
+  prompt: 'Вызовется ли BuildSummary() при audit?.Text = BuildSummary(), если audit == null? Объясни.'
+- id: CS14-NCA-02
+  topic: CS14-NULL-ASSIGN
+  tag: 'C# 14 · null-conditional assignment'
+  type: сравнение
+  available_from: '2026-11-23'
+  prompt: 'Чем audit?.Text = value отличается от text ??= value?'
+- id: CS14-NCA-03
+  topic: CS14-NULL-ASSIGN
+  tag: 'C# 14 · null-conditional assignment'
+  type: исправление
+  available_from: '2026-11-24'
+  prompt: 'Почему audit?.Counter++ не компилируется? Покажи допустимую альтернативу.'
+- id: CS14-NCA-04
+  topic: CS14-NULL-ASSIGN
+  tag: 'C# 14 · null-conditional assignment'
+  type: объяснение
+  available_from: '2026-11-25'
+  prompt: 'Является ли audit?.Counter += 1 атомарной операцией? Почему?'
+- id: N9-AB-01
+  topic: NET9-AGGREGATEBY
+  tag: '.NET 9 · AggregateBy'
+  type: понимание
+  available_from: '2026-11-22'
+  prompt: 'Чем AggregateBy отличается от CountBy и когда его использовать?'
+- id: N9-AB-02
+  topic: NET9-AGGREGATEBY
+  tag: '.NET 9 · AggregateBy'
+  type: прогноз результата
+  available_from: '2026-11-23'
+  prompt: 'Что выдаст AggregateBy(x => x.Key, 0, (sum,x) => sum + x.Value) для пар (A,2),(B,5),(A,3)?'
+- id: N9-AB-03
+  topic: NET9-AGGREGATEBY
+  tag: '.NET 9 · AggregateBy'
+  type: код
+  available_from: '2026-11-24'
+  prompt: 'Как сгруппировать ключи GET и get в AggregateBy без учёта регистра?'
+- id: N9-AB-04
+  topic: NET9-AGGREGATEBY
+  tag: '.NET 9 · AggregateBy'
+  type: объяснение
+  available_from: '2026-11-25'
+  prompt: 'Почему повторное перечисление результата AggregateBy может повторно обработать исходную коллекцию?'

@@ -33,6 +33,7 @@ jobs:
           dotnet run --project "$RUNNER_TEMP/lesson001smoke" > "$RUNNER_TEMP/lesson001-output.txt"
           printf 'HTTP methods\nGET: 3\nPOST: 2\nPUT: 1\nSum = 60\n' > "$RUNNER_TEMP/lesson001-expected.txt"
           diff -u "$RUNNER_TEMP/lesson001-expected.txt" "$RUNNER_TEMP/lesson001-output.txt"
+          node _browser/verify_snippets.cjs "$RUNNER_TEMP/lesson001smoke"
       - name: Adapt browser compiler for lesson 001
         run: python3 _browser/prepare_compiler.py
       - name: Build real C# compiler for WebAssembly

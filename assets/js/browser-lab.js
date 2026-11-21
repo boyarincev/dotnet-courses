@@ -6,36 +6,43 @@
   const receive = document.getElementById("browser-task-import");
   if (!frame || !task || !send || !receive) return;
 
-  function getEditor() {
+  function getCompiler() {
     try {
       const win = frame.contentWindow;
       if (!win || win.location.origin !== window.location.origin) return null;
-      return win.document.getElementById("code-editor");
+      const editor = win.document.getElementById("code-editor");
+      const run = win.document.querySelector("button.compile-btn");
+      return editor && run ? { editor, run } : null;
     } catch {
       return null;
     }
   }
 
+  function setCompilerCode(editor, code) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    if (setter) setter.call(editor, code);
+    else editor.value = code;
+    editor.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
   function status(button, message) {
-    const target = button.closest(".practice-actions")?.querySelector(".practice-feedback");
+    const target = button.closest(".practice-actions, .snippet-actions")?.querySelector(".practice-feedback");
     if (target) target.textContent = message;
   }
 
   function makeProgram(input) {
     const normalized = input.replace(/\r\n?/g, "\n");
-    if (/\b(?:class|struct)\s+Program\b/.test(normalized))
-      return normalized; // User already wrote a complete console program.
-
+    if (/\b(?:class|struct)\s+Program\b/.test(normalized)) return normalized;
     const lines = normalized.split("\n");
-    const extraImports = lines.filter(line => /^\s*using\s+[\w.]+\s*;\s*$/.test(line));
-    const code = lines.filter(line => !/^\s*using\s+[\w.]+\s*;\s*$/.test(line)).join("\n").trim();
+    const isImport = line => /^\s*using\s+[\w.]+\s*;\s*$/.test(line);
+    const extraImports = lines.filter(isImport);
+    const code = lines.filter(line => !isImport(line)).join("\n").trim();
     const imports = Array.from(new Set([
       "using System;",
       "using System.Collections.Generic;",
       "using System.Linq;",
       ...extraImports.map(x => x.trim())
     ])).join("\n");
-
     return imports + "\n\npublic static class Program\n{\n" +
       "    public static void Main()\n    {\n" +
       "        string[] methods = [\"get\", \"POST\", \"GET\", \"put\", \"post\", \"DELETE\", \"delete\", \"GET\"];\n" +
@@ -47,27 +54,24 @@
   }
 
   send.addEventListener("click", () => {
-    const editor = getEditor();
-    if (!editor) {
+    const compiler = getCompiler();
+    if (!compiler) {
       status(send, "Компилятор ещё загружается. Повтори после появления редактора.");
       return;
     }
-    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-    if (setter) setter.call(editor, makeProgram(task.value));
-    else editor.value = makeProgram(task.value);
-    editor.dispatchEvent(new Event("input", { bubbles: true }));
-    editor.focus();
-    status(send, "Заготовка загружена в компилятор. Нажми Compile & Run. Ошибка NotImplementedException исчезнет после твоей реализации.");
+    setCompilerCode(compiler.editor, makeProgram(task.value));
+    compiler.editor.focus();
+    status(send, "Заготовка загружена. Нажми Compile & Run; ошибка NotImplementedException исчезнет после реализации.");
     frame.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
   receive.addEventListener("click", () => {
-    const editor = getEditor();
-    if (!editor) {
+    const compiler = getCompiler();
+    if (!compiler) {
       status(receive, "Компилятор ещё загружается.");
       return;
     }
-    const content = editor.value;
+    const content = compiler.editor.value;
     const start = content.indexOf("// BEGIN TASK-001");
     const end = content.indexOf("// END TASK-001");
     if (start === -1 || end < start) {
@@ -78,7 +82,73 @@
     const imports = [...content.matchAll(/^\s*using\s+[\w.]+\s*;\s*$/gm)].map(m => m[0].trim());
     task.value = imports.join("\n") + "\n\n" + method + "\n";
     task.dispatchEvent(new Event("input", { bubbles: true }));
-    status(receive, "Код скопирован в поле TASK-001 и сохранён в локальном черновике.");
+    status(receive, "Код перенесён в TASK-001 и сохранён в локальном черновике.");
     task.scrollIntoView({ behavior: "smooth", block: "nearest" });
   });
+
+  // Each existing C# code fence gets an actual runnable program.
+  // Other code fences, including terminal commands and expected output, stay read-only.
+  function insertExampleButtons() {
+    const builder = window.DotnetLesson001Snippets;
+    if (!builder) {
+      console.error("Не загружен генератор запускаемых C#-примеров.");
+      return;
+    }
+    const examples = [...document.querySelectorAll(".prose pre")].filter(pre =>
+      pre.closest(".language-csharp") || pre.querySelector("code.language-csharp")
+    );
+    if (examples.length !== builder.exampleCount) {
+      console.error("Неожиданное число C#-примеров:", examples.length);
+      return;
+    }
+    examples.forEach((pre, index) => {
+      const holder = pre.closest(".code-wrap") || pre;
+      const actions = document.createElement("div");
+      actions.className = "practice-actions snippet-actions";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "button";
+      button.textContent = "▶ Запустить этот пример";
+      button.setAttribute("aria-label", "Запустить пример C# №" + (index + 1));
+      const feedback = document.createElement("span");
+      feedback.className = "practice-feedback";
+      feedback.setAttribute("role", "status");
+      actions.append(button, feedback);
+      holder.insertAdjacentElement("afterend", actions);
+      button.addEventListener("click", async () => {
+        const compiler = getCompiler();
+        if (!compiler) {
+          status(button, "Компилятор ещё загружается. Попробуй снова после появления редактора.");
+          return;
+        }
+        if (compiler.run.disabled) {
+          status(button, "Компилятор выполняет предыдущую программу.");
+          return;
+        }
+        let program;
+        try {
+          program = builder.makeRunnable(pre.textContent, index);
+        } catch (error) {
+          status(button, "Не удалось подготовить пример: " + error.message);
+          return;
+        }
+        setCompilerCode(compiler.editor, program);
+        status(button, "Пример №" + (index + 1) + " передан в Roslyn. Запуск...");
+        // Give Blazor's oninput binding a moment to update before its onclick handler.
+        await new Promise(resolve => setTimeout(resolve, 180));
+        if (compiler.run.disabled) {
+          status(button, "Компилятор занят. Повтори после завершения.");
+          return;
+        }
+        compiler.run.click();
+        frame.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", insertExampleButtons, { once: true });
+  } else {
+    insertExampleButtons();
+  }
 })();

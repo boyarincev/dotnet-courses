@@ -11,6 +11,8 @@ series: 'Коллекции и LINQ'
 ---
 > **Экспериментальная версия оригинального урока №1.** Все исходные объяснения, пример, самостоятельное задание TASK-001 и ссылки сохранены. Добавлены только возможности запуска C# в браузере. [Открыть обычную версию]({{ '/lessons/001-params-countby/' | relative_url }}).
 
+> **Запуск всех примеров:** под каждым из семи фрагментов C# доступна кнопка «Запустить этот пример». Короткие фрагменты дополняются необходимыми данными и точкой входа, но их исходный текст сохраняется. Команды `dotnet` и образцы вывода запускать в C#-компиляторе не нужно.
+
 ## Зачем это нужно
 Допустим, мы хотим анализировать HTTP-методы: удобно передавать их в метод и считать количество каждого значения, не создавая лишних групп.
 
@@ -106,7 +108,7 @@ Sum = 60
 
 <div class="notice">
   <strong>Дополнительная возможность: запусти пример прямо в браузере.</strong>
-  Ниже встроен настоящий компилятор C# на Roslyn + .NET 9 WebAssembly. Редактор уже содержит <strong>тот же код</strong>, что в примере выше, только внутри стандартного <code>Program.Main</code>. Нажми <strong>Compile &amp; Run</strong> (или Ctrl+Enter). Чтобы восстановить пример после экспериментов, используй кнопку <strong>Sample</strong> внутри компилятора.
+  Ниже встроен настоящий компилятор C# на Roslyn + .NET 9 WebAssembly. Можно нажать <strong>«Запустить этот пример» под любым C#-фрагментом</strong>, чтобы автоматически перенести его в редактор и выполнить. При необходимости можно редактировать код и повторно нажать <strong>Compile &amp; Run</strong> (либо Ctrl+Enter). Кнопка <strong>Sample</strong> восстанавливает полный пример.
 </div>
 <iframe id="browser-lab-compiler" title="Компилятор и исполнение C# 13 / .NET 9 в браузере" src="{{ '/browser-compiler/' | relative_url }}" loading="eager" style="display:block;width:100%;min-height:900px;border:1px solid var(--border);border-radius:14px;background:#fff" referrerpolicy="strict-origin-when-cross-origin"></iframe>
 <p class="muted">При первой загрузке WebAssembly может потребоваться дополнительное время и интернет. Код выполняется в браузере, не на сервере; приложения, требующие полноценной ОС, здесь не запускаются. Не вставляй секреты и не запускай недоверенный код.</p>
@@ -142,4 +144,5 @@ static IEnumerable&lt;(string Method, int Count)&gt; GetTopMethods(
 
 **Официально:** [C# 13: params collections](https://learn.microsoft.com/dotnet/csharp/whats-new/csharp-13#params-collections), [.NET 9: LINQ](https://learn.microsoft.com/dotnet/core/whats-new/dotnet-9/libraries#linq).
 
+<script defer src="{{ '/assets/js/browser-snippets.js' | relative_url }}"></script>
 <script defer src="{{ '/assets/js/browser-lab.js' | relative_url }}"></script>

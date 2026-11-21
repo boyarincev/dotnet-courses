@@ -2,7 +2,7 @@ title: "C# 13, 14, 15 и .NET 9, 10, 11 — .NET Learning Lab"
 description: "Практический курс для опытных разработчиков: новые полезные возможности C# 13, C# 14, C# 15 и .NET 9, .NET 10, .NET 11 с запускаемыми примерами, задачами и повторением."
 lang: ru
 url: "https://boyarincev.github.io"
-baseurl: "/dotnet-learning"
+baseurl: "/dotnet-learning-9-11"
 markdown: kramdown
 highlighter: rouge
 collections:

@@ -10,6 +10,8 @@
 - `.github/workflows/pages.yml`: сборка и публикация GitHub Pages.
 
 ## Запуск сайта
+Текущий репозиторий: https://github.com/boyarincev/dotnet-learning-9-11 .
+Ожидаемый стандартный адрес GitHub Pages: https://boyarincev.github.io/dotnet-learning-9-11/ (при отдельном домене адрес может отличаться).
 В GitHub открыть **Settings → Pages → Build and deployment → Source → GitHub Actions**. После этого workflow публикует сайт при изменениях в ветке main.
 
 ## Конфиденциальность

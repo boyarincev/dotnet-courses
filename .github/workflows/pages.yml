@@ -59,6 +59,8 @@ jobs:
           node --check assets/js/compiler-editor.js
           node --check assets/js/course-runner.js
           node --check assets/js/browser-snippets-lesson002.js
+          node --check assets/js/browser-snippets-memory001.js
+          node --check assets/js/quiz.js
       - name: Verify lesson C# examples on .NET 9 and .NET 10
         run: |
           dotnet new console -n Lesson001Smoke -f net9.0 -o "$RUNNER_TEMP/lesson001smoke"
@@ -74,6 +76,13 @@ jobs:
           printf '/health: Count=1, TotalMs=5\n/orders: Count=4, TotalMs=220\nBuilds when null: 0\nBuilds when present: 1\nAudit: /health=1/5; /orders=4/220\n' > "$RUNNER_TEMP/lesson002-expected.txt"
           diff -u "$RUNNER_TEMP/lesson002-expected.txt" "$RUNNER_TEMP/lesson002-output.txt"
           node _browser/verify_snippets_lesson2.cjs "$RUNNER_TEMP/lesson002smoke"
+          dotnet new console -n Memory001Smoke -f net10.0 -o "$RUNNER_TEMP/memory001smoke"
+          cp _browser/memory-lesson001-program.cs "$RUNNER_TEMP/memory001smoke/Program.cs"
+          dotnet run --project "$RUNNER_TEMP/memory001smoke" > "$RUNNER_TEMP/memory001-output.txt"
+          printf 'Paid orders: 2\nFirst amount: 1499.90\nAfter copy change: 1499.90\n' > "$RUNNER_TEMP/memory001-expected.txt"
+          diff -u "$RUNNER_TEMP/memory001-expected.txt" "$RUNNER_TEMP/memory001-output.txt"
+          node -e "const p=require('./assets/js/browser-snippets-memory001.js'); if(p.exampleCount!==1) process.exit(1)"
+          node -e "const f=require('fs');if(!f.readFileSync('_memory_lessons/001-allocations-copies-retention.md','utf8').includes(f.readFileSync('_browser/memory-lesson001-program.cs','utf8').trim())) process.exit(1)"
       - name: Prepare C# 13 browser compiler (cache miss)
         if: steps.wasm9.outputs.cache-hit != 'true'
         run: python3 _browser/prepare_compiler.py 9 _compiler_src/CSharpCompilerWasm
@@ -131,8 +140,13 @@ jobs:
           if test -f "$RUNNER_TEMP/cm/node_modules/codemirror/LICENSE"; then cp "$RUNNER_TEMP/cm/node_modules/codemirror/LICENSE" _site/assets/vendor/codemirror/LICENSE.txt; fi
           test -s _site/assets/js/compiler-editor.js
           test -s _site/assets/js/course-runner.js
-          grep -q 'course-compiler' _site/lessons/001-params-countby/index.html
-          grep -q 'course-compiler' _site/lessons/002-aggregateby-null-conditional-assignment/index.html
+          grep -q 'course-compiler' _site/courses/whats-new/lessons/001-params-countby/index.html
+          grep -q 'course-compiler' _site/courses/whats-new/lessons/002-aggregateby-null-conditional-assignment/index.html
+          grep -q 'course-compiler' _site/courses/memory/lessons/001-allocations-copies-retention/index.html
+          test -s _site/courses/memory/quiz/index.html
+          test -s _site/courses/whats-new/quiz/index.html
+          test -s _site/courses/memory/index.html
+          test -s _site/courses/whats-new/index.html
       - uses: actions/upload-pages-artifact@v5
   deploy:
     environment:

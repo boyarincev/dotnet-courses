@@ -1,5 +1,5 @@
-title: ".NET Courses — C#, производительность и память"
-description: "Практические курсы .NET для опытных разработчиков: C# 13–15, .NET 9–11, память, аллокации и производительность."
+title: ".NET Courses — C#, память и производительность"
+description: "Практические курсы для опытных C#/.NET-разработчиков: возможности C# 13–15, .NET 9–11, память, аллокации и производительность."
 lang: ru
 url: "https://boyarincev.github.io"
 baseurl: "/dotnet-courses"
@@ -8,13 +8,23 @@ highlighter: rouge
 collections:
   lessons:
     output: true
-    permalink: /lessons/:name/
+    permalink: /courses/whats-new/lessons/:name/
+  memory_lessons:
+    output: true
+    permalink: /courses/memory/lessons/:name/
 defaults:
   - scope:
       path: ""
       type: lessons
     values:
       layout: lesson
+      course: whats-new
+  - scope:
+      path: ""
+      type: memory_lessons
+    values:
+      layout: lesson
+      course: memory
 exclude:
   - README.md
   - Gemfile

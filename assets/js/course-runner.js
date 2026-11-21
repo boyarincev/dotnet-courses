@@ -7,9 +7,11 @@
   const frame = document.getElementById("course-compiler");
   if (!frame) return;
   const lesson = Number(frame.dataset.lesson);
-  const taskId = "TASK-" + String(lesson).padStart(3, "0");
+  const course = frame.dataset.course === "memory" ? "memory" : "whats-new";
+  const taskId = (course === "memory" ? "ALLOC-TASK-" : "TASK-") + String(lesson).padStart(3, "0");
   const task = document.getElementById("solution-" + taskId);
-  const provider = lesson === 1 ? window.DotnetLesson001Snippets :
+  const provider = course === "memory" ? (lesson === 1 ? window.DotnetMemoryLesson001Snippets : null) :
+                   lesson === 1 ? window.DotnetLesson001Snippets :
                    lesson === 2 ? window.DotnetLesson002Snippets : null;
 
   function bridge() {
@@ -92,6 +94,22 @@
   }
 
   const commonImports="using System;\nusing System.Collections.Generic;\nusing System.Linq;\n";
+
+  function taskProgramMemory001(input) {
+    if (/\bclass\s+Program\b/.test(input)) return input;
+    const code = stripImports(input);
+    return commonImports + "\nusing System.Globalization;\n\n" +
+      "public static class Program\n{\n" +
+      "    public static void Main()\n    {\n" +
+      '        string[] rows = ["ORD-1042;paid;1499.90","ORD-1043;new;250.00","ORD-1044;paid;80.00","broken","ORD-1045;paid;not-a-number","ORD-1046;PAID;30.00"];\n' +
+      '        var summary = SummarizePaid(rows);\n' +
+      '        Console.WriteLine($"Paid: {summary.PaidCount}");\n' +
+      '        Console.WriteLine($"Total: {summary.Total.ToString("F2", CultureInfo.InvariantCulture)}");\n' +
+      '        Console.WriteLine($"Empty: {SummarizePaid(Array.Empty<string>()).PaidCount}");\n' +
+      "    }\n    // BEGIN ALLOC-TASK-001\n" + code +
+      "\n    // END ALLOC-TASK-001\n}\n";
+  }
+
   function stripImports(raw) {
     return String(raw).replace(/\r\n?/g,"\n").split("\n")
       .filter(line=>!/^\s*using\s+[\w.]+\s*;\s*$/.test(line)).join("\n").trim();
@@ -108,7 +126,7 @@
     save.textContent="Вернуть код из компилятора";
     actions.append(load,save);
     load.addEventListener("click",()=>{
-      const code=lesson===1?taskProgram001(task.value):taskProgram002(task.value);
+      const code=course==="memory"?taskProgramMemory001(task.value):(lesson===1?taskProgram001(task.value):taskProgram002(task.value));
       send(load,code,true);
     });
     save.addEventListener("click",()=>{

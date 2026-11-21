@@ -1,13 +1,30 @@
 ---
 layout: default
-title: Главная
+title: Каталог курсов
 permalink: /
 ---
-<div class="hero"><div class="eyebrow">Практический курс для опытных C#/.NET-разработчиков</div><h1>C# 13, 14, 15<br><em>.NET 9, 10, 11</em></h1>
-<p class="lead">Изучаем действительно полезные возможности C# 13, C# 14, C# 15 и .NET 9, .NET 10, .NET 11: объяснения с примерами, самостоятельный код и интервальное повторение. Не полный changelog, а навыки для реальной разработки.</p>
-<a class="button primary" href="{{ '/lessons/001-params-countby/' | relative_url }}">Начать обучение →</a><a class="button" href="{{ '/quiz/' | relative_url }}">Квиз</a></div>
-<p class="muted">Для уроков №1 и №2 браузерный компилятор встроен прямо в основные страницы. Выбирай урок в библиотеке ниже.</p>
-<div class="features"><div><b>01 · Разобрать</b><p>Зачем нужна фича и когда её применять.</p></div><div><b>02 · Запустить</b><p>Проверенный пример C# и команды запуска.</p></div><div><b>03 · Написать</b><p>Небольшая самостоятельная задача.</p></div><div><b>04 · Повторить</b><p>Вопросы с отдельными ID.</p></div></div>
-<h2>Библиотека уроков</h2>
-<div class="lessons">{% assign lessons_sorted = site.lessons | sort: 'lesson_number' | reverse %}{% for lesson in lessons_sorted %}
-<a class="lesson-card" href="{{ lesson.url | relative_url }}"><small>Урок {{ lesson.lesson_number }} · {{ lesson.lesson_date }} · {{ lesson.series }}</small><h3>{{ lesson.title | escape }}</h3><p>{{ lesson.summary | escape }}</p><span>{{ lesson.csharp_feature }} · {{ lesson.dotnet_feature }}</span><strong>↗</strong></a>{% endfor %}</div>
+<div class="hero">
+  <div class="eyebrow">.NET Courses · практическое обучение</div>
+  <h1>Разбирайся глубже.<br><em>Пиши осознаннее.</em></h1>
+  <p class="lead">Два самостоятельных курса для опытного C#/.NET-разработчика. Короткие уроки, практические задачи, запускаемые примеры и интервальное повторение.</p>
+</div>
+<h2>Выбери курс</h2>
+<div class="course-grid">
+  <a class="course-card" href="{{ '/courses/whats-new/' | relative_url }}">
+    <span class="course-number">КУРС 01 · НОВОЕ В ПЛАТФОРМЕ</span>
+    <h3>C# 13–15 и .NET 9–11</h3>
+    <p>Полезные нововведения языка и библиотек, сгруппированные в связанные учебные цепочки.</p>
+    <span class="course-meta">{{ site.lessons.size }} опубликованных урока · отдельный квиз</span>
+    <strong>Перейти к урокам ↗</strong>
+  </a>
+  <a class="course-card" href="{{ '/courses/memory/' | relative_url }}">
+    <span class="course-number">КУРС 02 · ПАМЯТЬ И АЛЛОКАЦИИ</span>
+    <h3>Эффективная работа с памятью</h3>
+    <p>Аллокации, копирование, GC, readonly, Span, временные буферы, пулы и производительные API.</p>
+    <span class="course-meta">{{ site.memory_lessons.size }} опубликованных урока · 45 тем в программе</span>
+    <strong>Перейти к урокам ↗</strong>
+  </a>
+</div>
+<h2>Один метод обучения</h2>
+<div class="features"><div><b>01 · Понять</b><p>Реальная проблема, ограничения, краткая теория.</p></div><div><b>02 · Запустить</b><p>Проверяемый пример C# и ожидаемый результат.</p></div><div><b>03 · Написать</b><p>Собственная небольшая задача на 10–12 минут.</p></div><div><b>04 · Повторить</b><p>Раздельные вопросы с постоянными ID.</p></div></div>
+<p class="muted">Каждый учебный день рассчитан максимум на 30 минут. Курсы ссылаются друг на друга там, где материал помогает закрепить знания.</p>

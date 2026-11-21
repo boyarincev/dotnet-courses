@@ -1,7 +1,15 @@
 ---
 layout: default
 ---
-<div class="eyebrow">Урок {{ page.lesson_number }} · {{ page.lesson_date }}</div>
+{% assign course_url = '/courses/whats-new/' %}
+{% assign quiz_url = '/courses/whats-new/quiz/' %}
+{% assign course_title = 'C# 13–15 и .NET 9–11' %}
+{% if page.course == 'memory' %}
+  {% assign course_url = '/courses/memory/' %}
+  {% assign quiz_url = '/courses/memory/quiz/' %}
+  {% assign course_title = 'Память и аллокации .NET' %}
+{% endif %}
+<div class="eyebrow"><a href="{{ course_url | relative_url }}">{{ course_title }}</a> · Урок {{ page.lesson_number }} · {{ page.lesson_date }}</div>
 <h1>{{ page.title | escape }}</h1>
 <p class="lead">{{ page.summary | escape }}</p>
 <div class="chips"><span>{{ page.csharp_feature }}</span><span>{{ page.dotnet_feature }}</span><span>{{ page.series }}</span></div>
@@ -9,16 +17,18 @@ layout: default
 {% if page.browser_runtime %}
 <section class="lesson-browser" id="browser-runner">
   <h2>Практика: настоящий C# в браузере</h2>
-  <p>Под каждым C#-примером есть кнопка <strong>«Запустить этот пример»</strong>. Она переносит код в редактор ниже, автоматически дополняя неполные фрагменты окружением для запуска. Твоё самостоятельное решение запускается отдельно, без заранее готового ответа.</p>
-  <p><strong>C# {% if page.browser_runtime == '9' %}13{% elsif page.browser_runtime == '10' %}14{% else %}неизвестная версия{% endif %} / .NET {{ page.browser_runtime }}</strong> · Roslyn и WebAssembly. Подсветка C#, парные скобки и базовые подсказки имён (Ctrl+Space). Это ещё не полноценный семантический IntelliSense с анализом типов.</p>
-  <iframe id="course-compiler" data-lesson="{{ page.lesson_number }}" title="C#-редактор и компилятор Roslyn для .NET {{ page.browser_runtime }}" src="{{ '/browser-compiler-net' | append: page.browser_runtime | append: '/' | relative_url }}" loading="eager" style="display:block;width:100%;min-height:890px;border:1px solid var(--border);border-radius:14px;background:#fff" referrerpolicy="strict-origin-when-cross-origin"></iframe>
-  <p class="muted">Первая загрузка WebAssembly может занять больше времени. Код запускается в браузере и не отправляется на сервер компиляции. Не вставляй секреты. Браузерная среда не заменяет SDK для EF Core, ASP.NET Core и системных API.</p>
+  <p>Кнопка под примером переносит код в компилятор ниже. <strong>У самого редактора есть кнопка «Запустить мой код»</strong> — после изменения текста она запускает его заново без повторной подстановки примера.</p>
+  <p><strong>C# {% if page.browser_runtime == '9' %}13{% elsif page.browser_runtime == '10' %}14{% else %}неизвестная версия{% endif %} / .NET {{ page.browser_runtime }}</strong> · Roslyn + WebAssembly. Базовая подсветка и подсказки, но не полноценный IntelliSense.</p>
+  <iframe id="course-compiler" data-lesson="{{ page.lesson_number }}" data-course="{{ page.course | default: 'whats-new' }}" title="C#-редактор и компилятор Roslyn для .NET {{ page.browser_runtime }}" src="{{ '/browser-compiler-net' | append: page.browser_runtime | append: '/' | relative_url }}" loading="eager" style="display:block;width:100%;min-height:890px;border:1px solid var(--border);border-radius:14px;background:#fff" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+  <p class="muted">Нажми «Запустить этот пример», чтобы загрузить код текущего урока; затем редактируй и запускай его прямо в компиляторе. Рабочие секреты в браузер не вставляй.</p>
 </section>
-{% if page.lesson_number == 1 %}
+{% if page.course == 'memory' and page.lesson_number == 1 %}
+<script defer src="{{ '/assets/js/browser-snippets-memory001.js' | relative_url }}"></script>
+{% elsif page.course != 'memory' and page.lesson_number == 1 %}
 <script defer src="{{ '/assets/js/browser-snippets.js' | relative_url }}"></script>
-{% elsif page.lesson_number == 2 %}
+{% elsif page.course != 'memory' and page.lesson_number == 2 %}
 <script defer src="{{ '/assets/js/browser-snippets-lesson002.js' | relative_url }}"></script>
 {% endif %}
 <script defer src="{{ '/assets/js/course-runner.js' | relative_url }}"></script>
 {% endif %}
-<div class="next"><h2>Теперь повторение</h2><p>Вопросы по уже изученным фичам имеют постоянные ID. Ответы можно экспортировать для проверки.</p><a class="button primary" href="{{ '/quiz/' | relative_url }}">Открыть квиз →</a></div>
+<div class="next"><h2>Теперь повторение</h2><p>Вопросы этого курса имеют собственные постоянные ID. Ответы можно экспортировать для проверки — без публикации личной истории.</p><a class="button primary" href="{{ quiz_url | relative_url }}">Открыть квиз курса →</a><a class="button" href="{{ course_url | relative_url }}">К списку уроков</a></div>

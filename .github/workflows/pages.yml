@@ -38,6 +38,7 @@ jobs:
           destination: ./_site
       - name: Include compiled browser runner
         run: |
+          sudo chown -R "$(id -u):$(id -g)" _site
           mkdir -p _site/browser-compiler
           cp -a "$RUNNER_TEMP/browser-compiler-publish/wwwroot/." _site/browser-compiler/
           cp _compiler_src/LICENSE _site/browser-compiler/LICENSE.txt

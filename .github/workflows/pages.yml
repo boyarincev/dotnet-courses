@@ -62,7 +62,17 @@ jobs:
           node --check assets/js/browser-snippets-lesson002.js
           node --check assets/js/browser-snippets-memory001.js
           node --check assets/js/quiz.js
+          node --check _browser/quiz-fsrs-entry.mjs
+          node --check _browser/quiz-fsrs.test.mjs
           node --check assets/js/site.js
+      - name: Install pinned FSRS scheduler and bundler
+        run: npm install --prefix _browser --no-save --no-package-lock --no-audit --no-fund ts-fsrs@6.0.0 esbuild@0.25.12
+      - name: Verify FSRS-7 scheduling with real ts-fsrs and build browser module
+        run: |
+          node _browser/quiz-fsrs.test.mjs
+          _browser/node_modules/.bin/esbuild _browser/quiz-fsrs-entry.mjs --bundle --platform=browser --format=iife --target=es2022 --minify --outfile=assets/js/quiz-fsrs.js
+          test -s assets/js/quiz-fsrs.js
+          node --check assets/js/quiz-fsrs.js
       - name: Verify lesson C# examples on .NET 9 and .NET 10
         run: |
           dotnet new console -n Lesson001Smoke -f net9.0 -o "$RUNNER_TEMP/lesson001smoke"
@@ -177,6 +187,11 @@ jobs:
           if test -f "$RUNNER_TEMP/cm/node_modules/codemirror/LICENSE"; then cp "$RUNNER_TEMP/cm/node_modules/codemirror/LICENSE" _site/assets/vendor/codemirror/LICENSE.txt; fi
           test -s _site/assets/js/compiler-editor.js
           test -s _site/assets/js/course-runner.js
+          test -s _site/assets/js/quiz-fsrs.js
+          grep -q 'quiz-fsrs.js' _site/courses/csharp-dotnet-9-11/quiz/index.html
+          grep -q 'quiz-fsrs.js' _site/courses/memory/quiz/index.html
+          grep -q 'through=1' _site/courses/csharp-dotnet-9-11/lessons/001-params-countby/index.html
+          grep -q 'through=2' _site/courses/csharp-dotnet-9-11/lessons/002-aggregateby-null-conditional-assignment/index.html
           for page in \
             _site/courses/csharp-dotnet-9-11/lessons/001-params-countby/index.html \
             _site/courses/csharp-dotnet-9-11/lessons/002-aggregateby-null-conditional-assignment/index.html \

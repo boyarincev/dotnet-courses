@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Checkout learning site
         uses: actions/checkout@v4
-      - name: Checkout pinned C# minor sources (MIT license)
+      - name: Checkout pinned MicrosoftLearning C# minor compiler (MIT)
         uses: actions/checkout@v4
         with:
           repository: MicrosoftLearning/c-sharp-minor
@@ -25,8 +25,13 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
-      - name: Smoke test lesson 001 C# 13 and CountBy
+          dotnet-version: |
+            9.0.x
+            10.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify lesson C# examples on .NET 9 and .NET 10
         run: |
           dotnet new console -n Lesson001Smoke -f net9.0 -o "$RUNNER_TEMP/lesson001smoke"
           cp _browser/lesson001-program.cs "$RUNNER_TEMP/lesson001smoke/Program.cs"
@@ -34,25 +39,54 @@ jobs:
           printf 'HTTP methods\nGET: 3\nPOST: 2\nPUT: 1\nSum = 60\n' > "$RUNNER_TEMP/lesson001-expected.txt"
           diff -u "$RUNNER_TEMP/lesson001-expected.txt" "$RUNNER_TEMP/lesson001-output.txt"
           node _browser/verify_snippets.cjs "$RUNNER_TEMP/lesson001smoke"
-      - name: Adapt browser compiler for lesson 001
-        run: python3 _browser/prepare_compiler.py
-      - name: Build real C# compiler for WebAssembly
-        run: dotnet publish _compiler_src/CSharpCompilerWasm/CSharpCompilerWasm.csproj --configuration Release --output "$RUNNER_TEMP/browser-compiler-publish"
+          dotnet new console -n Lesson002Smoke -f net10.0 -o "$RUNNER_TEMP/lesson002smoke"
+          cp _browser/lesson002-program.cs "$RUNNER_TEMP/lesson002smoke/Program.cs"
+          dotnet run --project "$RUNNER_TEMP/lesson002smoke" > "$RUNNER_TEMP/lesson002-output.txt"
+          printf '/health: Count=1, TotalMs=5\n/orders: Count=4, TotalMs=220\nBuilds when null: 0\nBuilds when present: 1\nAudit: /health=1/5; /orders=4/220\n' > "$RUNNER_TEMP/lesson002-expected.txt"
+          diff -u "$RUNNER_TEMP/lesson002-expected.txt" "$RUNNER_TEMP/lesson002-output.txt"
+          node _browser/verify_snippets_lesson2.cjs "$RUNNER_TEMP/lesson002smoke"
+      - name: Prepare browser compilers for both runtimes
+        run: |
+          cp -a _compiler_src _compiler_src_net10
+          python3 _browser/prepare_compiler.py 9 _compiler_src/CSharpCompilerWasm
+          python3 _browser/prepare_compiler.py 10 _compiler_src_net10/CSharpCompilerWasm
+      - name: Build C# 13 browser compiler on .NET 9
+        run: dotnet publish _compiler_src/CSharpCompilerWasm/CSharpCompilerWasm.csproj --configuration Release --output "$RUNNER_TEMP/compiler-net9"
+      - name: Build C# 14 browser compiler on .NET 10
+        run: dotnet publish _compiler_src_net10/CSharpCompilerWasm/CSharpCompilerWasm.csproj --configuration Release --output "$RUNNER_TEMP/compiler-net10"
+      - name: Install pinned CodeMirror editor assets
+        run: npm install --prefix "$RUNNER_TEMP/cm" --no-save --no-package-lock --no-audit --no-fund codemirror@5.65.21
       - uses: actions/configure-pages@v5
       - name: Build Jekyll course
         uses: actions/jekyll-build-pages@v1
         with:
           source: ./
           destination: ./_site
-      - name: Include compiled browser runner
+      - name: Include two browser compilers and shared CodeMirror
         run: |
           sudo chown -R "$(id -u):$(id -g)" _site
-          mkdir -p _site/browser-compiler
-          cp -a "$RUNNER_TEMP/browser-compiler-publish/wwwroot/." _site/browser-compiler/
-          cp _compiler_src/LICENSE _site/browser-compiler/LICENSE.txt
-          test -s _site/browser-compiler/index.html
-          test -s _site/browser-compiler/_framework/blazor.webassembly.js
-          test -s _site/labs/001-browser/index.html
+          for runtime in 9 10; do
+            mkdir -p "_site/browser-compiler-net$runtime"
+            cp -a "$RUNNER_TEMP/compiler-net$runtime/wwwroot/." "_site/browser-compiler-net$runtime/"
+            cp _compiler_src/LICENSE "_site/browser-compiler-net$runtime/LICENSE.txt"
+            test -s "_site/browser-compiler-net$runtime/index.html"
+            test -s "_site/browser-compiler-net$runtime/_framework/blazor.webassembly.js"
+          done
+          mkdir -p _site/assets/vendor/codemirror/lib
+          mkdir -p _site/assets/vendor/codemirror/mode/clike
+          mkdir -p _site/assets/vendor/codemirror/addon/hint
+          mkdir -p _site/assets/vendor/codemirror/addon/edit
+          cp "$RUNNER_TEMP/cm/node_modules/codemirror/lib/codemirror.js" _site/assets/vendor/codemirror/lib/
+          cp "$RUNNER_TEMP/cm/node_modules/codemirror/lib/codemirror.css" _site/assets/vendor/codemirror/lib/
+          cp "$RUNNER_TEMP/cm/node_modules/codemirror/mode/clike/clike.js" _site/assets/vendor/codemirror/mode/clike/
+          cp "$RUNNER_TEMP/cm/node_modules/codemirror/addon/hint/show-hint.js" _site/assets/vendor/codemirror/addon/hint/
+          cp "$RUNNER_TEMP/cm/node_modules/codemirror/addon/hint/show-hint.css" _site/assets/vendor/codemirror/addon/hint/
+          cp "$RUNNER_TEMP/cm/node_modules/codemirror/addon/edit/matchbrackets.js" _site/assets/vendor/codemirror/addon/edit/
+          cp "$RUNNER_TEMP/cm/node_modules/codemirror/addon/edit/closebrackets.js" _site/assets/vendor/codemirror/addon/edit/
+          test -s _site/assets/js/compiler-editor.js
+          test -s _site/assets/js/course-runner.js
+          grep -q 'course-compiler' _site/lessons/001-params-countby/index.html
+          grep -q 'course-compiler' _site/lessons/002-aggregateby-null-conditional-assignment/index.html
       - uses: actions/upload-pages-artifact@v4
   deploy:
     environment:

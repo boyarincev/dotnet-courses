@@ -45,6 +45,136 @@ if source.count(parse) != 1:
 lang = "CSharp13" if runtime == "9" else "CSharp14"
 source = source.replace(parse, "CSharpSyntaxTree.ParseText(combinedCode, new CSharpParseOptions(LanguageVersion." + lang + "));")
 
+
+def replace_once(text, old, new):
+    if text.count(old) != 1:
+        raise RuntimeError("Upstream console code changed; cannot patch: " + old.splitlines()[0].strip())
+    return text.replace(old, new)
+
+
+# ReadLine restarts the entry point. Use a dedicated signal so a program error
+# with the same message cannot be mistaken for a request for input.
+console = root / "ConsoleReplacementCode.cs"
+console_source = replace_once(
+    console.read_text(encoding="utf-8"),
+    '        throw new System.InvalidOperationException(""INPUT_REQUIRED"");',
+    '        throw new InputRequiredException();',
+)
+console_source = replace_once(
+    console_source,
+    "    internal static string GetCapturedOutput()",
+    "    internal sealed class InputRequiredException : System.Exception { }\n\n"
+    "    internal static string GetCapturedOutput()",
+)
+
+source = replace_once(
+    source,
+    '                AddOutput(".NET WebAssembly execution completed successfully!", "success");',
+    '''                if (string.IsNullOrEmpty(executionResult))
+                {
+                    AddOutput(".NET WebAssembly execution completed successfully!", "success");
+                }
+                else if (!showSystemOutput)
+                {
+                    await DisplayErrorsViaJavaScript(clearPreviousOutput: false);
+                }''',
+)
+source = replace_once(
+    source,
+    '                return "Error: No suitable Main method found";',
+    '                AddErrorOutput("Error: No suitable Main method found", "error");\n'
+    '                return "Error: No suitable Main method found";',
+)
+source = replace_once(
+    source,
+    "        // We need to use the restart-based approach, but we'll optimize it to minimize visual issues",
+    '''        // We need to use the restart-based approach, but we'll optimize it to minimize visual issues
+        var getOutputMethod = consoleType?.GetMethod("GetCapturedOutput", BindingFlags.Static | BindingFlags.NonPublic);
+        var inputRequiredType = consoleType?.GetNestedType("InputRequiredException", BindingFlags.NonPublic);
+        string GetCapturedOutput() => getOutputMethod?.Invoke(null, null) as string ?? "";
+        var outputBeforeExecution = output;''',
+)
+source = replace_once(
+    source,
+    "                // Clear and reset the console for this execution attempt",
+    '''                // Replace the previous attempt's preview when replaying input.
+                if (showSystemOutput)
+                {
+                    output = outputBeforeExecution;
+                }
+
+                // Clear and reset the console for this execution attempt''',
+)
+for name, comment in (("finalOutput", "the final output"), ("outputSoFar", "current output")):
+    source = replace_once(
+        source,
+        f'''                    string {name} = "";
+                    if (consoleType != null)
+                    {{
+                        var getOutputMethod = consoleType.GetMethod("GetCapturedOutput", BindingFlags.Static | BindingFlags.NonPublic);
+                        {name} = getOutputMethod?.Invoke(null, null) as string ?? "";
+                    }}''' + "\n                    \n" + f'''                    // Display {comment}
+                    await DisplayOutput({name});''',
+        "                    await DisplayOutput(GetCapturedOutput());",
+    )
+source = replace_once(
+    source,
+    'catch (TargetInvocationException ex) when (ex.InnerException?.Message == "INPUT_REQUIRED")',
+    'catch (TargetInvocationException ex) when (inputRequiredType != null && ex.InnerException?.GetType() == inputRequiredType)',
+)
+source = replace_once(
+    source,
+    "            var innerEx = ex.InnerException ?? ex;",
+    '''            await DisplayOutput(GetCapturedOutput());
+            var innerEx = ex is TargetInvocationException { InnerException: { } cause } ? cause : ex;''',
+)
+
+# Keep the two renderers in order: DisplayOutput replaces the previous run,
+# while the error renderer can append to the current run's console.
+source = replace_once(
+    source,
+    "    private async Task DisplayErrorsViaJavaScript()",
+    "    private async Task DisplayErrorsViaJavaScript(bool clearPreviousOutput = true)",
+)
+source = replace_once(
+    source,
+    '''            // Clear previous output first
+            await JSRuntime.InvokeVoidAsync("clearAllOutput");''',
+    '''            if (clearPreviousOutput)
+            {
+                await JSRuntime.InvokeVoidAsync("clearAllOutput");
+            }''',
+)
+source = replace_once(
+    source,
+    "        var line = $\"<span class='{cssClass}'>[{timestamp}] {text.Replace(\"\\n\", \"<br/>\")}</span><br/>\";\n"
+    "        errorOutput += line;",
+    "        var escaped = System.Net.WebUtility.HtmlEncode(text).Replace(\"\\n\", \"<br/>\");\n"
+    "        var line = $\"<span class='{cssClass}'>[{timestamp}] {escaped}</span><br/>\";\n"
+    "        errorOutput += line;",
+)
+
+# Preserve blank lines too. The HTML parser consumes the first newline in
+# a <pre> element, so add one before the escaped text in the Razor renderer.
+trim_leading = r"""                    var lines = outputText.Split('\n');
+                    int firstNonEmptyLine = 0;
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        if (!string.IsNullOrWhiteSpace(lines[i]))
+                        {
+                            firstNonEmptyLine = i;
+                            break;
+                        }
+                    }
+                    var trimmedOutput = string.Join("\n", lines.Skip(firstNonEmptyLine));
+""" + "                    \n"
+if source.count(trim_leading) != 2 or source.count("trimmedOutput") != 4:
+    raise RuntimeError("Upstream console output formatting changed")
+source = source.replace(trim_leading, "").replace("trimmedOutput", "outputText")
+source = replace_once(source, ";'>{escaped}</pre>", r";'>\n{escaped}</pre>")
+
+console.write_text(console_source, encoding="utf-8")
+
 if runtime == "10":
     source = source.replace("Basic.Reference.Assemblies.Net90", "Basic.Reference.Assemblies.Net100")
     project = csproj.read_text(encoding="utf-8")

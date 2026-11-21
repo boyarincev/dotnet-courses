@@ -59,6 +59,7 @@ jobs:
           node --check assets/js/compiler-editor.js
           node --check assets/js/course-runner.js
           node --check _browser/verify_practice_assertions.cjs
+          node --check _browser/verify_compiler_output.cjs
           node --check assets/js/browser-snippets-lesson002.js
           node --check assets/js/browser-snippets-memory001.js
           node --check assets/js/quiz.js
@@ -218,6 +219,17 @@ jobs:
           grep -q "$GITHUB_SHA" _site/index.html
           grep -q "$GITHUB_SHA" _site/sw.js
           grep -q "$GITHUB_SHA" _site/courses/memory/lessons/001-allocations-copies-retention/index.html
+      - name: Verify console output in both published WASM builds
+        run: |
+          npm install --prefix "$RUNNER_TEMP/browser-tests" --no-save --no-package-lock --no-audit --no-fund playwright@1.62.1
+          "$RUNNER_TEMP/browser-tests/node_modules/.bin/playwright" install --with-deps chromium
+          mkdir -p "$RUNNER_TEMP/browser-site"
+          ln -s "$GITHUB_WORKSPACE/_site" "$RUNNER_TEMP/browser-site/dotnet-courses"
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory "$RUNNER_TEMP/browser-site" &
+          trap 'kill $!' EXIT
+          curl -fsS --retry 5 --retry-connrefused http://127.0.0.1:4173/dotnet-courses/ >/dev/null
+          NODE_PATH="$RUNNER_TEMP/browser-tests/node_modules" node _browser/verify_compiler_output.cjs \
+            http://127.0.0.1:4173/dotnet-courses/ "$GITHUB_SHA"
       - uses: actions/upload-pages-artifact@v5
   deploy:
     environment:

@@ -18,7 +18,7 @@ const expected=[
   "/health: Count=1, TotalMs=5\n/orders: Count=4, TotalMs=220\nBuilds when null: 0\nBuilds when present: 1\nAudit: /health=1/5; /orders=4/220\n",
   "api-A: 500, bytes=150\n",
   "Сигнатура проверена; реализацию напиши самостоятельно.\n",
-  "Input: 5 calls\n"
+  "Input: 7 calls\n"
 ];
 for(let i=0;i<exampleCount;i++){
   const source=makeRunnable(snippets[i],i);

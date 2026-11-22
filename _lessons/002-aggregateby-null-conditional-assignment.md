@@ -16,7 +16,7 @@ browser_runtime: '10'
 
 ## 1. .NET 9: Enumerable.AggregateBy
 
-`CountBy(keySelector)` считает элементы по ключу. `AggregateBy` накапливает **произвольное состояние для каждого ключа**. Например, одновременно счётчик и сумму:
+`CountBy(keySelector)` считает элементы по ключу. `AggregateBy` накапливает **произвольное состояние для каждого ключа**. В этой сводке считаем маршруты одинаковыми без учёта регистра и накапливаем для каждого счётчик и сумму.
 
 ```csharp
 var stats = calls.AggregateBy(
@@ -33,13 +33,13 @@ var stats = calls.AggregateBy(
     keyComparer: StringComparer.OrdinalIgnoreCase);
 ```
 
-Сравнение ключей можно оставить по умолчанию, опустив `keyComparer`. Если стартовое состояние зависит от ключа, используй перегрузку с `seedSelector`. Она принимает функцию, которая вычисляет начальное значение по ключу.
+Если опустить `keyComparer`, применяется [сравнение по умолчанию для типа ключа](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/Dictionary.cs#L58-L82). Когда начальное значение зависит от ключа, используй [перегрузку с `seedSelector`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.aggregateby?view=net-9.0#overloads). Функция типа `Func<TKey, TAccumulate>` вычисляет начальное значение [при первой встрече ключа в очередном перечислении](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/src/System/Linq/AggregateBy.cs#L103-L131).
 
-Возвращается **`IEnumerable<KeyValuePair<TKey,TAccumulate>>`**, а не словарь. Как и `CountBy`, это отложенное вычисление: повторное перечисление заново агрегирует исходные данные. `ToArray()` материализует снимок. `AggregateBy` не создаёт промежуточные группы `GroupBy`, но хранит состояние по каждому уникальному ключу и не гарантирует отсутствия аллокаций.
+Метод возвращает **`IEnumerable<KeyValuePair<TKey, TAccumulate>>`**. Как и в [`CountBy`](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/src/System/Linq/CountBy.cs#L22-L42), вычисление отложено. При перечислении `AggregateBy` [полностью читает вход до выдачи первой пары](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/src/System/Linq/AggregateBy.cs#L71-L99), а при повторном перечислении заново читает источник. Реализация .NET 9 для непустого входа [создаёт словарь с одним накопленным значением на ключ](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/src/System/Linq/AggregateBy.cs#L85-L99).
+
+В полном примере ниже [`ToArray()` вычисляет сводку сразу и сохраняет её в массиве](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.toarray?view=net-10.0#remarks). И вывод в консоль, и отчёт читают этот массив.
 
 **Когда пригодится `GroupBy`.** Если нужно перечислить отдельные запросы по маршруту, например посмотреть статус и длительность каждого запроса к `/orders`, используй `GroupBy`. В результате `GroupBy` для каждого маршрута доступны ключ группы и входящие в неё записи `HttpCall`. В результате этого вызова `AggregateBy` для каждого маршрута доступны ключ и накопленный итог `(Count, TotalMs)`.
-
-В EF Core `IQueryable` не рассчитывай на автоматическую трансляцию `Enumerable.AggregateBy` в SQL: для серверной агрегации обычно применяют поддерживаемые `GroupBy`, `Count`, `Sum` и проверяют сгенерированный SQL. Для идентификаторов с чувствительным к регистру сравнением не используй `OrdinalIgnoreCase` механически.
 
 ## 2. C# 14: null-conditional assignment
 
@@ -56,18 +56,18 @@ if (audit is not null)
 audit?.Text = BuildSummary();
 ```
 
-При `audit == null` **правая часть вообще не вычисляется**: `BuildSummary()` не вызывается. Это особенно полезно, когда создание необязательного отчёта дорого.
+При `audit == null` **[правая часть не вычисляется](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/proposals/csharp-14.0/null-conditional-assignment#specification)**. В этом примере вызов `BuildSummary()` и построение строки отчёта пропускаются.
 
-Также допустимо `audit?.Counter += 1` и `array?[0] = value`. Но `audit?.Counter++` недопустимо. `?.` не заменяет синхронизацию потоков: между проверкой и использованием состояние других объектов может меняться. Если нужно несколько действий, обычный `if` часто понятнее.
+Условный доступ поддерживает составное присваивание, например `audit?.Text += " (проверено)"`, и присваивание элементу массива, например `array?[0] = value`. Инкремент `++` и декремент `--` с условным доступом недопустимы ([правила условного присваивания](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/member-access-operators#null-conditional-operators--and-)). Для нескольких действий подходит один блок `if`.
 
 **Обновить текст или создать объект отчёта?** Рассмотрим два отдельных варианта для переменной `audit` типа `Audit?`.
 
 - `audit?.Text = BuildSummary()` проверяет ссылку в `audit`. Если объект есть, результат `BuildSummary()` записывается в его свойство `Text`, заменяя любой прежний текст. При `audit == null` значение `audit` остаётся `null`, а вызов `BuildSummary()` пропускается.
-- `audit ??= new Audit()` проверяет текущее значение переменной `audit`. При `audit == null` новый объект с пустым `Text` записывается в саму переменную `audit`. Если объект уже есть, `audit` сохраняет ссылку на него, `Text` сохраняет своё значение, а выражение `new Audit()` пропускается.
+- [`audit ??= new Audit()`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/null-coalescing-operator) проверяет текущее значение переменной `audit`. При `audit == null` новый объект с пустым `Text` записывается в саму переменную `audit`. Если объект уже есть, `audit` сохраняет ссылку на него, `Text` сохраняет своё значение, а выражение `new Audit()` пропускается.
 
 ## 3. Полностью запускаемый пример
 
-Нужен **.NET 10 SDK**: `AggregateBy` доступен с .NET 9, а C# 14 используется по умолчанию при `net10.0`.
+Для полного примера используй **.NET 10 SDK** и проект с целевой платформой `net10.0`. В таком проекте [версия языка по умолчанию — C# 14](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-versioning#defaults). Сам API [`AggregateBy` появился в .NET 9](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-9/libraries#linq).
 
 ```bash
 dotnet --version
@@ -147,14 +147,16 @@ Builds when present: 1
 Audit: /health=1/5; /orders=4/220
 ```
 
-Статус `503` исключён, разные регистры `/orders` объединены. `BuildSummary` вызывается только после появления объекта `Audit`. Попробуй убрать `StringComparer.OrdinalIgnoreCase` и предскажи, сколько ключей получится.
+Фильтр пропустил только ответы со статусами 2xx. Запросы к `/orders` и `/ORDERS` вошли в один итог с [написанием первого встреченного ключа](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/Dictionary.cs#L1124-L1132) `/orders`.
+
+`BuildSummary` вызван один раз, когда появился объект `Audit`. Попробуй убрать `StringComparer.OrdinalIgnoreCase` и предскажи, сколько ключей получится.
 
 ## 4. Напиши код сам · TASK-002
 
-**15–20 минут.** Реализуй `GetNoisiestClients` для записей HTTP-вызовов. Оставь ответы со статусом `400` и выше. Сгруппируй их через `AggregateBy` по имени клиента без учёта регистра.
+**15–20 минут.** Реализуй `GetNoisiestClients` для записей HTTP-вызовов. Оставь ответы со статусом `400` и выше. Сгруппируй их через `AggregateBy` по имени клиента с `StringComparer.OrdinalIgnoreCase`.
 
-- **Результат метода.** Верни до двух элементов `(Client, Count, TotalBytes)`. `Count` — число ошибочных ответов клиента. `TotalBytes` — сумма их полей `ResponseBytes` в байтах, тип суммы `long`. Сортируй по `TotalBytes` по убыванию, при равенстве — по имени клиента по возрастанию без учёта регистра.
-- **Текст отчёта.** Если `audit` задан, через оператор `?.` запиши в `audit.Text` имя и сумму байтов для каждого клиента из результата в том же порядке. Формат записи — `клиент=сумма_байтов`, разделитель — `"; "`.
+- **Результат метода.** Верни до двух элементов `(Client, Count, TotalBytes)`. `Count` — число ошибочных ответов клиента. `TotalBytes` — сумма их полей `ResponseBytes` в байтах, тип суммы `long`. Для `Client` сохрани написание из первого ответа клиента со статусом от `400`. Сортируй по `TotalBytes` по убыванию, при равенстве — по `Client` по возрастанию с `StringComparer.OrdinalIgnoreCase`.
+- **Текст отчёта.** Если `audit` задан, через `?.` запиши в `audit.Text` значения `Client` и `TotalBytes` из результата в том же порядке. Формат записи — `клиент=сумма_байтов`, разделитель — `"; "`.
 
 Объявления типов для `Program.cs`:
 
@@ -178,17 +180,17 @@ static IReadOnlyList<(string Client, int Count, long TotalBytes)> GetNoisiestCli
 ```csharp
 Failure[] calls =
 [
-    new(Client: "api-A", StatusCode: 500, ResponseBytes: 150),
-    new(Client: "API-a", StatusCode: 404, ResponseBytes: 50),
+    new(Client: "Api-C", StatusCode: 500, ResponseBytes: 350),
+    new(Client: "API-c", StatusCode: 404, ResponseBytes: 50),
+    new(Client: "API-B", StatusCode: 200, ResponseBytes: 900),
     new(Client: "api-b", StatusCode: 503, ResponseBytes: 390),
-    new(Client: "api-b", StatusCode: 200, ResponseBytes: 900),
-    new(Client: "api-c", StatusCode: 500, ResponseBytes: 400)
+    new(Client: "api-a", StatusCode: 500, ResponseBytes: 200)
 ];
 ```
 
-**Ожидаемый результат.** Сначала `api-c` с одной ошибкой на 400 байт, затем `api-b` с одной ошибкой на 390 байт. У `api-A` две ошибки на 200 байт суммарно. При наличии `audit` ожидается `api-c=400; api-b=390`.
+**Ожидаемый результат.** Сначала `Api-C` с двумя ошибками на 400 байт суммарно, затем `api-b` с одной ошибкой на 390 байт. Третий по сумме клиент `api-a` получил одну ошибку на 200 байт. При наличии `audit` ожидается `Api-C=400; api-b=390`.
 
-**Критерии готовности:** фильтр статусов до агрегации; `long` для суммы; объединение `api-A` и `API-a`; максимум два результата и определённый порядок при равенстве; при `audit == null` не создавать текст отчёта. **Пограничный случай:** пустой вход возвращает пустую коллекцию. Если `audit` не равен `null`, в `audit.Text` записывается пустая строка.
+**Критерии готовности:** фильтр статусов до агрегации; `long` для суммы; объединение `Api-C` и `API-c` с сохранением первого написания; максимум два результата и определённый порядок при равенстве; при `audit == null` не создавать текст отчёта. **Пограничный случай:** пустой вход возвращает пустую коллекцию. Если `audit` не равен `null`, в `audit.Text` записывается пустая строка.
 
 При ревью метода отдельно проверь, когда вычисляется строка отчёта. При `audit == null` построение строки должно пропускаться, даже если сводка возвращается правильно.
 
@@ -203,30 +205,34 @@ using System.Linq;
 
 public static class Program
 {
+    // BEGIN TASK-002
+    // INSERT_SOLUTION_HERE
+    // END TASK-002
+
     public static void Main()
     {
         Failure[] calls =
         [
-            new(Client: "api-A", StatusCode: 500, ResponseBytes: 150),
-            new(Client: "API-a", StatusCode: 404, ResponseBytes: 50),
+            new(Client: "Api-C", StatusCode: 500, ResponseBytes: 350),
+            new(Client: "API-c", StatusCode: 404, ResponseBytes: 50),
+            new(Client: "API-B", StatusCode: 200, ResponseBytes: 900),
             new(Client: "api-b", StatusCode: 503, ResponseBytes: 390),
-            new(Client: "api-b", StatusCode: 200, ResponseBytes: 900),
-            new(Client: "api-c", StatusCode: 500, ResponseBytes: 400)
+            new(Client: "api-a", StatusCode: 500, ResponseBytes: 200)
         ];
 
         var audit = new AuditReport();
         var actual = GetNoisiestClients(calls, audit);
 
-        Assert(actual.Count == 2 && actual[0].Count == 1 && actual[0].TotalBytes == 400
-            && string.Equals(actual[0].Client, "api-c", StringComparison.OrdinalIgnoreCase),
+        Assert(actual.Count == 2 && actual[0].Count == 2 && actual[0].TotalBytes == 400
+            && string.Equals(actual[0].Client, "Api-C", StringComparison.Ordinal),
             actual.Count == 2
-                ? $"Первым ожидался api-c с одной ошибкой на 400 байт. Получено «{actual[0]}»."
+                ? $"Первым ожидался Api-C с двумя ошибками на 400 байт суммарно. Получено «{actual[0]}»."
                 : $"Ожидались два клиента. Получено элементов {actual.Count}.");
         Assert(actual[1].Count == 1 && actual[1].TotalBytes == 390
-            && string.Equals(actual[1].Client, "api-b", StringComparison.OrdinalIgnoreCase),
+            && string.Equals(actual[1].Client, "api-b", StringComparison.Ordinal),
             $"Вторым ожидался api-b с одной ошибкой на 390 байт. Получено «{actual[1]}».");
 
-        const string expectedReport = "api-c=400; api-b=390";
+        const string expectedReport = "Api-C=400; api-b=390";
         Assert(audit.Text == expectedReport,
             string.IsNullOrEmpty(audit.Text)
                 ? $"Отчёт не записан в audit.Text. Ожидалось «{expectedReport}»."
@@ -252,8 +258,8 @@ public static class Program
         Assert(withoutAudit.Count == 2
             && withoutAudit[0].Count == 2 && withoutAudit[0].TotalBytes == 2_400_000_000L
             && withoutAudit[1].Count == 2 && withoutAudit[1].TotalBytes == 2_400_000_000L
-            && string.Equals(withoutAudit[0].Client, "alpha", StringComparison.OrdinalIgnoreCase)
-            && string.Equals(withoutAudit[1].Client, "Zed", StringComparison.OrdinalIgnoreCase),
+            && string.Equals(withoutAudit[0].Client, "alpha", StringComparison.Ordinal)
+            && string.Equals(withoutAudit[1].Client, "Zed", StringComparison.Ordinal),
             withoutAudit.Count == 2
                 ? "Ожидались alpha и Zed в этом порядке, по две ошибки и 2 400 000 000 байт у каждого. "
                     + $"Получены «{withoutAudit[0]}» и «{withoutAudit[1]}». Учитывается 400, а 399 пропускается."
@@ -266,10 +272,6 @@ public static class Program
     {
         if (!condition) throw new InvalidOperationException("❌ TASK-002: " + failureMessage);
     }
-
-    // BEGIN TASK-002
-    // INSERT_SOLUTION_HERE
-    // END TASK-002
 }
 
 sealed record Failure(string Client, int StatusCode, long ResponseBytes);
@@ -285,12 +287,14 @@ sealed class AuditReport
 {
     // Реализуй GetNoisiestClients для записей HTTP-вызовов.
     // Оставь ответы со StatusCode &gt;= 400 и сгруппируй их через AggregateBy
-    // по имени клиента без учёта регистра. Count — число таких ответов.
+    // по имени клиента с StringComparer.OrdinalIgnoreCase. Count — число таких ответов.
     // TotalBytes (long) — сумма их ResponseBytes в байтах.
+    // Client — имя из первого ответа этого клиента со StatusCode &gt;= 400.
     // Верни до двух элементов (Client, Count, TotalBytes) по убыванию TotalBytes.
-    // При равенстве сортируй по имени клиента по возрастанию без учёта регистра.
+    // При равенстве сортируй по Client по возрастанию с StringComparer.OrdinalIgnoreCase.
     // Если audit задан, через ?. запиши в audit.Text пары "клиент=сумма_байтов"
-    // в порядке результата, разделяя пары через "; ". Пустой результат даёт пустой текст.
+    // из результата в том же порядке, разделяя пары через "; ". Для пустого
+    // результата запиши пустую строку. При audit == null отчёт не формируй.
 
     throw new NotImplementedException();
 }</textarea>
@@ -301,6 +305,6 @@ sealed class AuditReport
 
 [Квиз по этому и предыдущим урокам]({{ '/courses/csharp-dotnet-9-11/quiz/' | relative_url }}?through={{ page.lesson_number }}) подбирает вопросы с постоянными Q-ID. Ответы и самооценки сохраняются в браузере.
 
-Microsoft Learn: [C# 14](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14), [null-conditional operators](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/member-access-operators#null-conditional-operators--and-), [`??` и `??=`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/null-coalescing-operator), [Enumerable.AggregateBy](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.aggregateby?view=net-9.0), [.NET 9 LINQ](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-9/libraries#linq).
+Microsoft Learn: [условное присваивание в C# 14](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14#null-conditional-assignment).
 
 *Примеры этого урока проверяются на .NET 10 при сборке сайта; браузерный компилятор использует C# 14 и .NET 10.*

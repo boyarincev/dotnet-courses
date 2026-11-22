@@ -76,9 +76,18 @@ jobs:
           node --check assets/js/quiz-fsrs.js
       - name: Verify lesson C# examples on .NET 9 and .NET 10
         run: |
-          dotnet new console -n Lesson001Smoke -f net9.0 -o "$RUNNER_TEMP/lesson001smoke"
-          cp _browser/lesson001-program.cs "$RUNNER_TEMP/lesson001smoke/Program.cs"
-          dotnet run --project "$RUNNER_TEMP/lesson001smoke" > "$RUNNER_TEMP/lesson001-output.txt"
+          sdk9=$(dotnet --list-sdks | awk '$1 ~ /^9\.0\.[0-9]+$/ { version=$1 } END { print version }')
+          test -n "$sdk9"
+          folder="$RUNNER_TEMP/lesson001smoke"
+          mkdir -p "$folder"
+          printf '{"sdk":{"version":"%s","rollForward":"disable"}}\n' "$sdk9" > "$folder/global.json"
+          (
+            cd "$folder"
+            dotnet --version
+            dotnet new console -n Lesson001Smoke -f net9.0 -o .
+            cp "$GITHUB_WORKSPACE/_browser/lesson001-program.cs" Program.cs
+            dotnet run > "$RUNNER_TEMP/lesson001-output.txt"
+          )
           printf 'HTTP methods\nGET: 3\nPOST: 2\nPUT: 1\nSum = 60\n' > "$RUNNER_TEMP/lesson001-expected.txt"
           diff -u "$RUNNER_TEMP/lesson001-expected.txt" "$RUNNER_TEMP/lesson001-output.txt"
           node _browser/verify_snippets.cjs "$RUNNER_TEMP/lesson001smoke"
@@ -99,15 +108,29 @@ jobs:
       - name: Verify inline C# Assert templates from each lesson (reject wrong solutions)
         run: |
           for task in task001 task002 alloc001; do
+            folder="$RUNNER_TEMP/practice/$task"
+            mkdir -p "$folder"
             framework=net10.0
-            if test "$task" = task001; then framework=net9.0; fi
-            dotnet new console -n "Practice_${task}" -f "$framework" -o "$RUNNER_TEMP/practice/$task"
+            if test "$task" = task001; then
+              framework=net9.0
+              cp "$RUNNER_TEMP/lesson001smoke/global.json" "$folder/global.json"
+            fi
+            (
+              cd "$folder"
+              dotnet new console -n "Practice_${task}" -f "$framework" -o .
+            )
           done
           node _browser/verify_practice_assertions.cjs "$RUNNER_TEMP/practice"
           for task in task001 task002 alloc001; do
             folder="$RUNNER_TEMP/practice/$task"
-            dotnet build "$folder" --no-restore
-            if dotnet run --no-build --project "$folder" > "$folder/run.log" 2>&1; then
+            (
+              cd "$folder"
+              dotnet build --no-restore
+            )
+            if (
+              cd "$folder"
+              dotnet run --no-build
+            ) > "$folder/run.log" 2>&1; then
               echo "ERROR: intentionally wrong $task solution passed its assertions"
               exit 1
             fi

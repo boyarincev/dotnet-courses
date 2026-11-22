@@ -11,15 +11,15 @@ browser_runtime: '9'
 > **Браузерный запуск включён.** Под каждым C#-примером доступна кнопка запуска, а ниже находится общий редактор с Roslyn.
 
 ## Зачем это нужно
-Допустим, мы хотим анализировать HTTP-методы: удобно передавать их в метод и считать количество каждого значения, не создавая лишних групп.
+Посчитаем частоты HTTP-методов по меткам из учебной выгрузки. По условию выгрузки `GET` и `get` обозначают одну категорию отчёта. В HTTP [регистр токена метода значим](https://www.rfc-editor.org/rfc/rfc9110.html#section-9.1).
 
 ## 1. C# 13: расширенный `params`
-До C# 13 `params` поддерживал только одномерные массивы.
+До C# 13 тип параметра `params` ограничивался [одномерным массивом `T[]`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/method-parameters#params-modifier).
 ```csharp
 static int Sum(params int[] numbers) => numbers.Sum();
 Console.WriteLine(Sum(10, 20, 30)); // 60. Три числа образуют один массив numbers.
 ```
-В C# 13 появились *params collections*: поддерживаются, в частности, `ReadOnlySpan<T>`, `Span<T>`, `IEnumerable<T>`, `List<T>` и другие коллекционные типы.
+В C# 13 появились [коллекции `params`](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-13#params-collections), например `ReadOnlySpan<T>`, `Span<T>`, `IEnumerable<T>` или `List<T>`. При [развёрнутом вызове](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/classes#15624-parameter-collections) компилятор собирает отдельные элементы в одну коллекцию. Можно также передать готовую коллекцию подходящего типа.
 ```csharp
 static int Sum(params ReadOnlySpan<int> values)
 {
@@ -29,23 +29,27 @@ static int Sum(params ReadOnlySpan<int> values)
 }
 Console.WriteLine(Sum(10, 20, 30)); // 60. Три числа образуют один ReadOnlySpan<int>.
 ```
-**Почему полезно:** `ReadOnlySpan<T>` может избежать выделения отдельного массива в куче при некоторых вызовах. Однако не гарантирует нулевые аллокации во всех сценариях, а также имеет ограничения по времени жизни данных.
+Для вызова `Sum(10, 20, 30)` с `ReadOnlySpan<int>` компилятор из .NET 9 SDK [сохраняет константы в данных сборки](https://github.com/dotnet/roslyn/blob/f3348c2a2be16ec6525cb3df7be12952c3e2de9d/src/Compilers/CSharp/Portable/CodeGen/EmitArrayInitializer.cs#L606-L623). На .NET 9 x64 `ReadOnlySpan<int>` [ссылается на эти данные](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Private.CoreLib/src/System/Runtime/CompilerServices/RuntimeHelpers.cs#L148-L149), поэтому вызов обходится без выделения массива для аргументов. Элементы удобно обработать сразу в `foreach`. Сам параметр [нельзя захватить в лямбде](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/ref-struct).
 
-Новый `params` делает проще и такой API:
+Заголовок можно передать отдельным аргументом, а метки собрать в `IEnumerable<string>`.
+
 ```csharp
+// "HTTP" — заголовок. Оставшиеся три аргумента образуют коллекцию methods.
+Analyze("HTTP", "GET", "POST", "GET"); // HTTP: 3
+
 static void Analyze(string title, params IEnumerable<string> methods)
 {
-    // В вызове Analyze("HTTP", "GET", "POST", "GET") "HTTP" — это title.
-    // Три оставшихся аргумента образуют коллекцию methods.
+    Console.WriteLine($"{title}: {methods.Count()}");
 }
 ```
+
 ## 2. .NET 9: `Enumerable.CountBy()`
-Раньше для подсчёта частот часто использовали `GroupBy`:
+[`GroupBy`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.groupby?view=net-9.0) собирает строки с одинаковым ключом. Из каждой группы `Select` берёт ключ и число элементов.
 ```csharp
 var counts = methods.GroupBy(keySelector: method => method)
     .Select(group => new { Method = group.Key, Count = group.Count() });
 ```
-Теперь, если нужны **только счётчики**, можно написать:
+Если нужны **только счётчики**, [`CountBy` в .NET 9](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-9/libraries#linq) вычисляет их без промежуточных групп строк.
 ```csharp
 var counts = methods.CountBy(
     // Используем само имя HTTP-метода как ключ подсчёта.
@@ -53,24 +57,26 @@ var counts = methods.CountBy(
 foreach (var (method, count) in counts)
     Console.WriteLine($"{method}: {count}");
 ```
-Результат перечисления имеет тип `IEnumerable<KeyValuePair<TKey, int>>`, это **не** `Dictionary<TKey, int>`. Вычисление выполняется при перечислении.
+Вызов возвращает [`IEnumerable<KeyValuePair<TKey, int>>`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.countby?view=net-9.0#returns). Каждый элемент — пара из ключа и количества его вхождений. В .NET 9 [подсчёт начинается при перечислении](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/src/System/Linq/CountBy.cs#L27-L62). Перед выдачей первой пары `CountBy` читает весь источник и накапливает счётчики по ключам.
 
-По умолчанию `"GET"` и `"get"` различаются. Для объединения регистров:
+При сравнении строк по умолчанию `"GET"` и `"get"` дают два ключа ([тесты `CountBy` в .NET 9](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/tests/CountByTests.cs#L93-L113)). Для нашей выгрузки передадим [`StringComparer.OrdinalIgnoreCase`](https://learn.microsoft.com/en-us/dotnet/api/system.stringcomparer.ordinalignorecase?view=net-9.0), который сравнивает метки без учёта регистра.
 ```csharp
 var counts = methods.CountBy(
     keySelector: method => method,
     // "GET" и "get" учитываются в одном счётчике.
     keyComparer: StringComparer.OrdinalIgnoreCase);
 ```
-Если нужны сами группы элементов, `GroupBy` по-прежнему подходит лучше.
+Используй `GroupBy`, когда нужно обработать записи внутри каждой группы, например вывести все записи для отдельного метода.
 
 ## 3. Полностью запускаемый пример
-Для сборки нужен .NET 9 SDK или более новый SDK с поддержкой `net9.0`. Для запуска требуется среда выполнения .NET 9.
+Выполни команды с **.NET 9 SDK**. `dotnet --version` должен показать версию `9.0.x`. Если установлено несколько SDK, версию для рабочего каталога можно закрепить в [`global.json`](https://learn.microsoft.com/en-us/dotnet/core/tools/global-json#version). [Шаблон `console`](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-new-sdk-templates#console) создаст проект с целевым фреймворком `net9.0`, для которого по умолчанию используется [C# 13](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-versioning#defaults).
+
 ```bash
+dotnet --version
 dotnet new console -n FeatureLab -f net9.0
 cd FeatureLab
 ```
-Содержимое `Program.cs`:
+Замени содержимое `Program.cs` этим примером.
 ```csharp
 using System;
 using System.Collections.Generic;
@@ -97,7 +103,7 @@ static int Sum(params ReadOnlySpan<int> values)
     return total;
 }
 ```
-Запуск:
+Запусти проект.
 ```bash
 dotnet run
 ```
@@ -111,11 +117,13 @@ Sum = 60
 ```
 
 ## 4. Напиши код сам · TASK-001
-**Условие:** реализуй `GetTopMethods`, который принимает последовательность HTTP-методов и возвращает **три самых частых** с количествами. Сравнение без учёта регистра, при равной частоте сортировка по имени без учёта регистра.
+**Условие.** Реализуй `GetTopMethods`. Метод принимает последовательность меток из той же выгрузки и возвращает до трёх пар `(Method, Count)`. `Count` — число вхождений метки с учётом правила сравнения.
 
-**Критерии:** максимум три результата; пустая последовательность — пустой результат; `"GET"` и `"get"` считаются одним методом; при равных частотах порядок устойчивый и предсказуемый. Используй `CountBy`.
+- Подсчитай вхождения через `CountBy` с `StringComparer.OrdinalIgnoreCase`.
+- Отсортируй по убыванию `Count`. При равных частотах отсортируй `Method` по возрастанию с тем же `StringComparer.OrdinalIgnoreCase`.
+- Верни первые три пары или все пары, если их меньше трёх. Для пустого входа верни пустую последовательность. Регистр букв в возвращаемых именах произвольный.
 
-Проверка: `["get", "POST", "GET", "put", "post", "DELETE", "delete", "GET"]` → частоты `get: 3`, `DELETE: 2`, `POST: 2` (первое встретившееся написание ключа может сохраниться).
+Для `["get", "POST", "GET", "put", "post", "DELETE", "delete", "GET"]` ожидаются `GET: 3`, `DELETE: 2`, `POST: 2` в этом порядке. Здесь имена записаны прописными буквами для наглядности.
 
 <details><summary>Необязательная подсказка</summary><p>После CountBy подумай о двух ключах сортировки и Take(3).</p></details>
 
@@ -128,6 +136,10 @@ using System.Linq;
 
 public static class Program
 {
+    // BEGIN TASK-001
+    // INSERT_SOLUTION_HERE
+    // END TASK-001
+
     public static void Main()
     {
         string[] methods = ["get", "POST", "GET", "put", "post", "DELETE", "delete", "GET"];
@@ -169,10 +181,6 @@ public static class Program
     {
         if (!condition) throw new InvalidOperationException("❌ TASK-001: " + failureMessage);
     }
-
-    // BEGIN TASK-001
-    // INSERT_SOLUTION_HERE
-    // END TASK-001
 }
 </script>
 
@@ -184,10 +192,11 @@ using System.Linq;
 static IEnumerable&lt;(string Method, int Count)&gt; GetTopMethods(
     IEnumerable&lt;string&gt; methods)
 {
-    // Реализуй GetTopMethods для последовательности HTTP-методов.
-    // Используй CountBy и считай частоты без учёта регистра.
-    // Верни до трёх пар (Method, Count), отсортированных по частоте по убыванию.
-    // При равной частоте сортируй по имени по возрастанию без учёта регистра.
+    // Вход — последовательность меток HTTP-методов из выгрузки.
+    // Используй CountBy с StringComparer.OrdinalIgnoreCase для подсчёта вхождений.
+    // Верни до трёх пар (Method, Count) по убыванию Count.
+    // При равных Count сортируй Method по возрастанию с StringComparer.OrdinalIgnoreCase.
+    // Регистр имён произвольный. Пустой вход даёт пустой результат.
 
     throw new NotImplementedException();
 }</textarea>
@@ -198,6 +207,5 @@ static IEnumerable&lt;(string Method, int Count)&gt; GetTopMethods(
 - C# 13 `params` может принимать коллекционные типы помимо массива, в том числе `ReadOnlySpan<T>`.
 - `CountBy` в .NET 9 непосредственно считает частоты по ключу.
 - `StringComparer.OrdinalIgnoreCase` позволяет игнорировать регистр.
-- Выбирай нововведение по пользе, а не ради нового синтаксиса.
 
-**Официально:** [C# 13: params collections](https://learn.microsoft.com/dotnet/csharp/whats-new/csharp-13#params-collections), [.NET 9: LINQ](https://learn.microsoft.com/dotnet/core/whats-new/dotnet-9/libraries#linq).
+В [уроке № 2]({{ '/courses/csharp-dotnet-9-11/lessons/002-aggregateby-null-conditional-assignment/' | relative_url }}) вместо одного счётчика накопим количество запросов и суммарное время по каждому маршруту. В [первом уроке курса по памяти]({{ '/courses/memory/lessons/001-allocations-copies-retention/' | relative_url }}) разберём, как отличать выделение памяти от копирования значений и удержания объектов.

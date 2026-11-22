@@ -15,17 +15,17 @@ browser_runtime: '10'
 
 В рабочем сервисе встречаются строки импорта вида `ORD-1042;paid;1499.90`. Допустим, сервис обрабатывает тысячи таких строк. Чтобы оценить цену реализации, важно различать **три вида работы**:
 
-- **Аллокация** — выделение места в памяти. В этом уроке разбираем выделения в управляемой куче: например, `Split` в нашем примере создаёт массив и отдельную строку для каждого поля записи. Память можно выделить и на стеке. Например, `Span<byte> buffer = stackalloc byte[16];` выделяет 16 байт на время выполнения метода. [Документация по `stackalloc`](https://learn.microsoft.com/dotnet/csharp/language-reference/operators/stackalloc).
-- **Копирование** — запись уже существующего значения в другое место. Если место уже есть, новое выделение не нужно. Например, `source.AsSpan().CopyTo(destination);` копирует байты из массива `source` в уже выделенный массив `destination`. В массиве назначения должно быть достаточно места. [Документация по `CopyTo`](https://learn.microsoft.com/en-us/dotnet/api/system.span-1.copyto?view=net-6.0). В примере ниже `Order snapshot = paid[0]` копирует значение структуры из списка в локальную переменную без создания отдельного объекта в управляемой куче.
+- **Аллокация** — выделение места в памяти. В этом уроке разбираем выделения в управляемой куче. В примере `Split` создаёт массив и отдельную строку для каждого поля записи. Память можно выделить и на стеке. Например, `Span<byte> buffer = stackalloc byte[16];` [выделяет 16 байт на время выполнения метода](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/stackalloc).
+- **Копирование** — запись уже существующего значения в другое место. Если место уже есть, новое выделение не нужно. Например, `source.AsSpan().CopyTo(destination);` [копирует байты из `source` в уже выделенный массив `destination`](https://learn.microsoft.com/en-us/dotnet/api/system.span-1.copyto?view=net-10.0). В массиве назначения должно быть достаточно места. В примере ниже `Order snapshot = paid[0]` копирует значение структуры из списка в локальную переменную без создания отдельного объекта в управляемой куче.
 - **Удержание** — данные остаются достижимыми через ссылки и поэтому продолжают занимать память. Пример: сохранённый надолго `List<Order>`.
 
 Выделение и копирование могут встретиться вместе. Строка `byte[] destination = new byte[source.Length];` создаёт массив. Следующая строка, `source.AsSpan().CopyTo(destination);`, записывает в него байты из исходного массива.
 
-Место хранения структуры зависит от того, где она используется. Если массив структур размещён в управляемой куче, его элементы хранятся прямо внутри массива. [Документация о типах значений](https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/value-types).
+Место хранения структуры зависит от того, где она используется. В массиве структур [каждый элемент — переменная массива](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/arrays#171-general), которая [хранит само значение структуры](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/structs#1682-value-semantics).
 
 ## Запускаемый пример
 
-Нужен **.NET 10 SDK**. Создай консольный проект:
+Создай консольный проект с **SDK .NET 10**. Для `net10.0` SDK по умолчанию [выбирает C# 14](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-versioning#defaults).
 
 ~~~bash
 dotnet new console -n MemoryLab -f net10.0
@@ -101,7 +101,9 @@ internal struct Order
 }
 ~~~
 
-Запуск: `dotnet run`. Ожидаемый вывод:
+Суммы разбираются и выводятся с [десятичной точкой инвариантной культуры](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/Globalization/CultureData.cs#L583-L590). В выводе `F2` [задаёт две цифры после десятичного разделителя](https://learn.microsoft.com/en-us/dotnet/standard/base-types/standard-numeric-format-strings#fixed-point-format-specifier-f).
+
+Запусти программу командой `dotnet run` и сравни результат с ожидаемым.
 
 ~~~text
 Paid orders: 2
@@ -111,9 +113,13 @@ After copy change: 1499.90
 
 ## Разберём три разных затраты
 
-**Аллокации.** В .NET 10 для строки `ORD-1042;paid;1499.90` вызов `row.Split(';')` создаёт один массив `string[]` и три строки. Для пустых полей используется `string.Empty`. Если разделителя `;` нет, массив содержит одну ссылку на исходную строку `row`. `new List<Order>()` создаёт объект списка со ссылкой на общий пустой массив `Order[]`. При первом вызове `Add` выделяется массив для хранения элементов. [Конструктор в исходниках .NET 10](https://github.com/dotnet/runtime/blob/v10.0.0/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/List.cs#L23-L40) · [Документация `List<T>.Add`](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.list-1.add?view=net-10.0#remarks).
+**Аллокации.** Для строки `ORD-1042;paid;1499.90` вызов `row.Split(';')` в .NET 10 [создаёт массив `string[]`](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/String.Manipulation.cs#L1860-L1889) и [выделяет память под три новые подстроки](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/String.Manipulation.cs#L2238-L2291).
 
-**Копирование.** `Order snapshot = paid[0]` копирует структуру первого заказа из внутреннего массива списка `paid` в локальную переменную `snapshot`. Присваивание `snapshot.Amount = 0m` меняет сумму в копии. В ячейке массива, из которой взяли копию, сумма остаётся прежней. Поле `Id` в списке и в копии ссылается на одну и ту же строку, поэтому символы повторно не копируются. [Индексатор `List<T>` в .NET 10](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/List.cs#L143-L153).
+`new List<Order>()` [создаёт объект списка со ссылкой на общий пустой массив `Order[]`](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/List.cs#L29-L40). Первый `Add` [выделяет массив для элементов](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.list-1.add?view=net-10.0#remarks).
+
+**Копирование.** Индексатор `paid[0]` [читает первый элемент внутреннего массива списка и возвращает `Order` по значению](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/List.cs#L143-L153).
+
+`Order snapshot = paid[0]` сохраняет копию структуры в локальной переменной. После `snapshot.Amount = 0m` сумма в копии равна `0m`. В элементе массива она остаётся `1499.90m`. При копировании `Id` копируется ссылка, поэтому [оба поля указывают на одну и ту же строку](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/value-types).
 
 Схема показывает состояние после присваивания.
 
@@ -131,15 +137,15 @@ snapshot.Amount = 0m                                  |
 snapshot.Id ------------------------------------------+
 ~~~
 
-**Удержание.** Метод возвращает `List<Order>`, который продолжает хранить записи, пока остаётся доступным. Если потребителю нужны только количество и сумма, можно обойтись без списка результатов. Но это **не отменяет** аллокаций внутри `Split` — их устраним в будущих уроках о `Span`.
+**Удержание.** Пока вызывающий код хранит ссылку на возвращённый `List<Order>`, его внутренний массив `Order[]` и строки из полей `Id` [остаются достижимыми через список](https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/fundamentals#memory-release). Если нужны только количество заказов и сумма, достаточно накапливать эти два значения. При таком изменении `Split` по-прежнему выделяет память для разбора строк.
 
 По одному примеру нельзя судить о выигрыше в производительности: на следующем занятии измерим варианты с BenchmarkDotNet.
 
 ## Напиши код сам · ALLOC-TASK-001
 
-**Задача на 12 минут.** Реализуй `SummarizePaid`: на входе — строки формата `ID;status;amount`. Верни количество записей со статусом `paid` и сумму их полей `amount` **без создания списка объектов заказов**.
+**Задача на 12 минут.** Реализуй `SummarizePaid`: на входе — строки формата `ID;status;amount`. Верни количество записей со статусом `paid` и сумму их полей `amount` **без создания списка заказов**.
 
-**Правила:** сравнение статуса строго с учётом регистра. Некорректная строка, неправильное число полей или нечисловая сумма пропускаются. Для чисел используй `decimal.TryParse` с `CultureInfo.InvariantCulture`. Пока **можно использовать `Split`** — это тема следующей цепочки. Не сохраняй промежуточные записи в коллекции.
+Сравнивай статус с `paid` с учётом регистра, как при [сравнении строк оператором `==`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/equality-operators#string-equality). Пропускай строки с неверным числом полей или суммой, которую `decimal.TryParse` не смог разобрать. Используй [`NumberStyles.Number`](https://learn.microsoft.com/en-us/dotnet/api/system.globalization.numberstyles?view=net-10.0#fields) и `CultureInfo.InvariantCulture`, как в примере. Для разбиения строки можно использовать `Split`. Не сохраняй промежуточные записи в коллекции.
 
 **Проверка:**
 
@@ -157,7 +163,7 @@ ORD-1046;PAID;30.00
 
 <details><summary>Необязательная подсказка</summary><p>Достаточно двух локальных переменных: счётчика и суммы. Для каждой строки проверь длину массива полей, статус и результат TryParse. Подумай, какие данные после обработки не нужно сохранять.</p></details>
 
-**Проверка решения:** кнопка «Запустить и проверить Assert» откроет в браузерном редакторе полный `Program.cs`: твой метод, тестовые данные и видимые C#-проверки `Assert` на обычный, пустой и пограничный ввод. При ошибке увидишь нарушенное условие; готовое решение не показывается.
+**Проверка решения.** Кнопка «Запустить и проверить Assert» откроет полный `Program.cs` в браузерном редакторе. Видимые `Assert` проверяют результат для обычного, пустого и пограничного ввода, а также один проход по входным строкам. Отсутствие промежуточной коллекции проверяется при ревью кода.
 
 <script type="text/plain" id="practice-program-template">
 using System;
@@ -166,6 +172,10 @@ using System.Globalization;
 
 public static class Program
 {
+    // BEGIN ALLOC-TASK-001
+    // INSERT_SOLUTION_HERE
+    // END ALLOC-TASK-001
+
     public static void Main()
     {
         string[] rows =
@@ -218,9 +228,9 @@ public static class Program
         IEnumerable<string> EnumerateRows()
         {
             enumerations++;
-            yield return "ORD-5;paid;-20.50";
+            yield return "ORD-5;paid;-1,020.50";
             yield return "ORD-6;new;999.00";
-            yield return "ORD-7;paid;30.75";
+            yield return "ORD-7;paid;1,030.75";
         }
     }
 
@@ -228,10 +238,6 @@ public static class Program
     {
         if (!condition) throw new InvalidOperationException("❌ ALLOC-TASK-001: " + failureMessage);
     }
-
-    // BEGIN ALLOC-TASK-001
-    // INSERT_SOLUTION_HERE
-    // END ALLOC-TASK-001
 }
 </script>
 
@@ -242,7 +248,8 @@ public static class Program
     // Реализуй SummarizePaid для строк формата "ID;status;amount".
     // За один проход посчитай записи со статусом "paid" с учётом регистра
     // и сложи их поля amount. Верни (PaidCount, Total).
-    // Разбирай суммы через decimal.TryParse с CultureInfo.InvariantCulture.
+    // Разбирай суммы через decimal.TryParse с NumberStyles.Number
+    // и CultureInfo.InvariantCulture.
     // Пропускай строки с неверным числом полей или нечисловой суммой.
     // Разобранные записи не сохраняй в коллекции.
 
@@ -253,7 +260,7 @@ public static class Program
 
 ## Что запомнить
 
-**Выделить память ≠ скопировать значение ≠ удерживать данные.** Сначала выясняем, какие расходы есть у метода и нужны ли все сохраняемые данные. Затем измеряем эффект изменений.
+Перед оптимизацией разберись, где метод выделяет память, какие значения копирует и какие объекты остаются достижимыми по ссылкам после вызова. Если вызывающему коду нужны только количество и сумма, в этом примере можно обойтись без списка заказов. Эффект изменения затем проверяем измерением.
 
 **Связь с другим курсом:** в [уроке о `params ReadOnlySpan<T>` и `CountBy`]({{ '/courses/csharp-dotnet-9-11/lessons/001-params-countby/' | relative_url }}) мы уже видели способ избежать некоторых временных массивов. Позже вернёмся к нему с измерениями.
 

@@ -33,12 +33,11 @@
         if (pos <= 0) throw Error("В примере Sum изменилась структура.");
         return wrapInProgram(code.slice(pos).trim(), code.slice(0, pos).trim());
       }
-      case 2: // params IEnumerable<string> API declaration (no call in original snippet)
-        if (!code.includes("static void Analyze(")) throw Error("В примере Analyze изменилась структура.");
-        return wrapInProgram(
-          'Analyze("HTTP", "GET", "POST", "GET");\nConsole.WriteLine("Analyze: переданы 3 HTTP-метода");',
-          code
-        );
+      case 2: { // params IEnumerable<string>
+        const pos = code.indexOf("\nstatic void Analyze(");
+        if (pos <= 0) throw Error("В примере Analyze изменилась структура.");
+        return wrapInProgram(code.slice(0, pos).trim(), code.slice(pos).trim());
+      }
       case 3: // GroupBy + Select
         if (!code.includes("GroupBy(")) throw Error("В примере GroupBy изменилась структура.");
         return wrapInProgram(sampleMethods + "\n" + code +

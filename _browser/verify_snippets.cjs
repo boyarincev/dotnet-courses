@@ -6,8 +6,9 @@ const path = require("node:path");
 const cp = require("node:child_process");
 const {makeRunnable, exampleCount} = require("../assets/js/browser-snippets.js");
 
-const project = process.argv[2];
-if (!project) throw Error("Usage: node _browser/verify_snippets.cjs <path-to-net9-console-project>");
+const projectArgument = process.argv[2];
+if (!projectArgument) throw Error("Usage: node _browser/verify_snippets.cjs <path-to-net9-console-project>");
+const project = path.resolve(projectArgument);
 const markdown = fs.readFileSync("_lessons/001-params-countby.md", "utf8");
 const fence = new RegExp("^\\x60\\x60\\x60csharp\\n([\\s\\S]*?)\\n\\x60\\x60\\x60", "gm");
 const snippets = [...markdown.matchAll(fence)].map(m => m[1]);
@@ -17,7 +18,7 @@ if (snippets.length !== exampleCount) {
 const expected = [
   "60\n",
   "60\n",
-  "Analyze: переданы 3 HTTP-метода\n",
+  "HTTP: 3\n",
   "GET: 2\nPOST: 1\nget: 1\n",
   "GET: 2\nPOST: 1\nget: 1\n",
   "GET: 3\nPOST: 1\n",
@@ -27,6 +28,7 @@ for (let i = 0; i < snippets.length; i++) {
   const source = makeRunnable(snippets[i], i);
   fs.writeFileSync(path.join(project, "Program.cs"), source, "utf8");
   const run = cp.spawnSync("dotnet", ["run", "--no-restore", "--project", project], {
+    cwd: project,
     encoding: "utf8",
     timeout: 120000
   });

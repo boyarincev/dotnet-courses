@@ -39,18 +39,39 @@
     return lines.join("\n");
   }
 
-  function isSuccessfulPracticeRun(template, source, output, taskId) {
-    if (typeof template !== "string" || typeof source !== "string" || typeof output !== "string") return false;
-    const [before, after, ...extra] = practiceSource(template).split("\n" + solutionMarker + "\n");
+  function matchesPracticeSource(template, source, taskId) {
+    const [before, after, ...extra] = template.split("\n" + solutionMarker + "\n");
     if (!after || extra.length || !before.endsWith("// BEGIN " + taskId) ||
         !after.startsWith("// END " + taskId + "\n")) return false;
 
-    const code = practiceSource(source);
     const start = before + "\n";
     const end = "\n" + after;
-    return code.startsWith(start) && code.endsWith(end) &&
-      code.length > start.length + end.length &&
-      normalize(output).trimEnd().split("\n").at(-1) === "Все проверки пройдены";
+    return source.startsWith(start) && source.endsWith(end) && source.length > start.length + end.length;
+  }
+
+  // Saved drafts may still put the solution after Assert. Keep the same C# checks in both layouts.
+  function previousPracticeOrder(template, taskId) {
+    const header = "public static class Program\n{\n";
+    const solution = "// BEGIN " + taskId + "\n" + solutionMarker + "\n// END " + taskId + "\n";
+    if (!template.startsWith(header + solution)) return "";
+
+    const assertStart = template.indexOf("\nprivate static void Assert(");
+    if (assertStart < 0) return "";
+    const classEnd = template.indexOf("\n}\n}", assertStart);
+    if (classEnd < 0) return "";
+    const programEnd = classEnd + "\n}\n".length;
+    return header + template.slice(header.length + solution.length, programEnd) +
+      solution + template.slice(programEnd);
+  }
+
+  function isSuccessfulPracticeRun(template, source, output, taskId) {
+    if (typeof template !== "string" || typeof source !== "string" || typeof output !== "string") return false;
+    if (normalize(output).trimEnd().split("\n").at(-1) !== "Все проверки пройдены") return false;
+
+    const normalizedTemplate = practiceSource(template);
+    const code = practiceSource(source);
+    return matchesPracticeSource(normalizedTemplate, code, taskId) ||
+      matchesPracticeSource(previousPracticeOrder(normalizedTemplate, taskId), code, taskId);
   }
 
   if (typeof module === "object" && module.exports) module.exports = {buildTaskProgram, isSuccessfulPracticeRun};

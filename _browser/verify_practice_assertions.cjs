@@ -3,7 +3,32 @@
 const fs=require("node:fs");
 const path=require("node:path");
 const assert=require("node:assert/strict");
-const {buildTaskProgram}=require("../assets/js/course-runner.js");
+const {buildTaskProgram,isSuccessfulPracticeRun}=require("../assets/js/course-runner.js");
+
+const taskId="TASK-TEST";
+const header="public static class Program\n{\n";
+const solution="// BEGIN TASK-TEST\n// INSERT_SOLUTION_HERE\n// END TASK-TEST\n";
+const checks=[
+  "public static void Main()",
+  "{",
+  "    Assert(Solve() == 1);",
+  "}",
+  "private static void Assert(bool condition)",
+  "{",
+  "    if (!condition) throw new System.InvalidOperationException();",
+  "}",
+  ""
+].join("\n");
+const currentTemplate=header+solution+checks+"}";
+const earlierTemplate=header+checks+solution+"}";
+const implementation="static int Solve() => 1;";
+const success="Все проверки пройдены";
+const currentProgram=buildTaskProgram(currentTemplate,implementation,taskId);
+const savedDraft=buildTaskProgram(earlierTemplate,implementation,taskId);
+assert.ok(isSuccessfulPracticeRun(currentTemplate,currentProgram,success,taskId),"method-first layout");
+assert.ok(isSuccessfulPracticeRun(currentTemplate,savedDraft,success,taskId),"saved method-last layout");
+assert.ok(!isSuccessfulPracticeRun(currentTemplate,savedDraft.replace("Solve() == 1","true"),success,taskId),"changed C# check");
+assert.ok(!isSuccessfulPracticeRun(currentTemplate,savedDraft,success+"\nОшибка",taskId),"failed C# run");
 
 const root=process.argv[2];
 if(!root) throw Error("Usage: node verify_practice_assertions.cjs <output-dir>");
@@ -24,6 +49,12 @@ for(const c of cases){
   assert.ok(program.includes("// BEGIN "+c.id),c.id+": BEGIN marker");
   assert.ok(program.includes("// END "+c.id),c.id+": END marker");
   assert.ok(program.includes("private static void Assert("),c.id+": real C# Assert missing");
+  const solutionStart=program.indexOf("// BEGIN "+c.id);
+  const solutionEnd=program.indexOf("// END "+c.id);
+  const methodStart=program.indexOf(c.method);
+  assert.ok(solutionStart>=0 && solutionStart<methodStart && methodStart<solutionEnd,c.id+": task method must be between its markers");
+  assert.ok(program.indexOf("public static void Main(")>solutionEnd,c.id+": Main must follow the task method");
+  assert.ok(program.indexOf("private static void Assert(")>solutionEnd,c.id+": Assert must follow the task method");
   assert.ok(program.includes("Все проверки пройдены"),c.id+": success signal missing");
   assert.ok(!program.includes("// INSERT_SOLUTION_HERE"),c.id+": placeholder still present");
   fs.writeFileSync(path.join(root,c.dir,"Program.cs"),program,"utf8");

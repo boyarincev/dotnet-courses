@@ -206,6 +206,10 @@
       ensure();
       return instance ? instance.getValue() : document.getElementById("code-editor")?.value ?? "";
     },
+    reportSuccessfulRun(source, output) {
+      if (window.parent === window) return;
+      window.parent.postMessage({ type: "dotnet-courses:practice-run-success", source, output }, location.origin);
+    },
     run() {
       ensure();
       if (instance) synchronize(instance);

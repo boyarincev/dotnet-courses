@@ -37,7 +37,8 @@ source = source.replace(
     needle,
     "            // Source may have been updated programmatically by the parent lesson.\n"
     "            if (showFullCode) sourceCode = displayCode;\n"
-    + needle,
+    "            var compiledSource = sourceCode;\n"
+    "            var result = await CompileCSharpCode(compiledSource);",
 )
 parse = "CSharpSyntaxTree.ParseText(combinedCode);"
 if source.count(parse) != 1:
@@ -50,6 +51,34 @@ def replace_once(text, old, new):
     if text.count(old) != 1:
         raise RuntimeError("Upstream console code changed; cannot patch: " + old.splitlines()[0].strip())
     return text.replace(old, new)
+
+
+source = replace_once(
+    source,
+    "    private async Task CompileAndRun()\n    {\n        isCompiling = true;",
+    "    private async Task CompileAndRun()\n    {\n        if (isCompiling) return;\n        isCompiling = true;",
+)
+source = replace_once(
+    source,
+    "                var executionResult = await ExecuteAssembly(result.Assembly!);",
+    "                var execution = await ExecuteAssembly(result.Assembly!);",
+)
+source = replace_once(
+    source,
+    "    private async Task<string> ExecuteAssembly(Assembly assembly)",
+    "    private async Task<(string? Error, string Output)> ExecuteAssembly(Assembly assembly)",
+)
+source = replace_once(
+    source,
+    "    private async Task<string> ExecuteWithInteractiveInput(Assembly assembly, MethodInfo mainMethod, Type? consoleType)",
+    "    private async Task<(string? Error, string Output)> ExecuteWithInteractiveInput(Assembly assembly, MethodInfo mainMethod, Type? consoleType)",
+)
+for error in ("ex.Message", "innerEx.Message"):
+    source = replace_once(
+        source,
+        f'return $"Execution error: {{{error}}}";',
+        f'return ($"Execution error: {{{error}}}", "");',
+    )
 
 
 # ReadLine restarts the entry point. Use a dedicated signal so a program error
@@ -70,9 +99,17 @@ console_source = replace_once(
 source = replace_once(
     source,
     '                AddOutput(".NET WebAssembly execution completed successfully!", "success");',
-    '''                if (string.IsNullOrEmpty(executionResult))
+    '''                if (execution.Error is null)
                 {
                     AddOutput(".NET WebAssembly execution completed successfully!", "success");
+                    try
+                    {
+                        await JSRuntime.InvokeVoidAsync("DotnetBrowserEditor.reportSuccessfulRun", compiledSource, execution.Output);
+                    }
+                    catch (JSException)
+                    {
+                        // The editor bridge is optional and does not affect execution.
+                    }
                 }
                 else if (!showSystemOutput)
                 {
@@ -83,7 +120,7 @@ source = replace_once(
     source,
     '                return "Error: No suitable Main method found";',
     '                AddErrorOutput("Error: No suitable Main method found", "error");\n'
-    '                return "Error: No suitable Main method found";',
+    '                return ("Error: No suitable Main method found", "");',
 )
 source = replace_once(
     source,
@@ -105,7 +142,15 @@ source = replace_once(
 
                 // Clear and reset the console for this execution attempt''',
 )
-for name, comment in (("finalOutput", "the final output"), ("outputSoFar", "current output")):
+for name, comment, display in (
+    (
+        "finalOutput",
+        "the final output",
+        "                    var finalOutput = GetCapturedOutput();\n"
+        "                    await DisplayOutput(finalOutput);",
+    ),
+    ("outputSoFar", "current output", "                    await DisplayOutput(GetCapturedOutput());"),
+):
     source = replace_once(
         source,
         f'''                    string {name} = "";
@@ -115,8 +160,13 @@ for name, comment in (("finalOutput", "the final output"), ("outputSoFar", "curr
                         {name} = getOutputMethod?.Invoke(null, null) as string ?? "";
                     }}''' + "\n                    \n" + f'''                    // Display {comment}
                     await DisplayOutput({name});''',
-        "                    await DisplayOutput(GetCapturedOutput());",
+        display,
     )
+source = replace_once(
+    source,
+    '                    await DisplayOutput(finalOutput);\n                    \n                    return "";',
+    '                    await DisplayOutput(finalOutput);\n                    return (null, finalOutput);',
+)
 source = replace_once(
     source,
     'catch (TargetInvocationException ex) when (ex.InnerException?.Message == "INPUT_REQUIRED")',

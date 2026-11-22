@@ -12,16 +12,17 @@ permalink: /courses/memory/
 <a class="button" href="{{ '/courses/csharp-dotnet-9-11/' | relative_url }}">Связанный курс: новинки .NET</a>
 </div>
 <section class="prose" aria-labelledby="ai-agent-skills">
-<h2 id="ai-agent-skills">Как курс помогает работать с AI-агентом</h2>
-<p>Если агент предлагает ускорить разбор заказов, ты сможешь определить, где код выделяет память, копирует значения или удерживает данные. На первом уроке разберём, что создаёт <code>Split</code> и какие данные остаются в списке заказов.</p>
-<p>В задаче на оптимизацию ты сможешь указать, какое поведение нужно сохранить, например как обрабатывать некорректные записи. Дальше научимся сравнивать исходный и новый варианты на одинаковых данных с помощью BenchmarkDotNet, чтобы проверять заявления агента о времени выполнения и объёме выделенной памяти.</p>
+<h2 id="ai-agent-skills">Как курс помогает работать с ИИ-агентом</h2>
+<p>Когда ИИ-агент предлагает оптимизацию, ты сможешь проверить, какие объекты создаёт код, где копируются данные и что удерживает объекты в памяти. Это поможет понять, уменьшает ли предложенная правка выделения памяти и какие издержки остаются.</p>
+<p>В практических задачах ты сначала определишь, какое поведение нужно сохранить. Затем научишься сравнивать исходный и новый варианты на одинаковых данных и проверять по измерениям, изменились ли время выполнения и объём выделенной памяти.</p>
+<p>В эксперименте Anthropic 52 разработчика осваивали незнакомую им библиотеку Trio для Python. Сразу после задания группа с ИИ-помощником набрала в среднем 50% баллов, а группа без него — 67%. Самая большая разница была в вопросах на поиск и объяснение ошибок. Среди тех, кто работал с ИИ, более высокие баллы наблюдали у участников, которые обращались к нему за объяснениями, чтобы самим разобраться в коде. <a href="https://www.anthropic.com/research/AI-assistance-coding-skills">Исследование Anthropic</a>.</p>
 </section>
 <div class="features"><div><b>До 30 минут</b><p>Одна идея на занятие вместе с практикой и повторением.</p></div><div><b>Свой код</b><p>Небольшая задача на реальном примере.</p></div><div><b>Цепочки тем</b><p>Возвращаемся к знакомому коду в новых условиях.</p></div><div><b>Измерения</b><p>Проверяем, что оптимизация действительно полезна.</p></div></div>
 <h2>Опубликованные уроки · {{ site.memory_lessons.size }}</h2>
 <div class="lessons">
 {% assign sorted = site.memory_lessons | sort: 'lesson_number' | reverse %}
 {% for lesson in sorted %}
-<a class="lesson-card" href="{{ lesson.url | relative_url }}"><small>Урок {{ lesson.lesson_number }} · {{ lesson.lesson_date }} · {{ lesson.series }}</small><h3>{{ lesson.title | escape }}</h3><p>{{ lesson.summary | escape }}</p><span>{{ lesson.topic_id }} · {{ lesson.dotnet_feature }}</span><strong>↗</strong></a>
+<a class="lesson-card" href="{{ lesson.url | relative_url }}"><small>Урок {{ lesson.lesson_number }} · {{ lesson.lesson_date }} · {{ lesson.series }}</small><span class="lesson-completion-badge" data-lesson-completion-badge data-course="memory" data-lesson="{{ lesson.lesson_number }}" hidden>Пройден</span><h3>{{ lesson.title | escape }}</h3><p>{{ lesson.summary | escape }}</p><span>{{ lesson.topic_id }} · {{ lesson.dotnet_feature }}</span><strong>↗</strong></a>
 {% endfor %}
 </div>
 <h2>Что будет дальше</h2>

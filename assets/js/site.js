@@ -50,5 +50,61 @@
       try{await copy(editor.value);feedback.textContent="Код скопирован";}catch{feedback.textContent="Выдели код вручную";}
     });
   });
-  window.DotnetLearning={copy,download};
+  const progressPrefix = "dotnet-courses:progress:";
+  const progressKey = (kind, course, lesson) => progressPrefix + kind + ":" + course + ":" + lesson;
+  const progress = {
+    get(kind, course, lesson) {
+      try {
+        return localStorage.getItem(progressKey(kind, course, lesson)) === "1";
+      } catch {
+        return null;
+      }
+    },
+    mark(kind, course, lesson) {
+      try {
+        localStorage.setItem(progressKey(kind, course, lesson), "1");
+      } catch {
+        return false;
+      }
+      refreshProgress();
+      return true;
+    }
+  };
+
+  const lessonStatus = document.getElementById("lesson-completion-status");
+  const lessonBadges = document.querySelectorAll("[data-lesson-completion-badge]");
+  const previousQuiz = document.getElementById("previous-quiz-dialog");
+  let quizReminderShown = false;
+
+  function refreshProgress() {
+    if (lessonStatus) {
+      const completed = progress.get("lesson", lessonStatus.dataset.course, lessonStatus.dataset.lesson);
+      const message = completed === null ? "Не удалось прочитать прогресс в этом браузере."
+        : completed ? "Урок пройден." : "Урок ещё не пройден.";
+      if (lessonStatus.textContent !== message) lessonStatus.textContent = message;
+    }
+
+    lessonBadges.forEach(badge => {
+      badge.hidden = progress.get("lesson", badge.dataset.course, badge.dataset.lesson) !== true;
+    });
+
+    if (previousQuiz && typeof previousQuiz.showModal === "function") {
+      const completed = progress.get("quiz", previousQuiz.dataset.course, previousQuiz.dataset.lesson);
+      if (completed === false && !quizReminderShown) {
+        previousQuiz.showModal();
+        quizReminderShown = true;
+      } else if (completed !== false && previousQuiz.open) {
+        previousQuiz.close();
+      }
+    }
+  }
+
+  window.DotnetLearning = {copy, download, progress};
+  if (lessonStatus || lessonBadges.length || previousQuiz) {
+    refreshProgress();
+    window.addEventListener("pageshow", refreshProgress);
+    window.addEventListener("storage", event => {
+      if (event.key === null || event.key.startsWith(progressPrefix)) refreshProgress();
+    });
+  }
 })();

@@ -5,13 +5,16 @@
 (() => {
   "use strict";
 
+  const normalize = value => value.replace(/\r\n?/g, "\n");
+  const solutionMarker = "// INSERT_SOLUTION_HERE";
+  const importPattern = /^\s*using\s+[\w.]+\s*;\s*$/;
+
   // Only assembles visible C# from the lesson with the student's method.
   // All Assert checks are plain C# in each lesson's practice-program-template.
   function buildTaskProgram(template, source, taskId) {
     const text = String(template).trim();
-    const value = String(source).replace(/\r\n?/g, "\n");
-    const marker = "// INSERT_SOLUTION_HERE";
-    if (text.split(marker).length !== 2 ||
+    const value = normalize(String(source));
+    if (text.split(solutionMarker).length !== 2 ||
         !text.includes("// BEGIN " + taskId) ||
         !text.includes("// END " + taskId)) {
       throw Error("Проверочный C#-пример урока отсутствует или повреждён.");
@@ -19,17 +22,38 @@
     if (/\b(?:class|struct)\s+Program\b/.test(value)) {
       throw Error("В поле задания нужна только реализация метода, без собственного Program. Для полного файла используй редактор ниже.");
     }
-    const importPattern = /^\s*using\s+[\w.]+\s*;\s*$/;
     const lines = value.split("\n");
     const extraImports = [...new Set(lines.filter(line => importPattern.test(line)).map(line => line.trim()))]
       .filter(line => !text.includes(line));
     const body = lines.filter(line => !importPattern.test(line)).join("\n").trim();
     if (!body) throw Error("Сначала напиши метод в поле задания.");
     return (extraImports.length ? extraImports.join("\n") + "\n" : "") +
-      text.replace(marker, body) + "\n";
+      text.replace(solutionMarker, () => body) + "\n";
   }
-  // Expose the same assembly routine to CI without creating a separate JS test engine.
-  if (typeof module === "object" && module.exports) module.exports = {buildTaskProgram};
+
+  function practiceSource(value) {
+    const lines = normalize(value).split("\n").map(line => line.trim()).filter(Boolean);
+    // Imports at the top of the file may be added or reordered in the editor.
+    const importLine = /^(?:global\s+)?using\s+(?:(?:static\s+)|(?:\w+\s*=\s*))?(?:global::)?[\w.]+;$/;
+    while (lines.length && importLine.test(lines[0])) lines.shift();
+    return lines.join("\n");
+  }
+
+  function isSuccessfulPracticeRun(template, source, output, taskId) {
+    if (typeof template !== "string" || typeof source !== "string" || typeof output !== "string") return false;
+    const [before, after, ...extra] = practiceSource(template).split("\n" + solutionMarker + "\n");
+    if (!after || extra.length || !before.endsWith("// BEGIN " + taskId) ||
+        !after.startsWith("// END " + taskId + "\n")) return false;
+
+    const code = practiceSource(source);
+    const start = before + "\n";
+    const end = "\n" + after;
+    return code.startsWith(start) && code.endsWith(end) &&
+      code.length > start.length + end.length &&
+      normalize(output).trimEnd().split("\n").at(-1) === "Все проверки пройдены";
+  }
+
+  if (typeof module === "object" && module.exports) module.exports = {buildTaskProgram, isSuccessfulPracticeRun};
   if (typeof document === "undefined") return;
   const frame = document.getElementById("course-compiler");
   if (!frame) return;
@@ -40,6 +64,26 @@
   const provider = course === "memory" ? (lesson === 1 ? window.DotnetMemoryLesson001Snippets : null) :
                    lesson === 1 ? window.DotnetLesson001Snippets :
                    lesson === 2 ? window.DotnetLesson002Snippets : null;
+
+  const completion = document.getElementById("lesson-completion-status");
+  if (task && completion) {
+    window.addEventListener("message", event => {
+      const result = event.data;
+      if (event.origin !== location.origin || event.source !== frame.contentWindow ||
+          result?.type !== "dotnet-courses:practice-run-success") return;
+      const template = document.getElementById("practice-program-template")?.textContent;
+      if (!isSuccessfulPracticeRun(template, result.source, result.output, taskId)) {
+        if (typeof result.source === "string" && result.source.includes("// BEGIN " + taskId) &&
+            window.DotnetLearning.progress.get("lesson", course, lesson) !== true) {
+          completion.textContent = "Отметка не поставлена. Запусти своё решение с исходными проверками урока.";
+        }
+        return;
+      }
+      if (!window.DotnetLearning.progress.mark("lesson", course, lesson)) {
+        completion.textContent = "Проверки пройдены, но отметку сохранить не удалось.";
+      }
+    });
+  }
 
   function bridge() {
     try {

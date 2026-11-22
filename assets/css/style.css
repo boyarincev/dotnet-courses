@@ -45,3 +45,11 @@ h1,h2,h3{line-height:1.2;letter-spacing:-.045em}h1{font-size:clamp(35px,6vw,60px
 .quiz-progress-actions{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 8px}
 .quiz-toolbar>div{display:flex;gap:6px;flex-wrap:wrap}
 @media(max-width:650px){.quiz-toolbar{align-items:flex-start;flex-direction:column}}
+
+/* Lesson completion and previous-lesson quiz reminder */
+.lesson-completion-status{color:var(--primary);font-weight:700}
+.lesson-card .lesson-completion-badge{margin-inline-start:8px;background:var(--light);color:var(--primary);border-radius:99px;padding:3px 8px;font-size:12px;font-weight:700;white-space:nowrap}
+.previous-quiz-dialog{width:min(450px,calc(100% - 32px));padding:22px;border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--ink)}
+.previous-quiz-dialog::backdrop{background:rgb(0 0 0 / 55%)}
+.previous-quiz-dialog h2{margin:0}
+.previous-quiz-actions{display:flex;flex-wrap:wrap;gap:8px}

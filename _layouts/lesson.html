@@ -4,10 +4,31 @@ layout: default
 {% assign course_url = '/courses/csharp-dotnet-9-11/' %}
 {% assign quiz_url = '/courses/csharp-dotnet-9-11/quiz/' %}
 {% assign course_title = 'C# 13–15 и .NET 9–11' %}
+{% assign course_id = page.course | default: 'whats-new' %}
+{% assign course_lessons = site.lessons %}
 {% if page.course == 'memory' %}
   {% assign course_url = '/courses/memory/' %}
   {% assign quiz_url = '/courses/memory/quiz/' %}
   {% assign course_title = 'Память и аллокации .NET' %}
+  {% assign course_lessons = site.memory_lessons %}
+{% endif %}
+{% assign current_lesson_number = page.lesson_number | plus: 0 %}
+{% assign previous_lesson_number = 0 %}
+{% for lesson in course_lessons %}
+  {% assign number = lesson.lesson_number | plus: 0 %}
+  {% if number < current_lesson_number and number > previous_lesson_number %}
+    {% assign previous_lesson_number = number %}
+  {% endif %}
+{% endfor %}
+{% if previous_lesson_number > 0 %}
+<dialog id="previous-quiz-dialog" class="previous-quiz-dialog" data-course="{{ course_id }}" data-lesson="{{ previous_lesson_number }}" aria-labelledby="previous-quiz-title" aria-describedby="previous-quiz-description">
+  <h2 id="previous-quiz-title">Повтори предыдущий урок</h2>
+  <p id="previous-quiz-description">Квиз к уроку №{{ previous_lesson_number }} ещё не пройден. Пройди его, чтобы повторить материал перед новым уроком.</p>
+  <form method="dialog" class="previous-quiz-actions">
+    <a class="button primary" href="{{ quiz_url | relative_url }}?through={{ previous_lesson_number }}">Перейти к квизу</a>
+    <button type="submit" class="button" autofocus>Продолжить урок</button>
+  </form>
+</dialog>
 {% endif %}
 <div class="eyebrow"><a href="{{ course_url | relative_url }}">{{ course_title }}</a> · Урок {{ page.lesson_number }} · {{ page.lesson_date }}</div>
 <h1>{{ page.title | escape }}</h1>
@@ -17,6 +38,8 @@ layout: default
 {% if page.browser_runtime %}
 <section class="lesson-browser" id="browser-runner">
   <h2>Практика: настоящий C# в браузере</h2>
+  <p>Урок отмечается пройденным, когда решение проходит все исходные проверки Assert во встроенном редакторе. Меняй реализацию задания, оставляя код проверок как в уроке. Отметка сохраняется в этом браузере.</p>
+  <p id="lesson-completion-status" class="lesson-completion-status" data-course="{{ course_id }}" data-lesson="{{ page.lesson_number }}" role="status"></p>
   <p>Кнопка под примером переносит код в компилятор ниже. <strong>«Запустить текущий код» над редактором</strong> запускает именно твою изменённую версию, не подставляя исходный пример.</p>
   <p><strong>C# {% if page.browser_runtime == '9' %}13{% elsif page.browser_runtime == '10' %}14{% else %}неизвестная версия{% endif %} / .NET {{ page.browser_runtime }}</strong> · Roslyn + WebAssembly. Базовая подсветка и подсказки, но не полноценный IntelliSense.</p>
   <div class="practice-actions live-editor-toolbar" aria-label="Действия редактора C#">

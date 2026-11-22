@@ -146,6 +146,69 @@ async function verifyDotnetLabLink(browser) {
     }
 }
 
+
+async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
+    const context = await browser.newContext({ serviceWorkers: "block" });
+    try {
+        const page = await context.newPage();
+        page.setDefaultTimeout(timeout);
+        await page.goto(new URL(coursePath + lessonPath, site).href, { waitUntil: "domcontentloaded" });
+        const iframe = await page.locator("#course-compiler").elementHandle();
+        const compiler = await iframe.contentFrame();
+        assert.ok(compiler, "Lesson compiler frame is missing");
+        await compiler.locator("#editor-run-current").waitFor({ state: "attached" });
+
+        // Use the real editor, lesson runner and storage, with a synthetic task.
+        const template = [
+            "using System;",
+            "public static class Program",
+            "{",
+            "    public static void Main()",
+            "    {",
+            "        if (Solve() != 42) throw new Exception(\"synthetic Assert failed\");",
+            '        Console.WriteLine("Все проверки пройдены");',
+            "        AfterChecks();",
+            "    }",
+            "    // BEGIN " + taskId,
+            "    // INSERT_SOLUTION_HERE",
+            "    // END " + taskId,
+            "}"
+        ].join("\n");
+        await page.locator("#practice-program-template").evaluate((element, code) => {
+            element.textContent = code;
+            document.documentElement.dataset.practiceRunSignals = "0";
+            window.addEventListener("message", event => {
+                if (event.data?.type === "dotnet-courses:practice-run-success") {
+                    document.documentElement.dataset.practiceRunSignals =
+                        String(Number(document.documentElement.dataset.practiceRunSignals) + 1);
+                }
+            });
+        }, template);
+        const status = page.locator("#lesson-completion-status");
+        const solution = "static int Solve() => 42;\n    static void AfterChecks() {}";
+        const program = template.replace("// INSERT_SOLUTION_HERE", solution);
+        await start(compiler, program.replace("Solve() != 42", "Solve() != 41").replace("=> 42", "=> 41"));
+        await page.waitForFunction(() => document.documentElement.dataset.practiceRunSignals === "1");
+        assert.match(await status.textContent(), /исходными проверками/);
+        await compiler.waitForFunction(() => !window.DotnetBrowserEditor.busy());
+
+        await start(compiler, program.replace("AfterChecks() {}", 'AfterChecks() { throw new Exception("after checks"); }'));
+        await checkFailure(compiler, "Все проверки пройдены\n", "Execution error: Exception: after checks");
+        assert.notEqual(await status.textContent(), "Урок пройден.");
+
+        assert.ok(await compiler.evaluate(code => window.DotnetBrowserEditor.setCode(code), program));
+        await page.locator("#page-editor-run").click();
+        await page.waitForFunction(() => document.getElementById("lesson-completion-status").textContent === "Урок пройден.");
+        await page.goto(new URL(coursePath, site).href, { waitUntil: "domcontentloaded" });
+        const badge = page.locator('[data-lesson-completion-badge][data-lesson="1"]');
+        await badge.waitFor({ state: "visible" });
+        assert.equal(await badge.textContent(), "Пройден");
+        console.log(taskId + ": checked practice completion through WebAssembly and the course badge");
+    } finally {
+        await context.close();
+    }
+}
+
 async function verify() {
     const browser = await chromium.launch();
     try {
@@ -191,6 +254,8 @@ async function verify() {
             await page.close();
         }
         await verifyDotnetLabLink(browser);
+        await verifyLessonCompletion(browser, "courses/csharp-dotnet-9-11/", "lessons/001-params-countby/", "TASK-001");
+        await verifyLessonCompletion(browser, "courses/memory/", "lessons/001-allocations-copies-retention/", "ALLOC-TASK-001");
     } finally {
         await browser.close();
     }

@@ -10,16 +10,22 @@
   const oldDraftKey=course==="memory"?"dotnet-learning:quiz-drafts:memory":"dotnet-learning:quiz-drafts";
   const fsrsKey="dotnet-courses:fsrs-7:v1:"+course;
   const maxQuestions=5;
-  const requested=new URLSearchParams(location.search).get("through");
-  const n=requested!==null && /^\d+$/.test(requested)?Number(requested):null;
+  const requested=new URLSearchParams(location.search).getAll("through");
+  const courseWide=requested.length===0;
+  const n=requested.length===1 && /^\d+$/.test(requested[0])?Number(requested[0]):null;
   const through=Number.isSafeInteger(n) && n>0?n:null;
+  const publishedLessons=(root.dataset.lessonNumbers||"").split(",").map(Number);
+  const lessonQuiz=through!==null && publishedLessons.includes(through);
   const ids=new Set(bank.map(q=>q.id));
   const gradeNames={wrong:"Неверно",partial:"Частично",correct:"Верно",easy:"Легко"};
   const count=document.getElementById("quiz-count");
   const context=document.getElementById("quiz-context");
+  const lessonNotice=document.getElementById("quiz-lesson-progress");
+  const lessonStatus=lessonNotice?.querySelector('[role="status"]');
   const feedback=document.getElementById("quiz-feedback");
   const allButton=document.getElementById("quiz-show-all");
   const nextButton=document.getElementById("quiz-next");
+  const nextControl=document.getElementById("quiz-next-control");
   const actions=document.getElementById("quiz-actions");
   const exportButton=document.getElementById("quiz-export-progress");
   const importButton=document.getElementById("quiz-import-progress");
@@ -36,6 +42,10 @@
   let displayed=[];
   let showAll=false;
   let answeredThisSession=new Set();
+  const selectionAssessments=new Map();
+  let lessonSelection=null;
+  let lessonCompleted=false;
+  let extraSelection=false;
   let engine=null;
 
   function store(key,value) {
@@ -81,11 +91,61 @@
   }
 
   function getEligible() {return engine.eligible(bank,currentTime(),through);}
+  function countsForLesson() {return lessonQuiz && !showAll && !lessonCompleted;}
+
   function choose() {
-    return showAll?getEligible():engine.select(
-      bank,records,currentTime(),through,maxQuestions,Math.random,[...answeredThisSession]);
+    extraSelection=false;
+    if(showAll)return getEligible();
+    const now=currentTime();
+    const scheduled=engine.select(bank,records,now,through,maxQuestions,Math.random,[...answeredThisSession]);
+    if(scheduled.length || !countsForLesson())return scheduled;
+
+    // Offer a short assessment even when every available card was already reviewed.
+    // These ratings belong to this selection and do not reschedule cards.
+    const extra=engine.select(bank,{},now,through,maxQuestions);
+    extraSelection=extra.length>0;
+    return extra;
   }
-  function refresh() {displayed=choose();render();}
+
+  function refresh() {
+    lessonCompleted=lessonQuiz && window.DotnetLearning?.progress?.get("quiz",course,through)===true;
+    if(!lessonQuiz)displayed=choose();
+    else if(showAll)displayed=getEligible();
+    else {
+      lessonSelection??=choose();
+      displayed=lessonSelection;
+    }
+    render();
+  }
+
+  function updateLessonStatus() {
+    if(!lessonQuiz || !lessonStatus)return;
+    if(lessonCompleted) {
+      lessonStatus.textContent="Квиз урока №"+through+" пройден.";
+      return;
+    }
+    if(showAll) {
+      lessonStatus.textContent="Вернись в короткую подборку, чтобы продолжить квиз урока.";
+      return;
+    }
+    if(!displayed.length) {
+      lessonStatus.textContent="Для квиза урока пока нет доступных вопросов.";
+      return;
+    }
+
+    const assessed=displayed.filter(q=>
+      selectionAssessments.get(q.id)?.answer===String(drafts[q.id]??"").trim()).length;
+    if(assessed===displayed.length) {
+      lessonCompleted=window.DotnetLearning?.progress?.mark("quiz",course,through)===true;
+      lessonStatus.textContent=lessonCompleted?
+        "Квиз урока №"+through+" пройден. Отметка сохранена в этом браузере.":
+        "Все ответы оценены. Не удалось сохранить отметку в этом браузере.";
+      return;
+    }
+
+    lessonStatus.textContent="Ответы с самооценкой в этой подборке: "+assessed+" из "+displayed.length+"."+
+      (extraSelection?" Самооценки в этой подборке сохраняют текущее расписание FSRS.":"");
+  }
 
   function render() {
     const eligible=getEligible();
@@ -94,6 +154,7 @@
     allButton.textContent=showAll?"Короткая подборка":"Все вопросы";
     nextButton.disabled=showAll;
     actions.hidden=displayed.length===0;
+    updateLessonStatus();
     if(!displayed.length) {
       const empty=document.createElement("p");
       empty.className="notice";
@@ -128,10 +189,6 @@
       input.rows=4;
       input.value=drafts[q.id]||"";
       input.placeholder="Напиши свой ответ или пример C#…";
-      input.addEventListener("input",()=>{
-        drafts[q.id]=input.value;
-        store(oldDraftKey,drafts);
-      });
       const controls=document.createElement("div");
       controls.className="question-grade-actions";
       const answerHistory=document.createElement("details");
@@ -140,22 +197,48 @@
       const message=document.createElement("span");
       message.className="practice-feedback";
       message.setAttribute("role","status");
+      const previousAssessment=showAll?null:selectionAssessments.get(q.id);
+      const assessed=previousAssessment?.answer===input.value.trim();
+      if(assessed)message.textContent="Самооценка «"+gradeNames[previousAssessment.grade]+"» учтена в подборке.";
+      else if(previousAssessment && countsForLesson())message.textContent="Поставь самооценку изменённому ответу.";
+      input.addEventListener("input",()=>{
+        drafts[q.id]=input.value;
+        store(oldDraftKey,drafts);
+        if(!countsForLesson())return;
+        const assessment=selectionAssessments.get(q.id);
+        if(assessment) {
+          const matches=assessment.answer===input.value.trim();
+          controls.querySelectorAll("button").forEach(b=>b.disabled=matches);
+          message.textContent=matches?"Ответ учтён в подборке.":"Поставь самооценку изменённому ответу.";
+        }
+        updateLessonStatus();
+      });
       Object.entries(gradeNames).forEach(([grade,title])=>{
         const button=document.createElement("button");
         button.type="button";
         button.className="button";
         button.textContent=title;
-        button.disabled=!isDue;
+        button.disabled=assessed || (!isDue && !countsForLesson());
         button.title="Это твоя самооценка, а не автоматическая проверка";
         button.addEventListener("click",()=>{
-          if(!input.value.trim()) {
+          const answer=input.value.trim();
+          if(!answer) {
             input.focus();
             message.textContent="Сначала напиши ответ.";
             return;
           }
+          const forLesson=countsForLesson();
           const prior=records[q.id];
+          const now=currentTime();
+          if(forLesson && (extraSelection || answeredThisSession.has(q.id) || !engine.due(prior,now))) {
+            selectionAssessments.set(q.id,{answer,grade});
+            message.textContent="Самооценка «"+title+"» учтена в подборке. Расписание FSRS сохранено.";
+            controls.querySelectorAll("button").forEach(b=>b.disabled=true);
+            updateLessonStatus();
+            return;
+          }
           try {
-            const updated=engine.evaluate(prior,q.id,grade,input.value,currentTime());
+            const updated=engine.evaluate(prior,q.id,grade,input.value,now);
             records[q.id]=updated;
             if(!store(fsrsKey,records)) {
               if(prior)records[q.id]=prior;
@@ -164,12 +247,14 @@
               return;
             }
             answeredThisSession.add(q.id);
+            if(forLesson)selectionAssessments.set(q.id,{answer,grade});
             status.textContent="Самооценка: "+title+
               " · Следующее повторение: "+prettyDate(updated.card.dueAt)+
               " · Попыток: "+updated.history.length;
             message.textContent="Оценка сохранена локально. Дату рассчитал FSRS-7.";
             controls.querySelectorAll("button").forEach(b=>b.disabled=true);
             renderAnswerHistory(answerHistory,updated.history);
+            if(forLesson)updateLessonStatus();
           } catch (error) {
             message.textContent="Не удалось оценить: "+error.message;
           }
@@ -183,12 +268,21 @@
 
   function exportAnswers() {
     const label=course==="memory"?"Память и аллокации":"C# 13–15 и .NET 9–11";
-    return [".NET Courses — квиз: "+label,"Дата: "+currentTime().toLocaleString("ru-RU"),
+    return [".NET Courses — квиз: "+label,
+      "Проверь мои ответы, объясни ошибки и дай короткую подсказку для каждого вопроса без ответа.",
+      "Дата: "+currentTime().toLocaleString("ru-RU"),
       through?"Уроки №1–"+through:"Весь курс","",
-      ...displayed.map(q=>q.id+" · Урок "+q.lesson_number+"\n"+
-        ((drafts[q.id]||"").trim()||"(нет ответа)")+"\n"+
-        (records[q.id]?.lastGrade?
-          "Самооценка: "+gradeNames[records[q.id].lastGrade]:"Самооценка: нет")+"\n"),
+      ...displayed.map(q=>{
+        const answer=String(drafts[q.id]??"").trim();
+        const assessment=showAll?null:selectionAssessments.get(q.id);
+        const record=records[q.id];
+        const lastAttempt=Array.isArray(record?.history)?record.history.at(-1):null;
+        const grade=answer && (assessment?.answer===answer?assessment.grade:
+          lastAttempt?.answer===answer?(lastAttempt.rating||record.lastGrade):null);
+        return q.id+" · Урок "+q.lesson_number+"\nВопрос\n"+q.prompt+
+          "\nМой ответ\n"+(answer||"(нет ответа)")+
+          "\nСамооценка: "+(gradeNames[grade]||"нет")+"\n";
+      }),
       "Самооценка не является независимой проверкой правильности ответа."
     ].join("\n");
   }
@@ -228,6 +322,7 @@
         throw Error("Невозможно сохранить импорт в этом браузере.");
       }
       answeredThisSession=new Set();
+      selectionAssessments.clear();
       refresh();
       feedback.textContent="Прогресс импортирован.";
     } catch(error) {
@@ -239,11 +334,13 @@
 
   function init(srs) {
     engine=srs;
+    if(lessonNotice)lessonNotice.hidden=!lessonQuiz;
     context.textContent=through?
       "Случайные вопросы по урокам №1–"+through+
       ". Приоритет — трудным и просроченным карточкам; затем новым.":
       "Общее повторение всего курса: случайные просроченные и новые вопросы.";
-    nextButton.addEventListener("click",()=>{showAll=false;refresh();});
+    if(nextControl)nextControl.hidden=!courseWide;
+    if(courseWide)nextButton.addEventListener("click",refresh);
     allButton.addEventListener("click",()=>{showAll=!showAll;refresh();});
     document.getElementById("quiz-copy").addEventListener("click",async()=>{
       try {
@@ -263,11 +360,16 @@
     refresh();
   }
 
-  if(window.DotnetQuizSRSReady&&typeof window.DotnetQuizSRSReady.then==="function") {
-    window.DotnetQuizSRSReady.then(init).catch(err=>{
-      root.textContent="Не удалось включить интервальное повторение: "+err.message;
-    });
-  } else {
-    root.textContent="Модуль FSRS-7 не загрузился. Попробуй обновить страницу.";
+  function start() {
+    if(window.DotnetQuizSRSReady&&typeof window.DotnetQuizSRSReady.then==="function") {
+      window.DotnetQuizSRSReady.then(init).catch(err=>{
+        root.textContent="Не удалось включить интервальное повторение: "+err.message;
+      });
+    } else {
+      root.textContent="Модуль FSRS-7 не загрузился. Попробуй обновить страницу.";
+    }
   }
+  // The shared site script exposes local progress after this deferred script.
+  if(document.readyState==="complete")start();
+  else document.addEventListener("DOMContentLoaded",start,{once:true});
 })();

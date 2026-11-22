@@ -133,35 +133,41 @@ public static class Program
         string[] methods = ["get", "POST", "GET", "put", "post", "DELETE", "delete", "GET"];
         var actual = GetTopMethods(methods).ToArray();
 
-        Assert(actual.Length == 3, "Вернуть три самых частых метода");
-        Assert(actual[0].Count == 3
+        Assert(actual.Length == 3 && actual[0].Count == 3
             && string.Equals(actual[0].Method, "get", StringComparison.OrdinalIgnoreCase),
-            "Объединить GET и get: 3 обращения");
+            actual.Length == 3
+                ? $"Первым должен быть GET с частотой 3. Получено «{actual[0]}»."
+                : $"Ожидались три HTTP-метода. Получено элементов {actual.Length}.");
         Assert(actual[1].Count == 2 && actual[2].Count == 2
             && string.Equals(actual[1].Method, "DELETE", StringComparison.OrdinalIgnoreCase)
             && string.Equals(actual[2].Method, "POST", StringComparison.OrdinalIgnoreCase),
-            "При равной частоте отсортировать методы по имени");
+            $"На втором и третьем местах ожидались DELETE (2) и POST (2). Получены «{actual[1]}» и «{actual[2]}».");
 
         Assert(!GetTopMethods(Array.Empty<string>()).Any(),
-            "Пустой ввод возвращает пустой результат");
+            "Для пустого ввода ожидался пустой результат. Метод вернул как минимум один элемент.");
 
         var mixed = GetTopMethods(["X", "x", "y"]).ToArray();
-        Assert(mixed.Length == 2 && mixed[0].Count == 2
-            && string.Equals(mixed[0].Method, "x", StringComparison.OrdinalIgnoreCase),
-            "Имена X и x считаются одним методом");
+        Assert(mixed.Length == 2 && mixed[0].Count == 2 && mixed[1].Count == 1
+            && string.Equals(mixed[0].Method, "X", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(mixed[1].Method, "y", StringComparison.OrdinalIgnoreCase),
+            $"Ожидались X (2) и y (1) в этом порядке. Получено «{string.Join(", ", mixed)}».");
 
-        var tie = GetTopMethods(["z", "A", "Z", "a"]).ToArray();
-        Assert(tie.Length == 2 && tie[0].Count == 2 && tie[1].Count == 2
-            && string.Equals(tie[0].Method, "a", StringComparison.OrdinalIgnoreCase),
-            "При равной частоте имя A идёт перед Z");
+        var cutoff = GetTopMethods(
+            ["TRACE", "get", "put", "post", "GET", "trace", "POST", "get", "PUT", "POST"]).ToArray();
+        Assert(cutoff.Length == 3
+            && cutoff[0].Count == 3 && cutoff[1].Count == 3 && cutoff[2].Count == 2
+            && string.Equals(cutoff[0].Method, "GET", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(cutoff[1].Method, "POST", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(cutoff[2].Method, "PUT", StringComparison.OrdinalIgnoreCase),
+            "Ожидались GET (3), POST (3) и PUT (2). При равной частоте PUT идёт раньше TRACE. "
+            + $"Получено «{string.Join(", ", cutoff)}».");
 
         Console.WriteLine("Все проверки пройдены");
     }
 
-    private static void Assert(bool condition, string message)
+    private static void Assert(bool condition, string failureMessage)
     {
-        if (!condition) throw new InvalidOperationException("❌ TASK-001: " + message);
-        Console.WriteLine("✓ " + message);
+        if (!condition) throw new InvalidOperationException("❌ TASK-001: " + failureMessage);
     }
 
     // BEGIN TASK-001

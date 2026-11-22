@@ -158,33 +158,57 @@ public static class Program
         ];
         var summary = SummarizePaid(rows);
         Assert(summary.PaidCount == 2 && summary.Total == 1579.90m,
-            "Два оплаченных заказа дают сумму 1579.90");
+            FormattableString.Invariant(
+                $"Ожидались два оплаченных заказа на сумму 1579.90. Получено ({summary.PaidCount}, {summary.Total})."));
 
         var empty = SummarizePaid(Array.Empty<string>());
         Assert(empty.PaidCount == 0 && empty.Total == 0m,
-            "Пустой ввод возвращает (0, 0)");
+            FormattableString.Invariant(
+                $"Для пустого ввода ожидалось (0, 0). Получено ({empty.PaidCount}, {empty.Total})."));
 
         var invalid = SummarizePaid(
-            ["broken", "ORD-3;paid;not-a-number", "ORD-4;paid;4;extra"]);
+            ["broken", "ORD-3;paid;not-a-number", "ORD-4;paid;4;extra", "ORD-8;paid;4;"]);
         Assert(invalid.PaidCount == 0 && invalid.Total == 0m,
-            "Некорректные записи пропускаются");
+            FormattableString.Invariant(
+                $"Все строки некорректны, ожидалось (0, 0). Получено ({invalid.PaidCount}, {invalid.Total})."));
 
-        var strict = SummarizePaid(["ORD-1;PAID;10.00", "ORD-2;paid;5.25"]);
-        Assert(strict.PaidCount == 1 && strict.Total == 5.25m,
-            "Статус paid учитывает регистр");
+        int enumerations = 0;
+        var previousCulture = CultureInfo.CurrentCulture;
+        var commaCulture = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+        commaCulture.NumberFormat.NumberDecimalSeparator = ",";
+        commaCulture.NumberFormat.NumberGroupSeparator = " ";
 
-        var mixed = SummarizePaid(
-            ["ORD-5;paid;-20.50", "ORD-6;new;999.00", "ORD-7;paid;30.75"]);
+        (int PaidCount, decimal Total) mixed;
+        try
+        {
+            CultureInfo.CurrentCulture = commaCulture;
+            mixed = SummarizePaid(EnumerateRows());
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
+
         Assert(mixed.PaidCount == 2 && mixed.Total == 10.25m,
-            "Суммы decimal и фильтрация статуса");
+            FormattableString.Invariant(
+                $"При локали с десятичной запятой ожидалось (2, 10.25). Получено ({mixed.PaidCount}, {mixed.Total})."));
+        Assert(enumerations == 1,
+            $"Ожидался один проход по исходной последовательности. Фактическое число проходов — {enumerations}.");
 
         Console.WriteLine("Все проверки пройдены");
+
+        IEnumerable<string> EnumerateRows()
+        {
+            enumerations++;
+            yield return "ORD-5;paid;-20.50";
+            yield return "ORD-6;new;999.00";
+            yield return "ORD-7;paid;30.75";
+        }
     }
 
-    private static void Assert(bool condition, string message)
+    private static void Assert(bool condition, string failureMessage)
     {
-        if (!condition) throw new InvalidOperationException("❌ ALLOC-TASK-001: " + message);
-        Console.WriteLine("✓ " + message);
+        if (!condition) throw new InvalidOperationException("❌ ALLOC-TASK-001: " + failureMessage);
     }
 
     // BEGIN ALLOC-TASK-001

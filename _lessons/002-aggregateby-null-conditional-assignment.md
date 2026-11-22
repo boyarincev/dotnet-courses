@@ -151,7 +151,10 @@ Audit: /health=1/5; /orders=4/220
 
 ## 4. Напиши код сам · TASK-002
 
-**15–20 минут.** Реализуй `GetNoisiestClients`: по записям HTTP-вызовов верни **двух клиентов с наибольшей суммой байтов ошибочных ответов** (`StatusCode >= 400`). Используй `AggregateBy` для накопления `(Count, TotalBytes)`, сравнивай имена клиентов без учёта регистра. Сортируй по `TotalBytes` убыванию, при равенстве — по имени без учёта регистра по возрастанию. При ненулевом `audit` запиши в `audit.Text` строку вида `client=400; client=400` через `?.`.
+**15–20 минут.** Реализуй `GetNoisiestClients` для записей HTTP-вызовов. Оставь ответы со статусом `400` и выше. Сгруппируй их через `AggregateBy` по имени клиента без учёта регистра.
+
+- **Результат метода.** Верни до двух элементов `(Client, Count, TotalBytes)`. `Count` — число ошибочных ответов клиента. `TotalBytes` — сумма их полей `ResponseBytes` в байтах, тип суммы `long`. Сортируй по `TotalBytes` по убыванию, при равенстве — по имени клиента по возрастанию без учёта регистра.
+- **Текст отчёта.** Если `audit` задан, через оператор `?.` запиши в `audit.Text` имя и сумму байтов для каждого клиента из результата в том же порядке. Формат записи — `клиент=сумма_байтов`, разделитель — `"; "`.
 
 Объявления типов для `Program.cs`:
 
@@ -177,15 +180,17 @@ Failure[] calls =
 [
     new(Client: "api-A", StatusCode: 500, ResponseBytes: 150),
     new(Client: "API-a", StatusCode: 404, ResponseBytes: 50),
-    new(Client: "api-b", StatusCode: 503, ResponseBytes: 400),
+    new(Client: "api-b", StatusCode: 503, ResponseBytes: 390),
     new(Client: "api-b", StatusCode: 200, ResponseBytes: 900),
     new(Client: "api-c", StatusCode: 500, ResponseBytes: 400)
 ];
 ```
 
-**Ожидаемый результат:** `api-b: Count=1, TotalBytes=400`; `api-c: Count=1, TotalBytes=400`. `api-A` имеет две ошибки, но всего 200 байт. При наличии `audit`: `api-b=400; api-c=400`.
+**Ожидаемый результат.** Сначала `api-c` с одной ошибкой на 400 байт, затем `api-b` с одной ошибкой на 390 байт. У `api-A` две ошибки на 200 байт суммарно. При наличии `audit` ожидается `api-c=400; api-b=390`.
 
 **Критерии готовности:** фильтр статусов до агрегации; `long` для суммы; объединение `api-A` и `API-a`; максимум два результата и определённый порядок при равенстве; при `audit == null` не создавать текст отчёта. **Пограничный случай:** пустой вход возвращает пустую коллекцию. Если `audit` не равен `null`, в `audit.Text` записывается пустая строка.
+
+При ревью метода отдельно проверь, когда вычисляется строка отчёта. При `audit == null` построение строки должно пропускаться, даже если сводка возвращается правильно.
 
 <details><summary>Необязательная подсказка</summary><p>После AggregateBy используй OrderByDescending, ThenBy и Take(2). Сначала материализуй результат, затем формируй строку только внутри условного присваивания.</p></details>
 
@@ -204,7 +209,7 @@ public static class Program
         [
             new(Client: "api-A", StatusCode: 500, ResponseBytes: 150),
             new(Client: "API-a", StatusCode: 404, ResponseBytes: 50),
-            new(Client: "api-b", StatusCode: 503, ResponseBytes: 400),
+            new(Client: "api-b", StatusCode: 503, ResponseBytes: 390),
             new(Client: "api-b", StatusCode: 200, ResponseBytes: 900),
             new(Client: "api-c", StatusCode: 500, ResponseBytes: 400)
         ];
@@ -212,45 +217,54 @@ public static class Program
         var audit = new AuditReport();
         var actual = GetNoisiestClients(calls, audit);
 
-        Assert(actual.Count == 2, "Вернуть двух клиентов");
-        Assert(actual[0].Count == 1 && actual[0].TotalBytes == 400
-            && string.Equals(actual[0].Client, "api-b", StringComparison.OrdinalIgnoreCase),
-            "Первый клиент — api-b с одной ошибкой и 400 байтами");
-        Assert(actual[1].Count == 1 && actual[1].TotalBytes == 400
-            && string.Equals(actual[1].Client, "api-c", StringComparison.OrdinalIgnoreCase),
-            "При равной сумме api-b идёт перед api-c");
-        Assert(audit.Text == "api-b=400; api-c=400",
-            "Отчёт записан в audit.Text");
+        Assert(actual.Count == 2 && actual[0].Count == 1 && actual[0].TotalBytes == 400
+            && string.Equals(actual[0].Client, "api-c", StringComparison.OrdinalIgnoreCase),
+            actual.Count == 2
+                ? $"Первым ожидался api-c с одной ошибкой на 400 байт. Получено «{actual[0]}»."
+                : $"Ожидались два клиента. Получено элементов {actual.Count}.");
+        Assert(actual[1].Count == 1 && actual[1].TotalBytes == 390
+            && string.Equals(actual[1].Client, "api-b", StringComparison.OrdinalIgnoreCase),
+            $"Вторым ожидался api-b с одной ошибкой на 390 байт. Получено «{actual[1]}».");
+
+        const string expectedReport = "api-c=400; api-b=390";
+        Assert(audit.Text == expectedReport,
+            string.IsNullOrEmpty(audit.Text)
+                ? $"Отчёт не записан в audit.Text. Ожидалось «{expectedReport}»."
+                : $"Неверный текст отчёта в audit.Text. Ожидалось «{expectedReport}», получено «{audit.Text}».");
 
         var emptyAudit = new AuditReport { Text = "старый отчёт" };
-        Assert(GetNoisiestClients(Array.Empty<Failure>(), emptyAudit).Count == 0
-            && emptyAudit.Text == "",
-            "Пустой ввод возвращает пустой результат и очищает отчёт");
+        var empty = GetNoisiestClients(Array.Empty<Failure>(), emptyAudit);
+        var emptyReportText = emptyAudit.Text is null ? "null" : $"«{emptyAudit.Text}»";
+        Assert(empty.Count == 0 && emptyAudit.Text == "",
+            "Для пустого ввода ожидались 0 клиентов и пустая строка в audit.Text. "
+            + $"Получено клиентов {empty.Count}, текст отчёта — {emptyReportText}.");
 
-        Failure[] mixed =
+        Failure[] boundary =
         [
-            new(Client: "Api-X", StatusCode: 500, ResponseBytes: 300),
-            new(Client: "API-x", StatusCode: 404, ResponseBytes: 50),
-            new(Client: "small", StatusCode: 500, ResponseBytes: 10),
-            new(Client: "ignored", StatusCode: 200, ResponseBytes: 9000)
+            new(Client: "Zed", StatusCode: 400, ResponseBytes: 2_200_000_000L),
+            new(Client: "zed", StatusCode: 500, ResponseBytes: 200_000_000),
+            new(Client: "alpha", StatusCode: 400, ResponseBytes: 1_200_000_000),
+            new(Client: "ALPHA", StatusCode: 404, ResponseBytes: 1_200_000_000),
+            new(Client: "ignored", StatusCode: 399, ResponseBytes: 3_000_000_000)
         ];
-        // null означает, что отчёт не нужен.
-        var withoutAudit = GetNoisiestClients(mixed, null);
-        Assert(withoutAudit.Count == 2 && withoutAudit[0].Count == 2
-            && withoutAudit[0].TotalBytes == 350
-            && string.Equals(withoutAudit[0].Client, "Api-X", StringComparison.OrdinalIgnoreCase),
-            "Склеить Api-X и API-x, поддержать audit=null");
-        Assert(withoutAudit[1].TotalBytes == 10
-            && string.Equals(withoutAudit[1].Client, "small", StringComparison.OrdinalIgnoreCase),
-            "Ответ 200 не учитывается при агрегации ошибок");
+        // При audit == null нужна только сводка по клиентам.
+        var withoutAudit = GetNoisiestClients(boundary, null);
+        Assert(withoutAudit.Count == 2
+            && withoutAudit[0].Count == 2 && withoutAudit[0].TotalBytes == 2_400_000_000L
+            && withoutAudit[1].Count == 2 && withoutAudit[1].TotalBytes == 2_400_000_000L
+            && string.Equals(withoutAudit[0].Client, "alpha", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(withoutAudit[1].Client, "Zed", StringComparison.OrdinalIgnoreCase),
+            withoutAudit.Count == 2
+                ? "Ожидались alpha и Zed в этом порядке, по две ошибки и 2 400 000 000 байт у каждого. "
+                    + $"Получены «{withoutAudit[0]}» и «{withoutAudit[1]}». Учитывается 400, а 399 пропускается."
+                : $"Для ответов со статусом от 400 ожидались два клиента. Получено элементов {withoutAudit.Count}.");
 
         Console.WriteLine("Все проверки пройдены");
     }
 
-    private static void Assert(bool condition, string message)
+    private static void Assert(bool condition, string failureMessage)
     {
-        if (!condition) throw new InvalidOperationException("❌ TASK-002: " + message);
-        Console.WriteLine("✓ " + message);
+        if (!condition) throw new InvalidOperationException("❌ TASK-002: " + failureMessage);
     }
 
     // BEGIN TASK-002
@@ -270,12 +284,13 @@ sealed class AuditReport
     IEnumerable&lt;Failure&gt; calls, AuditReport? audit)
 {
     // Реализуй GetNoisiestClients для записей HTTP-вызовов.
-    // Оставь ответы со StatusCode &gt;= 400 и накопи (Count, TotalBytes) через AggregateBy.
-    // Группируй по имени клиента без учёта регистра. Для суммы байтов используй long.
-    // Верни до двух клиентов, отсортированных по TotalBytes по убыванию.
+    // Оставь ответы со StatusCode &gt;= 400 и сгруппируй их через AggregateBy
+    // по имени клиента без учёта регистра. Count — число таких ответов.
+    // TotalBytes (long) — сумма их ResponseBytes в байтах.
+    // Верни до двух элементов (Client, Count, TotalBytes) по убыванию TotalBytes.
     // При равенстве сортируй по имени клиента по возрастанию без учёта регистра.
-    // Если audit задан, через оператор ?. запиши в audit.Text имена и суммы
-    // из результата в том же порядке. Формат пары — "клиент=сумма", разделитель — "; ".
+    // Если audit задан, через ?. запиши в audit.Text пары "клиент=сумма_байтов"
+    // в порядке результата, разделяя пары через "; ". Пустой результат даёт пустой текст.
 
     throw new NotImplementedException();
 }</textarea>
@@ -284,7 +299,7 @@ sealed class AuditReport
 
 ## 5. Повторение и официальные источники
 
-[Квиз по предыдущим темам]({{ '/quiz/' | relative_url }}) содержит вопросы с постоянными Q-ID. Отправка и оценка ответов происходят только в чате.
+[Квиз по этому и предыдущим урокам]({{ '/courses/csharp-dotnet-9-11/quiz/' | relative_url }}?through={{ page.lesson_number }}) подбирает вопросы с постоянными Q-ID. Ответы и самооценки сохраняются в браузере.
 
 Microsoft Learn: [C# 14](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14), [null-conditional operators](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/member-access-operators#null-conditional-operators--and-), [`??` и `??=`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/null-coalescing-operator), [Enumerable.AggregateBy](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.aggregateby?view=net-9.0), [.NET 9 LINQ](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-9/libraries#linq).
 

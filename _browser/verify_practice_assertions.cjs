@@ -3,7 +3,7 @@
 const fs=require("node:fs");
 const path=require("node:path");
 const assert=require("node:assert/strict");
-const {addTaskInstructions,buildTaskProgram,isSuccessfulPracticeRun}=require("../assets/js/course-runner.js");
+const {addTaskInstructions,buildTaskProgram,isSuccessfulPracticeRun,refreshOpenTask}=require("../assets/js/course-runner.js");
 
 const taskId="TASK-TEST";
 const header="public static class Program\n{\n";
@@ -74,8 +74,38 @@ assert.equal(addTaskInstructions(expressionSource,starter),
   "an expression-bodied method retains its implementation and gains comments above it");
 assert.equal(addTaskInstructions("",starter),"","empty practice remains empty");
 
-const root=process.argv[2];
-if(!root) throw Error("Usage: node verify_practice_assertions.cjs <output-dir>");
+const oldGuide="// Условие из предыдущей версии.";
+const notes="    // Личная заметка.\n    return 1;";
+const duplicatedGuide=[
+  "static int Solve()",
+  "{",
+  "    // Актуальное условие из урока",
+  "    "+firstInstruction,
+  "    "+secondInstruction,
+  "    "+oldGuide,
+  notes,
+  "}"
+].join("\n");
+const cleanedGuide=duplicatedGuide.replace("    "+oldGuide+"\n","");
+assert.equal(addTaskInstructions(duplicatedGuide,starter,oldGuide),cleanedGuide,
+  "a saved draft with both guide versions keeps only the current one");
+assert.equal(addTaskInstructions(cleanedGuide,starter,oldGuide),cleanedGuide,
+  "repeated restore keeps the same learner source and instructions");
+
+const openedProgram=buildTaskProgram(currentTemplate,duplicatedGuide,taskId).replace(/\n/g,"\r\n");
+const cleanedProgram=openedProgram.replace("    "+oldGuide+"\r\n","");
+assert.equal(refreshOpenTask(openedProgram,taskId,starter,oldGuide),cleanedProgram,
+  "opening the current task removes only obsolete instructions");
+assert.equal(refreshOpenTask(cleanedProgram,taskId,starter,oldGuide),cleanedProgram,
+  "opening the current task again preserves the exact program");
+assert.equal(refreshOpenTask(openedProgram,"TASK-OTHER",starter,oldGuide),openedProgram,
+  "opening a different task does not alter the file");
+
+const [root,...taskFilter]=process.argv.slice(2);
+if(root==="--shared-only" && taskFilter.length===0) process.exit(0);
+if(!root || root.startsWith("--")) {
+  throw Error("Usage: node verify_practice_assertions.cjs <output-dir> [task...] or --shared-only");
+}
 const cases=[
   {source:"_lessons/001-params-countby.md", dir:"task001", id:"TASK-001",
     method:"static IEnumerable<(string Method, int Count)> GetTopMethods(IEnumerable<string> methods) => Array.Empty<(string, int)>();"},
@@ -84,7 +114,11 @@ const cases=[
   {source:"_memory_lessons/001-allocations-copies-retention.md", dir:"alloc001", id:"ALLOC-TASK-001",
     method:"static (int PaidCount, decimal Total) SummarizePaid(IEnumerable<string> rows) => (0, 0m);"}
 ];
+for(const task of taskFilter) {
+  if(!cases.some(c=>c.dir===task)) throw Error("Unknown practice task: "+task);
+}
 for(const c of cases){
+  if(taskFilter.length && !taskFilter.includes(c.dir)) continue;
   const markdown=fs.readFileSync(c.source,"utf8");
   const matches=[...markdown.matchAll(/<script type="text\/plain" id="practice-program-template">([\s\S]*?)<\/script>/g)];
   assert.equal(matches.length,1,"C# test template must be embedded once in "+c.source);

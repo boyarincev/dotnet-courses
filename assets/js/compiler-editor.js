@@ -18,6 +18,7 @@
   ];
   let instance = null;
   let original = null;
+  let initialCode = null;
   // The iframe URL carries a stable course + lesson identity. Keep authored
   // drafts separate across lessons and courses, without server-side storage.
   const pageParams = new URLSearchParams(location.search);
@@ -142,6 +143,7 @@
       installRunButton();
       return;
     }
+    initialCode ??= textarea.value;
     original = textarea;
     instance = window.CodeMirror.fromTextArea(textarea, {
       mode: "text/x-csharp",
@@ -205,6 +207,15 @@
     getCode() {
       ensure();
       return instance ? instance.getValue() : document.getElementById("code-editor")?.value ?? "";
+    },
+    focus() {
+      ensure();
+      if (instance) instance.focus();
+      else document.getElementById("code-editor")?.focus();
+    },
+    isInitialCode() {
+      ensure();
+      return instance !== null && instance.getValue() === initialCode;
     },
     reportSuccessfulRun(source, output) {
       if (window.parent === window) return;

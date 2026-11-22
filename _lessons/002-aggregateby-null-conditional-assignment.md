@@ -198,7 +198,7 @@ Failure[] calls =
 
 <details><summary>Необязательная подсказка</summary><p>После AggregateBy используй OrderByDescending по сумме байтов и Take(2). Сначала материализуй результат, затем формируй строку только внутри условного присваивания.</p></details>
 
-**Проверка решения:** кнопка «Запустить и проверить Assert» откроет в браузерном редакторе полный `Program.cs`: твой метод, тестовые данные и видимые C#-проверки `Assert` на обычный, пустой и пограничный ввод. При ошибке увидишь нарушенное условие; готовое решение не показывается.
+**Проверка решения:** открой `Program.cs` кнопкой «Открыть заготовку». Если черновик уже сохранён, кнопка называется «Открыть черновик». В файле есть метод, тестовые данные и видимые C#-проверки `Assert` на обычный, пустой и пограничный ввод. При ошибке в выводе будет указано нарушенное условие.
 
 <script type="text/plain" id="practice-program-template">
 using System;
@@ -292,8 +292,38 @@ sealed class AuditReport
 }
 </script>
 
-<label for="solution-TASK-002" class="editor-label">Твой код:</label>
-<textarea id="solution-TASK-002" class="code-editor" data-practice-id="TASK-002" spellcheck="false" rows="13">static IReadOnlyList&lt;(string Client, int Count, long TotalBytes)&gt; GetNoisiestClients(
+<script type="text/plain" id="practice-previous-instructions">
+// Реализуй GetNoisiestClients для записей HTTP-вызовов.
+// Оставь ответы со StatusCode >= 400 и сгруппируй их через AggregateBy
+// по имени клиента с StringComparer.OrdinalIgnoreCase. Count — число таких ответов.
+// TotalBytes (long) — сумма их ResponseBytes в байтах.
+// Client — имя из первого ответа этого клиента со StatusCode >= 400.
+// Верни до двух элементов (Client, Count, TotalBytes) по убыванию TotalBytes.
+// При равенстве сортируй по Client по возрастанию с StringComparer.OrdinalIgnoreCase.
+// Если audit задан, через ?. запиши в audit.Text пары "клиент=сумма_байтов"
+// из результата в том же порядке, разделяя пары через "; ". Для пустого
+// результата запиши пустую строку. При audit == null отчёт не формируй.
+
+// Реализуй GetNoisiestClients для записей HTTP-вызовов.
+// Оставь ответы со StatusCode >= 400 и сгруппируй их через AggregateBy
+// по имени клиента без учёта регистра. Count — число таких ответов.
+// TotalBytes (long) — сумма их ResponseBytes в байтах.
+// Верни до двух элементов (Client, Count, TotalBytes) по убыванию TotalBytes.
+// При равенстве сортируй по имени клиента по возрастанию без учёта регистра.
+// Если audit задан, через ?. запиши в audit.Text пары "клиент=сумма_байтов"
+// в порядке результата, разделяя пары через "; ". Пустой результат даёт пустой текст.
+
+// Реализуй GetNoisiestClients для записей HTTP-вызовов.
+// Оставь ответы со StatusCode >= 400 и накопи (Count, TotalBytes) через AggregateBy.
+// Группируй по имени клиента без учёта регистра. Для суммы байтов используй long.
+// Верни до двух клиентов, отсортированных по TotalBytes по убыванию.
+// При равенстве сортируй по имени клиента по возрастанию без учёта регистра.
+// Если audit задан, через оператор ?. запиши в audit.Text имена и суммы
+// из результата в том же порядке. Формат пары — "клиент=сумма", разделитель — "; ".
+</script>
+
+<label for="solution-TASK-002" class="editor-label">Заготовка задания</label>
+<textarea id="solution-TASK-002" class="code-editor" readonly spellcheck="false" rows="13">static IReadOnlyList&lt;(string Client, int Count, long TotalBytes)&gt; GetNoisiestClients(
     IEnumerable&lt;Failure&gt; calls, AuditReport? audit)
 {
     // Реализуй GetNoisiestClients для записей HTTP-вызовов.
@@ -308,8 +338,8 @@ sealed class AuditReport
 
     throw new NotImplementedException();
 }</textarea>
-<div class="practice-actions"><button type="button" class="button" data-copy-practice="TASK-002">Скопировать код</button> <button type="button" class="button" data-download-practice="TASK-002">Скачать .cs</button> <span class="practice-feedback" role="status"></span></div>
-<p class="muted">Черновик хранится только в браузере. Отправь код в ChatGPT для проверки. Браузерные Assert проверят корректность результата; оценка подхода и проверка кода остаются в чате.</p>
+<div class="practice-actions" data-practice-actions="TASK-002"><span class="practice-feedback" role="status"></span></div>
+<p class="muted">Кнопка открывает код в редакторе без запуска. Напиши решение в редакторе и нажми «Запустить текущий код». При переходе к примеру черновик сохраняется в этом браузере. После успешного запуска с исходными проверками твой код появится в блоке «Последнее успешное решение».</p>
 
 ## 5. Повторение и официальные источники
 

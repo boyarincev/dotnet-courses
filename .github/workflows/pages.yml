@@ -4,6 +4,7 @@ on:
     branches: [main]
   workflow_dispatch:
 permissions:
+  actions: read
   contents: read
   pages: write
   id-token: write
@@ -19,6 +20,8 @@ jobs:
     steps:
       - name: Checkout learning site
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       # The two WASM outputs are versioned independently. Editing Markdown, CSS,
       # quiz data or the shared editor JavaScript does not invalidate them.
       - name: Restore C# 13 / .NET 9 WebAssembly compiler
@@ -54,6 +57,11 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
+      - name: Select lesson C# checks
+        id: lesson_checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node _browser/select_lesson_checks.cjs
       - name: Check editor JavaScript syntax
         run: |
           node --check assets/js/compiler-editor.js
@@ -74,13 +82,18 @@ jobs:
           _browser/node_modules/.bin/esbuild _browser/quiz-fsrs-entry.mjs --bundle --platform=browser --format=iife --target=es2022 --minify --outfile=assets/js/quiz-fsrs.js
           test -s assets/js/quiz-fsrs.js
           node --check assets/js/quiz-fsrs.js
-      - name: Verify lesson C# examples on .NET 9 and .NET 10
+      - name: Pin installed .NET 9 SDK for selected checks
+        if: contains(fromJSON(steps.lesson_checks.outputs.tasks), 'task001')
         run: |
           sdk9=$(dotnet --list-sdks | awk '$1 ~ /^9\.0\.[0-9]+$/ { version=$1 } END { print version }')
           test -n "$sdk9"
+          printf '{"sdk":{"version":"%s","rollForward":"disable"}}\n' "$sdk9" > "$RUNNER_TEMP/sdk9-global.json"
+      - name: Verify lesson 001 C# examples on .NET 9
+        if: contains(fromJSON(steps.lesson_checks.outputs.tasks), 'task001')
+        run: |
           folder="$RUNNER_TEMP/lesson001smoke"
           mkdir -p "$folder"
-          printf '{"sdk":{"version":"%s","rollForward":"disable"}}\n' "$sdk9" > "$folder/global.json"
+          cp "$RUNNER_TEMP/sdk9-global.json" "$folder/global.json"
           (
             cd "$folder"
             dotnet --version
@@ -91,6 +104,9 @@ jobs:
           printf 'HTTP methods\nGET: 3\nPOST: 2\nPUT: 1\nSum = 60\n' > "$RUNNER_TEMP/lesson001-expected.txt"
           diff -u "$RUNNER_TEMP/lesson001-expected.txt" "$RUNNER_TEMP/lesson001-output.txt"
           node _browser/verify_snippets.cjs "$RUNNER_TEMP/lesson001smoke"
+      - name: Verify lesson 002 C# examples on .NET 10
+        if: contains(fromJSON(steps.lesson_checks.outputs.tasks), 'task002')
+        run: |
           dotnet new console -n Lesson002Smoke -f net10.0 -o "$RUNNER_TEMP/lesson002smoke"
           cp _browser/lesson002-program.cs "$RUNNER_TEMP/lesson002smoke/Program.cs"
           dotnet build "$RUNNER_TEMP/lesson002smoke"
@@ -98,6 +114,9 @@ jobs:
           printf '/health: Count=1, TotalMs=5\n/orders: Count=4, TotalMs=220\nBuilds when null: 0\nBuilds when present: 1\nAudit: /health=1/5; /orders=4/220\n' > "$RUNNER_TEMP/lesson002-expected.txt"
           diff -u "$RUNNER_TEMP/lesson002-expected.txt" "$RUNNER_TEMP/lesson002-output.txt"
           node _browser/verify_snippets_lesson2.cjs "$RUNNER_TEMP/lesson002smoke"
+      - name: Verify memory lesson 001 C# example on .NET 10
+        if: contains(fromJSON(steps.lesson_checks.outputs.tasks), 'alloc001')
+        run: |
           dotnet new console -n Memory001Smoke -f net10.0 -o "$RUNNER_TEMP/memory001smoke"
           cp _browser/memory-lesson001-program.cs "$RUNNER_TEMP/memory001smoke/Program.cs"
           dotnet run --project "$RUNNER_TEMP/memory001smoke" > "$RUNNER_TEMP/memory001-output.txt"
@@ -105,23 +124,30 @@ jobs:
           diff -u "$RUNNER_TEMP/memory001-expected.txt" "$RUNNER_TEMP/memory001-output.txt"
           node -e "const p=require('./assets/js/browser-snippets-memory001.js'); if(p.exampleCount!==1) process.exit(1)"
           node -e "const f=require('fs');if(!f.readFileSync('_memory_lessons/001-allocations-copies-retention.md','utf8').includes(f.readFileSync('_browser/memory-lesson001-program.cs','utf8').trim())) process.exit(1)"
-      - name: Verify inline C# Assert templates from each lesson (reject wrong solutions)
+      - name: Verify shared practice JavaScript and selected C# Assert templates (reject wrong solutions)
+        env:
+          SELECTED_TASKS: ${{ join(fromJSON(steps.lesson_checks.outputs.tasks), ' ') }}
         run: |
-          for task in task001 task002 alloc001; do
+          read -r -a tasks <<< "$SELECTED_TASKS"
+          if ((${#tasks[@]} == 0)); then
+            node _browser/verify_practice_assertions.cjs --shared-only
+            exit
+          fi
+          for task in "${tasks[@]}"; do
             folder="$RUNNER_TEMP/practice/$task"
             mkdir -p "$folder"
             framework=net10.0
             if test "$task" = task001; then
               framework=net9.0
-              cp "$RUNNER_TEMP/lesson001smoke/global.json" "$folder/global.json"
+              cp "$RUNNER_TEMP/sdk9-global.json" "$folder/global.json"
             fi
             (
               cd "$folder"
               dotnet new console -n "Practice_${task}" -f "$framework" -o .
             )
           done
-          node _browser/verify_practice_assertions.cjs "$RUNNER_TEMP/practice"
-          for task in task001 task002 alloc001; do
+          node _browser/verify_practice_assertions.cjs "$RUNNER_TEMP/practice" "${tasks[@]}"
+          for task in "${tasks[@]}"; do
             folder="$RUNNER_TEMP/practice/$task"
             (
               cd "$folder"
@@ -134,17 +160,15 @@ jobs:
               echo "ERROR: intentionally wrong $task solution passed its assertions"
               exit 1
             fi
-            grep -q "TASK-001:" "$folder/run.log" || {
-              if test "$task" != task001; then
-                grep -q "TASK-002:" "$folder/run.log" || grep -q "ALLOC-TASK-001:" "$folder/run.log" || {
-                  cat "$folder/run.log"
-                  exit 1
-                }
-              else
-                cat "$folder/run.log"
-                exit 1
-              fi
-            }
+            case "$task" in
+              task001) assert_id=TASK-001 ;;
+              task002) assert_id=TASK-002 ;;
+              alloc001) assert_id=ALLOC-TASK-001 ;;
+            esac
+            if ! grep -Fq "❌ $assert_id:" "$folder/run.log"; then
+              cat "$folder/run.log"
+              exit 1
+            fi
             echo "$task: invalid solution correctly rejected"
           done
       - name: Prepare C# 13 browser compiler (cache miss)

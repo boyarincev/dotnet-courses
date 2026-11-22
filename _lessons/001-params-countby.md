@@ -127,7 +127,7 @@ Sum = 60
 
 <details><summary>Необязательная подсказка</summary><p>После CountBy подумай о двух ключах сортировки и Take(3).</p></details>
 
-**Проверка решения:** кнопка «Запустить и проверить Assert» откроет в браузерном редакторе полный `Program.cs`: твой метод, тестовые данные и видимые C#-проверки `Assert` на обычный, пустой и пограничный ввод. При ошибке увидишь нарушенное условие; готовое решение не показывается.
+**Проверка решения:** открой `Program.cs` кнопкой «Открыть заготовку». Если черновик уже сохранён, кнопка называется «Открыть черновик». В файле есть метод, тестовые данные и видимые C#-проверки `Assert` на обычный, пустой и пограничный ввод. При ошибке в выводе будет указано нарушенное условие.
 
 <script type="text/plain" id="practice-program-template">
 using System;
@@ -184,8 +184,8 @@ public static class Program
 }
 </script>
 
-<label for="solution-TASK-001" class="editor-label">Твой код:</label>
-<textarea id="solution-TASK-001" class="code-editor" data-practice-id="TASK-001" spellcheck="false" rows="12">using System;
+<label for="solution-TASK-001" class="editor-label">Заготовка задания</label>
+<textarea id="solution-TASK-001" class="code-editor" readonly spellcheck="false" rows="12">using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -200,8 +200,8 @@ static IEnumerable&lt;(string Method, int Count)&gt; GetTopMethods(
 
     throw new NotImplementedException();
 }</textarea>
-<div class="practice-actions"><button type="button" class="button" data-copy-practice="TASK-001">Скопировать код</button> <button type="button" class="button" data-download-practice="TASK-001">Скачать .cs</button> <span class="practice-feedback" role="status"></span></div>
-<p class="muted">Черновик сохраняется только в этом браузере. Для проверки пришли код в ChatGPT. Код запускается в браузерном компиляторе вместе с Assert. Прохождение тестов не заменяет проверку твоего решения в чате.</p>
+<div class="practice-actions" data-practice-actions="TASK-001"><span class="practice-feedback" role="status"></span></div>
+<p class="muted">Кнопка открывает код в редакторе без запуска. Напиши решение в редакторе и нажми «Запустить текущий код». При переходе к примеру черновик сохраняется в этом браузере. После успешного запуска с исходными проверками твой код появится в блоке «Последнее успешное решение».</p>
 
 ## 5. Что запомнить
 - C# 13 `params` может принимать коллекционные типы помимо массива, в том числе `ReadOnlySpan<T>`.

@@ -152,15 +152,40 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
     try {
         const page = await context.newPage();
         page.setDefaultTimeout(timeout);
+        const legacyDraft = "// Старый черновик, который не проходил проверки";
+        await context.addInitScript(({taskId, legacyDraft}) => {
+            if (window === window.top) localStorage.setItem("dotnet-learning:practice:" + taskId, legacyDraft);
+        }, {taskId, legacyDraft});
         await page.goto(new URL(coursePath + lessonPath, site).href, { waitUntil: "domcontentloaded" });
-        const iframe = await page.locator("#course-compiler").elementHandle();
-        const compiler = await iframe.contentFrame();
-        assert.ok(compiler, "Lesson compiler frame is missing");
+        const getCompiler = async () => {
+            const iframe = await page.locator("#course-compiler").elementHandle();
+            const frame = await iframe.contentFrame();
+            assert.ok(frame, "Lesson compiler frame is missing");
+            return frame;
+        };
+        let compiler = await getCompiler();
         await compiler.locator("#editor-run-current").waitFor({ state: "attached" });
+
+        const taskField = page.locator("#solution-" + taskId);
+        const verifiedField = page.locator("#verified-" + taskId);
+        const starter = await taskField.evaluate(field => field.defaultValue);
+        assert.ok(!(await taskField.isEditable()), "The task field must be read-only");
+        assert.equal(await taskField.inputValue(), starter, "The unchecked legacy draft must not replace the starter");
+        assert.ok(await verifiedField.isHidden(), "Unverified legacy text must not appear as a solution");
+        const runCurrent = page.locator("#page-editor-run");
+        const openStarter = page.getByRole("button", {name: "Открыть заготовку", exact: true});
+        assert.ok(await openStarter.isVisible(), "A fresh task must offer the starter");
+        const starterActions = page.locator('[data-practice-actions="' + taskId + '"]');
+        assert.equal(await starterActions.getByRole("button").count(), 1, "The starter has only one action");
+        assert.ok(await page.getByRole("button", {name: "Скачать старый черновик", exact: true}).isVisible(),
+            "A legacy draft has a separate recovery action");
+        const openDraft = page.getByRole("button", {name: "Открыть черновик", exact: true});
+        assert.equal(await openDraft.count(), 0, "A legacy upper draft must not enable practice draft reopening");
 
         // Use the real editor, lesson runner and storage, with a synthetic task.
         const template = [
             "using System;",
+            "using Number = System.Int32;",
             "public static class Program",
             "{",
             "    public static void Main()",
@@ -174,7 +199,7 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
             "    // END " + taskId,
             "}"
         ].join("\n");
-        await page.locator("#practice-program-template").evaluate((element, code) => {
+        const installTemplate = () => page.locator("#practice-program-template").evaluate((element, code) => {
             element.textContent = code;
             document.documentElement.dataset.practiceRunSignals = "0";
             window.addEventListener("message", event => {
@@ -184,9 +209,76 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
                 }
             });
         }, template);
+        await installTemplate();
         const status = page.locator("#lesson-completion-status");
-        const solution = "static int Solve() => 42;\n    static void AfterChecks() {}";
+        const solution = "static Number Solve() => 42;\n    static void AfterChecks() {}";
         const program = template.replace("// INSERT_SOLUTION_HERE", solution);
+        const wrongProgram = program.replace("=> 42", "=> 41");
+        const unrelatedProgram = 'Console.WriteLine("Modified example");';
+
+        await openStarter.click();
+        const openedStarter = await compiler.evaluate(() => window.DotnetBrowserEditor.getCode());
+        assert.match(openedStarter, /throw new NotImplementedException\(\)/, "Opening the starter installs the unfinished method");
+        assert.ok(!(await compiler.evaluate(() => window.DotnetBrowserEditor.busy())), "Opening the starter must not start the compiler");
+        assert.ok(await verifiedField.isHidden(), "Opening the starter must not count as practice completion");
+
+        assert.ok(await compiler.evaluate(code => window.DotnetBrowserEditor.setCode(code), unrelatedProgram));
+        page.once("dialog", dialog => dialog.dismiss());
+        await openStarter.click();
+        assert.equal(await compiler.evaluate(() => window.DotnetBrowserEditor.getCode()), unrelatedProgram);
+
+        assert.ok(await compiler.evaluate(code => window.DotnetBrowserEditor.setCode(code), wrongProgram));
+        await openStarter.click();
+        assert.equal(await compiler.evaluate(() => window.DotnetBrowserEditor.getCode()), wrongProgram,
+            "Opening a task must preserve the existing lower editor code");
+        await runCurrent.click();
+        await waitForOutput(compiler, "synthetic Assert failed");
+        assert.equal(await taskField.inputValue(), starter, "The starter must remain unchanged on failure");
+        assert.ok(await verifiedField.isHidden(), "A failed run must not show a solution");
+
+        const example = page.getByRole("button", {name: "Открыть C#-пример №1 в браузерном компиляторе", exact: true});
+        page.once("dialog", dialog => dialog.accept());
+        await example.click();
+        const demoSource = await compiler.evaluate(() => window.DotnetBrowserEditor.getCode());
+        assert.notEqual(demoSource, wrongProgram, "The lesson example must load into the editor");
+        await openDraft.waitFor({state: "visible"});
+        assert.equal(await openStarter.count(), 0, "The task must have one contextual opening button");
+        await compiler.waitForFunction(() => {
+            const output = document.getElementById("output").textContent;
+            return !window.DotnetBrowserEditor.busy() && output.trim() && !output.includes("synthetic Assert failed");
+        });
+        await page.reload({waitUntil: "domcontentloaded"});
+        compiler = await getCompiler();
+        await compiler.locator("#editor-run-current").waitFor({state: "attached"});
+        assert.equal(await compiler.evaluate(() => window.DotnetBrowserEditor.getCode()), demoSource);
+        await installTemplate();
+        await compiler.evaluate(() => {
+            const editor = window.DotnetBrowserEditor;
+            const run = editor.run;
+            document.documentElement.dataset.fixtureRunCount = "0";
+            editor.run = () => {
+                document.documentElement.dataset.fixtureRunCount =
+                    String(Number(document.documentElement.dataset.fixtureRunCount) + 1);
+                return run();
+            };
+        });
+        page.once("dialog", dialog => dialog.accept());
+        await openDraft.click();
+        const recovered = await compiler.evaluate(() => window.DotnetBrowserEditor.getCode());
+        assert.match(recovered, /using Number = System\.Int32;/);
+        assert.match(recovered, /static Number Solve\(\) => 41;/, "Pending practice must survive a demo and reload");
+        assert.ok(await verifiedField.isHidden(), "A restored draft must not appear as a verified solution");
+
+        const latest = recovered.replace("=> 41;", "=> 40;");
+        assert.ok(await compiler.evaluate(code => window.DotnetBrowserEditor.setCode(code), latest));
+        await openDraft.click();
+        assert.equal(await compiler.evaluate(() => window.DotnetBrowserEditor.getCode()), latest,
+            "Reopening must retain newer edits already in the editor");
+        assert.equal(await compiler.evaluate(() => document.documentElement.dataset.fixtureRunCount), "0",
+            "Opening a draft must not run the compiler");
+        await runCurrent.click();
+        await waitForOutput(compiler, "synthetic Assert failed");
+
         await start(compiler, program.replace("Solve() != 42", "Solve() != 41").replace("=> 42", "=> 41"));
         await page.waitForFunction(() => document.documentElement.dataset.practiceRunSignals === "1");
         assert.match(await status.textContent(), /исходными проверками/);
@@ -197,8 +289,21 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
         assert.notEqual(await status.textContent(), "Урок пройден.");
 
         assert.ok(await compiler.evaluate(code => window.DotnetBrowserEditor.setCode(code), program));
-        await page.locator("#page-editor-run").click();
+        await runCurrent.click();
         await page.waitForFunction(() => document.getElementById("lesson-completion-status").textContent === "Урок пройден.");
+        const verified = "using System;\nusing Number = System.Int32;\n\n    " + solution + "\n";
+        assert.equal(await taskField.inputValue(), starter, "A passing run must preserve the starter");
+        assert.ok(await verifiedField.isVisible() && !(await verifiedField.isEditable()), "The passing solution must be visible and read-only");
+        assert.equal(await verifiedField.inputValue(), verified, "A passing run must display the compiled method and imports");
+        await start(compiler, wrongProgram);
+        await waitForOutput(compiler, "synthetic Assert failed");
+        assert.equal(await verifiedField.inputValue(), verified, "A later failing run must preserve the verified method");
+
+        await page.reload({waitUntil: "domcontentloaded"});
+        await verifiedField.waitFor({state: "visible"});
+        assert.equal(await taskField.inputValue(), starter, "The canonical starter must survive reload");
+        assert.equal(await verifiedField.inputValue(), verified, "The last verified method must survive reload");
+        assert.equal(await page.evaluate(id => localStorage.getItem("dotnet-learning:practice:" + id), taskId), legacyDraft);
         await page.goto(new URL(coursePath, site).href, { waitUntil: "domcontentloaded" });
         const badge = page.locator('[data-lesson-completion-badge][data-lesson="1"]');
         await badge.waitFor({ state: "visible" });

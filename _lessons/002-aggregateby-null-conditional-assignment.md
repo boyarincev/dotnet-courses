@@ -269,7 +269,14 @@ sealed class AuditReport
 <textarea id="solution-TASK-002" class="code-editor" data-practice-id="TASK-002" spellcheck="false" rows="13">static IReadOnlyList&lt;(string Client, int Count, long TotalBytes)&gt; GetNoisiestClients(
     IEnumerable&lt;Failure&gt; calls, AuditReport? audit)
 {
-    // Напиши реализацию самостоятельно
+    // Реализуй GetNoisiestClients для записей HTTP-вызовов.
+    // Оставь ответы со StatusCode &gt;= 400 и накопи (Count, TotalBytes) через AggregateBy.
+    // Группируй по имени клиента без учёта регистра. Для суммы байтов используй long.
+    // Верни до двух клиентов, отсортированных по TotalBytes по убыванию.
+    // При равенстве сортируй по имени клиента по возрастанию без учёта регистра.
+    // Если audit задан, через оператор ?. запиши в audit.Text имена и суммы
+    // из результата в том же порядке. Формат пары — "клиент=сумма", разделитель — "; ".
+
     throw new NotImplementedException();
 }</textarea>
 <div class="practice-actions"><button type="button" class="button" data-copy-practice="TASK-002">Скопировать код</button> <button type="button" class="button" data-download-practice="TASK-002">Скачать .cs</button> <span class="practice-feedback" role="status"></span></div>

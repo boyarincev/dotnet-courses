@@ -178,7 +178,11 @@ using System.Linq;
 static IEnumerable&lt;(string Method, int Count)&gt; GetTopMethods(
     IEnumerable&lt;string&gt; methods)
 {
-    // Твоя реализация
+    // Реализуй GetTopMethods для последовательности HTTP-методов.
+    // Используй CountBy и считай частоты без учёта регистра.
+    // Верни до трёх пар (Method, Count), отсортированных по частоте по убыванию.
+    // При равной частоте сортируй по имени по возрастанию без учёта регистра.
+
     throw new NotImplementedException();
 }</textarea>
 <div class="practice-actions"><button type="button" class="button" data-copy-practice="TASK-001">Скопировать код</button> <button type="button" class="button" data-download-practice="TASK-001">Скачать .cs</button> <span class="practice-feedback" role="status"></span></div>

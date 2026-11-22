@@ -197,7 +197,13 @@ public static class Program
 <textarea id="solution-ALLOC-TASK-001" class="code-editor" data-practice-id="ALLOC-TASK-001" spellcheck="false" rows="12">static (int PaidCount, decimal Total) SummarizePaid(
     IEnumerable&lt;string&gt; rows)
 {
-    // Напиши реализацию. Не сохраняй List&lt;Order&gt;.
+    // Реализуй SummarizePaid для строк формата "ID;status;amount".
+    // За один проход посчитай записи со статусом "paid" с учётом регистра
+    // и сложи их поля amount. Верни (PaidCount, Total).
+    // Разбирай суммы через decimal.TryParse с CultureInfo.InvariantCulture.
+    // Пропускай строки с неверным числом полей или нечисловой суммой.
+    // Разобранные записи не сохраняй в коллекции.
+
     throw new NotImplementedException();
 }</textarea>
 <div class="practice-actions"><button type="button" class="button" data-copy-practice="ALLOC-TASK-001">Скопировать код</button> <button type="button" class="button" data-download-practice="ALLOC-TASK-001">Скачать .cs</button><span class="practice-feedback" role="status"></span></div>

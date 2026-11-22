@@ -129,6 +129,12 @@
     original.dispatchEvent(new Event("input",{bubbles:true}));
   }
   function ensure() {
+    // Lessons edit a complete Program.cs. The upstream simplified view rebuilds
+    // the source from Main and can discard using directives and helper methods.
+    if (pageParams.has("course") && pageParams.has("lesson")) {
+      const codeViewToggle = document.getElementById("code-view-desc")?.closest(".toggle-container");
+      if (codeViewToggle) codeViewToggle.style.display = "none";
+    }
     if (!cmReady()) return;
     const textarea = document.getElementById("code-editor");
     if (!textarea) return;

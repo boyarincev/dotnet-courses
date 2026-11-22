@@ -153,9 +153,15 @@ async function verify() {
             const page = await browser.newPage();
             page.setDefaultTimeout(timeout);
             const url = new URL("browser-compiler-net" + runtime + "/", site);
+            url.searchParams.set("course", runtime === 9 ? "whats-new" : "memory");
+            url.searchParams.set("lesson", "1");
             if (revision) url.searchParams.set("v", revision);
             await page.goto(url.href, { waitUntil: "domcontentloaded" });
             await page.locator("#editor-run-current").waitFor({ state: "attached" });
+            const codeViewToggle = page.locator(".toggle-container").filter({ has: page.locator("#code-view-desc") });
+            assert.equal(await codeViewToggle.count(), 1);
+            assert.ok(await codeViewToggle.isHidden(), "The lesson editor must hide simplified mode");
+            assert.ok(await codeViewToggle.locator("input").isChecked(), "The lesson editor must show the full program");
             if (revision) {
                 assert.equal(await page.locator('script[src$="compiler-editor.js?v=' + revision + '"]').count(), 1);
             }

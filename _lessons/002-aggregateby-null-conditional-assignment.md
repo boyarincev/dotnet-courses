@@ -155,7 +155,7 @@ Audit: /health=1/5; /orders=4/220
 
 **15–20 минут.** Реализуй `GetNoisiestClients` для записей HTTP-вызовов. Оставь ответы со статусом `400` и выше. Сгруппируй их через `AggregateBy` по имени клиента с `StringComparer.OrdinalIgnoreCase`.
 
-- **Результат метода.** Верни до двух элементов `(Client, Count, TotalBytes)`. `Count` — число ошибочных ответов клиента. `TotalBytes` — сумма их полей `ResponseBytes` в байтах, тип суммы `long`. Для `Client` сохрани написание из первого ответа клиента со статусом от `400`. Сортируй по `TotalBytes` по убыванию, при равенстве — по `Client` по возрастанию с `StringComparer.OrdinalIgnoreCase`.
+- **Результат метода.** Верни до двух клиентов с наибольшей суммой байтов в виде `(Client, Count, TotalBytes)`. `Count` — число ошибочных ответов клиента. `TotalBytes` — сумма их полей `ResponseBytes` в байтах, тип суммы `long`. Сортируй по `TotalBytes` по убыванию. При равной сумме порядок клиентов свободный. Для `Client` допустим любой регистр.
 - **Текст отчёта.** Если `audit` задан, через `?.` запиши в `audit.Text` значения `Client` и `TotalBytes` из результата в том же порядке. Формат записи — `клиент=сумма_байтов`, разделитель — `"; "`.
 
 Объявления типов для `Program.cs`:
@@ -180,21 +180,23 @@ static IReadOnlyList<(string Client, int Count, long TotalBytes)> GetNoisiestCli
 ```csharp
 Failure[] calls =
 [
-    new(Client: "Api-C", StatusCode: 500, ResponseBytes: 350),
-    new(Client: "API-c", StatusCode: 404, ResponseBytes: 50),
+    new(Client: "api-a", StatusCode: 500, ResponseBytes: 100),
+    new(Client: "API-A", StatusCode: 404, ResponseBytes: 60),
+    new(Client: "api-a", StatusCode: 502, ResponseBytes: 40),
     new(Client: "API-B", StatusCode: 200, ResponseBytes: 900),
     new(Client: "api-b", StatusCode: 503, ResponseBytes: 390),
-    new(Client: "api-a", StatusCode: 500, ResponseBytes: 200)
+    new(Client: "Api-C", StatusCode: 500, ResponseBytes: 350),
+    new(Client: "API-c", StatusCode: 404, ResponseBytes: 50)
 ];
 ```
 
-**Ожидаемый результат.** Сначала `Api-C` с двумя ошибками на 400 байт суммарно, затем `api-b` с одной ошибкой на 390 байт. Третий по сумме клиент `api-a` получил одну ошибку на 200 байт. При наличии `audit` ожидается `Api-C=400; api-b=390`.
+**Ожидаемый результат.** Сначала клиент `api-c` с двумя ошибками на 400 байт суммарно, затем клиент `api-b` с одной ошибкой на 390 байт. Регистр имён может отличаться. Если метод вернул имена `API-c` и `api-b`, в `audit.Text` должна быть строка `API-c=400; api-b=390`.
 
-**Критерии готовности:** фильтр статусов до агрегации; `long` для суммы; объединение `Api-C` и `API-c` с сохранением первого написания; максимум два результата и определённый порядок при равенстве; при `audit == null` не создавать текст отчёта. **Пограничный случай:** пустой вход возвращает пустую коллекцию. Если `audit` не равен `null`, в `audit.Text` записывается пустая строка.
+**Критерии готовности:** фильтр статусов до агрегации; `long` для суммы; объединение `Api-C` и `API-c` в одну группу; выбор двух клиентов с наибольшей суммой байтов; при `audit == null` не создавать текст отчёта. **Пограничный случай:** пустой вход возвращает пустую коллекцию. Если `audit` не равен `null`, в `audit.Text` записывается пустая строка.
 
 При ревью метода отдельно проверь, когда вычисляется строка отчёта. При `audit == null` построение строки должно пропускаться, даже если сводка возвращается правильно.
 
-<details><summary>Необязательная подсказка</summary><p>После AggregateBy используй OrderByDescending, ThenBy и Take(2). Сначала материализуй результат, затем формируй строку только внутри условного присваивания.</p></details>
+<details><summary>Необязательная подсказка</summary><p>После AggregateBy используй OrderByDescending по сумме байтов и Take(2). Сначала материализуй результат, затем формируй строку только внутри условного присваивания.</p></details>
 
 **Проверка решения:** кнопка «Запустить и проверить Assert» откроет в браузерном редакторе полный `Program.cs`: твой метод, тестовые данные и видимые C#-проверки `Assert` на обычный, пустой и пограничный ввод. При ошибке увидишь нарушенное условие; готовое решение не показывается.
 
@@ -213,26 +215,27 @@ public static class Program
     {
         Failure[] calls =
         [
-            new(Client: "Api-C", StatusCode: 500, ResponseBytes: 350),
-            new(Client: "API-c", StatusCode: 404, ResponseBytes: 50),
+            new(Client: "api-a", StatusCode: 500, ResponseBytes: 100),
+            new(Client: "API-A", StatusCode: 404, ResponseBytes: 60),
+            new(Client: "api-a", StatusCode: 502, ResponseBytes: 40),
             new(Client: "API-B", StatusCode: 200, ResponseBytes: 900),
             new(Client: "api-b", StatusCode: 503, ResponseBytes: 390),
-            new(Client: "api-a", StatusCode: 500, ResponseBytes: 200)
+            new(Client: "Api-C", StatusCode: 500, ResponseBytes: 350),
+            new(Client: "API-c", StatusCode: 404, ResponseBytes: 50)
         ];
 
         var audit = new AuditReport();
         var actual = GetNoisiestClients(calls, audit);
 
-        Assert(actual.Count == 2 && actual[0].Count == 2 && actual[0].TotalBytes == 400
-            && string.Equals(actual[0].Client, "Api-C", StringComparison.Ordinal),
-            actual.Count == 2
-                ? $"Первым ожидался Api-C с двумя ошибками на 400 байт суммарно. Получено «{actual[0]}»."
-                : $"Ожидались два клиента. Получено элементов {actual.Count}.");
-        Assert(actual[1].Count == 1 && actual[1].TotalBytes == 390
-            && string.Equals(actual[1].Client, "api-b", StringComparison.Ordinal),
-            $"Вторым ожидался api-b с одной ошибкой на 390 байт. Получено «{actual[1]}».");
+        Assert(actual.Count == 2
+            && string.Equals(actual[0].Client, "api-c", StringComparison.OrdinalIgnoreCase)
+            && actual[0].Count == 2 && actual[0].TotalBytes == 400
+            && string.Equals(actual[1].Client, "api-b", StringComparison.OrdinalIgnoreCase)
+            && actual[1].Count == 1 && actual[1].TotalBytes == 390,
+            "Ожидались клиенты по убыванию суммы байтов: api-c (2 ошибки, 400 байт), api-b (1 ошибка, 390 байт). "
+            + $"Получено [{string.Join(", ", actual)}].");
 
-        const string expectedReport = "Api-C=400; api-b=390";
+        string expectedReport = $"{actual[0].Client}=400; {actual[1].Client}=390";
         Assert(audit.Text == expectedReport,
             string.IsNullOrEmpty(audit.Text)
                 ? $"Отчёт не записан в audit.Text. Ожидалось «{expectedReport}»."
@@ -255,15 +258,23 @@ public static class Program
         ];
         // При audit == null нужна только сводка по клиентам.
         var withoutAudit = GetNoisiestClients(boundary, null);
+        var expectedClients = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "alpha", "Zed" };
         Assert(withoutAudit.Count == 2
-            && withoutAudit[0].Count == 2 && withoutAudit[0].TotalBytes == 2_400_000_000L
-            && withoutAudit[1].Count == 2 && withoutAudit[1].TotalBytes == 2_400_000_000L
-            && string.Equals(withoutAudit[0].Client, "alpha", StringComparison.Ordinal)
-            && string.Equals(withoutAudit[1].Client, "Zed", StringComparison.Ordinal),
-            withoutAudit.Count == 2
-                ? "Ожидались alpha и Zed в этом порядке, по две ошибки и 2 400 000 000 байт у каждого. "
-                    + $"Получены «{withoutAudit[0]}» и «{withoutAudit[1]}». Учитывается 400, а 399 пропускается."
-                : $"Для ответов со статусом от 400 ожидались два клиента. Получено элементов {withoutAudit.Count}.");
+            && expectedClients.SetEquals(withoutAudit.Select(client => client.Client))
+            && withoutAudit.All(client => client.Count == 2 && client.TotalBytes == 2_400_000_000L),
+            "Ожидались клиенты alpha и Zed в любом порядке, по две ошибки и 2 400 000 000 байт у каждого. "
+            + $"Получено [{string.Join(", ", withoutAudit)}]. Учитывается 400, а 399 пропускается.");
+
+        var tiedAudit = new AuditReport();
+        var tied = GetNoisiestClients(boundary, tiedAudit);
+        string expectedTiedReport = string.Join("; ", tied.Select(client => $"{client.Client}={client.TotalBytes}"));
+        Assert(tied.Count == 2
+            && expectedClients.SetEquals(tied.Select(client => client.Client))
+            && tied.All(client => client.Count == 2 && client.TotalBytes == 2_400_000_000L)
+            && tiedAudit.Text == expectedTiedReport,
+            "При равных суммах ожидались alpha и Zed по две ошибки на 2 400 000 000 байт у каждого. "
+            + "В отчёте должны быть те же имена и тот же порядок, что в результате. "
+            + $"Получено [{string.Join(", ", tied)}], отчёт «{tiedAudit.Text}», ожидался «{expectedTiedReport}».");
 
         Console.WriteLine("Все проверки пройдены");
     }
@@ -289,9 +300,8 @@ sealed class AuditReport
     // Оставь ответы со StatusCode &gt;= 400 и сгруппируй их через AggregateBy
     // по имени клиента с StringComparer.OrdinalIgnoreCase. Count — число таких ответов.
     // TotalBytes (long) — сумма их ResponseBytes в байтах.
-    // Client — имя из первого ответа этого клиента со StatusCode &gt;= 400.
-    // Верни до двух элементов (Client, Count, TotalBytes) по убыванию TotalBytes.
-    // При равенстве сортируй по Client по возрастанию с StringComparer.OrdinalIgnoreCase.
+    // Верни до двух клиентов с наибольшей суммой байтов по убыванию TotalBytes.
+    // При равных суммах порядок любой. Для Client допустим любой регистр.
     // Если audit задан, через ?. запиши в audit.Text пары "клиент=сумма_байтов"
     // из результата в том же порядке, разделяя пары через "; ". Для пустого
     // результата запиши пустую строку. При audit == null отчёт не формируй.

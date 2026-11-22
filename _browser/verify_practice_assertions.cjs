@@ -3,7 +3,7 @@
 const fs=require("node:fs");
 const path=require("node:path");
 const assert=require("node:assert/strict");
-const {buildTaskProgram,isSuccessfulPracticeRun}=require("../assets/js/course-runner.js");
+const {addTaskInstructions,buildTaskProgram,isSuccessfulPracticeRun}=require("../assets/js/course-runner.js");
 
 const taskId="TASK-TEST";
 const header="public static class Program\n{\n";
@@ -29,6 +29,50 @@ assert.ok(isSuccessfulPracticeRun(currentTemplate,currentProgram,success,taskId)
 assert.ok(isSuccessfulPracticeRun(currentTemplate,savedDraft,success,taskId),"saved method-last layout");
 assert.ok(!isSuccessfulPracticeRun(currentTemplate,savedDraft.replace("Solve() == 1","true"),success,taskId),"changed C# check");
 assert.ok(!isSuccessfulPracticeRun(currentTemplate,savedDraft,success+"\nОшибка",taskId),"failed C# run");
+
+const firstInstruction="// Верни заданное число.";
+const secondInstruction="// Входных параметров нет.";
+const starter=[
+  "using System;",
+  "",
+  "static int Solve()",
+  "{",
+  "    "+firstInstruction,
+  "    "+secondInstruction,
+  "",
+  "    throw new NotImplementedException();",
+  "}"
+].join("\n");
+assert.equal(addTaskInstructions(starter,starter),starter,"fresh starter already has instructions");
+
+const legacySource=[
+  "using System;",
+  "using System.Linq;",
+  "",
+  "private static int Solve ()",
+  "{",
+  "    "+firstInstruction,
+  "    // Заметка автора решения.",
+  "    return 1;",
+  "}"
+].join("\r\n");
+const restoredSource=addTaskInstructions(legacySource,starter);
+const restoredPrefix=[
+  "    // Актуальное условие из урока",
+  "    "+firstInstruction,
+  "    "+secondInstruction,
+  ""
+].join("\r\n");
+assert.equal(restoredSource,legacySource.replace("{\r\n","{\r\n"+restoredPrefix),"preserve existing imports, comments, body and newlines");
+assert.equal(addTaskInstructions(restoredSource,starter),restoredSource,"repeat loading does not duplicate comments");
+const restoredProgram=buildTaskProgram(currentTemplate,restoredSource,taskId);
+assert.ok(isSuccessfulPracticeRun(currentTemplate,restoredProgram,success,taskId),"restored comments leave the checks unchanged");
+assert.ok(restoredProgram.indexOf(secondInstruction)<restoredProgram.indexOf("public static void Main()"),"the compiler displays the restored comment before the checks");
+const expressionSource="using System;\n\n"+implementation;
+assert.equal(addTaskInstructions(expressionSource,starter),
+  expressionSource.replace(implementation,["// Актуальное условие из урока",firstInstruction,secondInstruction,implementation].join("\n")),
+  "an expression-bodied method retains its implementation and gains comments above it");
+assert.equal(addTaskInstructions("",starter),"","empty practice remains empty");
 
 const root=process.argv[2];
 if(!root) throw Error("Usage: node verify_practice_assertions.cjs <output-dir>");

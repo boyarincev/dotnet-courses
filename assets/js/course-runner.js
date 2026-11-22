@@ -9,6 +9,44 @@
   const solutionMarker = "// INSERT_SOLUTION_HERE";
   const importPattern = /^\s*using\s+[\w.]+\s*;\s*$/;
 
+  function addTaskInstructions(source, starter) {
+    const opening = normalize(starter).match(
+      /^[ \t]*(static\b[^{]*?)\{[ \t]*\n((?:[ \t]*\/\/[^\n]*\n)+)[ \t\n]*throw new NotImplementedException\(\);/m
+    );
+    if (!opening || !source.trim()) return source;
+
+    const instructions = opening[2].trim().split("\n").map(line => line.trim());
+    const existing = "\n" + normalize(source).split("\n").map(line => line.trim()).join("\n") + "\n";
+    if (existing.includes("\n" + instructions.join("\n") + "\n")) return source;
+    const guidance = ["// Актуальное условие из урока", ...instructions];
+
+    // Only insert inside a body if the source starts with the known signature,
+    // after ordinary imports and line comments. Otherwise keep the code intact.
+    let offset = 0;
+    for (const line of source.match(/[^\n]*\n/g) || []) {
+      const trimmed = line.trim();
+      if (trimmed && !importPattern.test(trimmed) && !trimmed.startsWith("//")) break;
+      offset += line.length;
+    }
+    const tokens = opening[1].match(/\w+|\S/g);
+    const signature = tokens.map((token, index) => {
+      const needsSpace = index > 0 && /^\w/.test(tokens[index - 1]) && /^\w/.test(token);
+      const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, character => "\\" + character);
+      return (needsSpace ? "\\s+" : "\\s*") + escaped;
+    }).join("");
+    const method = source.slice(offset).match(new RegExp(
+      "^([ \\t]*)(?:(?:public|internal|protected|private)\\s+)?" + signature + "\\s*\\{"
+    ));
+    const newline = source.includes("\r\n") ? "\r\n" : "\n";
+    if (!method) return source.slice(0, offset) + guidance.join(newline) + newline + source.slice(offset);
+
+    const body = offset + method[0].length;
+    const existingNewline = source.slice(body).match(/^[ \t]*\r?\n/)?.[0] || "";
+    const at = body + existingNewline.length;
+    const comments = guidance.map(line => method[1] + "    " + line).join(newline);
+    return source.slice(0, at) + (existingNewline ? "" : newline) + comments + newline + source.slice(at);
+  }
+
   // Only assembles visible C# from the lesson with the student's method.
   // All Assert checks are plain C# in each lesson's practice-program-template.
   function buildTaskProgram(template, source, taskId) {
@@ -74,7 +112,7 @@
       matchesPracticeSource(previousPracticeOrder(normalizedTemplate, taskId), code, taskId);
   }
 
-  if (typeof module === "object" && module.exports) module.exports = {buildTaskProgram, isSuccessfulPracticeRun};
+  if (typeof module === "object" && module.exports) module.exports = {addTaskInstructions, buildTaskProgram, isSuccessfulPracticeRun};
   if (typeof document === "undefined") return;
   const frame = document.getElementById("course-compiler");
   if (!frame) return;
@@ -162,8 +200,11 @@
 
   function addTaskButtons() {
     if (!task) return;
-    const actions = task.nextElementSibling;
-    if (!actions?.classList.contains("practice-actions")) return;
+    const restored = addTaskInstructions(task.value, task.defaultValue);
+    if (restored !== task.value) task.value = restored;
+
+    const actions = document.querySelector('[data-copy-practice="' + taskId + '"]')?.closest(".practice-actions");
+    if (!actions) return;
     const load = document.createElement("button");
     load.type = "button"; load.className = "button primary";
     load.textContent = "▶ Запустить и проверить Assert";
@@ -175,7 +216,7 @@
       let code;
       try {
         const template = document.getElementById("practice-program-template")?.textContent;
-        code = buildTaskProgram(template, task.value, taskId);
+        code = buildTaskProgram(template, addTaskInstructions(task.value, task.defaultValue), taskId);
       } catch(error) {show(load,error.message);return;}
       send(load,code,true);
     });
@@ -335,6 +376,7 @@
   }
 
   const init=()=>{addCodeButtons();addTaskButtons();addEditorToolbar();};
-  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
-  else init();
+  // site.js restores the saved practice text before DOMContentLoaded.
+  if(document.readyState==="complete")init();
+  else document.addEventListener("DOMContentLoaded",init,{once:true});
 })();

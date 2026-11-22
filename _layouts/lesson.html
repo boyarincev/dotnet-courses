@@ -4,9 +4,9 @@ layout: default
 {% assign course_url = '/courses/csharp-dotnet-9-11/' %}
 {% assign quiz_url = '/courses/csharp-dotnet-9-11/quiz/' %}
 {% assign course_title = 'C# 13–15 и .NET 9–11' %}
-{% assign course_id = page.course | default: 'whats-new' %}
+{% assign course_id = page.course | default: 'csharp-dotnet-9-11' %}
 {% assign course_lessons = site.lessons %}
-{% if page.course == 'memory' %}
+{% if course_id == 'memory' %}
   {% assign course_url = '/courses/memory/' %}
   {% assign quiz_url = '/courses/memory/quiz/' %}
   {% assign course_title = 'Память и аллокации .NET' %}
@@ -49,14 +49,14 @@ layout: default
     <button type="button" class="button" id="page-editor-dotnet-lab">Открыть в .NET Lab</button>
     <span class="practice-feedback" id="page-editor-feedback" role="status">Кнопки работают с текущим текстом в редакторе ниже.</span>
   </div>
-  <iframe id="course-compiler" data-lesson="{{ page.lesson_number }}" data-course="{{ page.course | default: 'whats-new' }}" title="C#-редактор и компилятор Roslyn для .NET {{ page.browser_runtime }}" src="{{ '/browser-compiler-net' | append: page.browser_runtime | append: '/' | relative_url }}?course={{ page.course | default: 'whats-new' }}&amp;lesson={{ page.lesson_number }}&amp;v={{ site.data.build.revision | default: 'dev' }}" loading="eager" style="display:block;width:100%;min-height:890px;border:1px solid var(--border);border-radius:14px;background:#fff" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+  <iframe id="course-compiler" data-lesson="{{ page.lesson_number }}" data-course="{{ course_id }}" title="C#-редактор и компилятор Roslyn для .NET {{ page.browser_runtime }}" src="{{ '/browser-compiler-net' | append: page.browser_runtime | append: '/' | relative_url }}?course={{ course_id }}&amp;lesson={{ page.lesson_number }}&amp;v={{ site.data.build.revision | default: 'dev' }}" loading="eager" style="display:block;width:100%;min-height:890px;border:1px solid var(--border);border-radius:14px;background:#fff" referrerpolicy="strict-origin-when-cross-origin"></iframe>
   <p class="muted">Изменения кода в редакторе автоматически сохраняются в локальном хранилище этого браузера для конкретного урока. После обновления страницы черновик восстанавливается, пока ты не очистишь данные сайта. Кнопка «Открыть в .NET Lab» открывает текущий код во внешнем редакторе в новой вкладке. Для резервной копии используй «Скачать Program.cs». Рабочие секреты в браузер не вставляй.</p>
 </section>
-{% if page.course == 'memory' and page.lesson_number == 1 %}
+{% if course_id == 'memory' and page.lesson_number == 1 %}
 <script defer src="{{ '/assets/js/browser-snippets-memory001.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
-{% elsif page.course != 'memory' and page.lesson_number == 1 %}
+{% elsif course_id == 'csharp-dotnet-9-11' and page.lesson_number == 1 %}
 <script defer src="{{ '/assets/js/browser-snippets.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
-{% elsif page.course != 'memory' and page.lesson_number == 2 %}
+{% elsif course_id == 'csharp-dotnet-9-11' and page.lesson_number == 2 %}
 <script defer src="{{ '/assets/js/browser-snippets-lesson002.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
 {% endif %}
 <script defer src="{{ '/assets/js/course-runner.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>

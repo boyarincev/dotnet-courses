@@ -3,7 +3,7 @@
 const fs=require("node:fs");
 const path=require("node:path");
 const assert=require("node:assert/strict");
-const {addTaskInstructions,buildTaskProgram,isSuccessfulPracticeRun,refreshOpenTask}=require("../assets/js/course-runner.js");
+const {buildTaskProgram,extractTaskSource,isSuccessfulPracticeRun}=require("../assets/js/course-runner.js");
 
 const taskId="TASK-TEST";
 const header="public static class Program\n{\n";
@@ -20,86 +20,16 @@ const checks=[
   ""
 ].join("\n");
 const currentTemplate=header+solution+checks+"}";
-const earlierTemplate=header+checks+solution+"}";
-const implementation="static int Solve() => 1;";
 const success="Все проверки пройдены";
-const currentProgram=buildTaskProgram(currentTemplate,implementation,taskId);
-const savedDraft=buildTaskProgram(earlierTemplate,implementation,taskId);
-assert.ok(isSuccessfulPracticeRun(currentTemplate,currentProgram,success,taskId),"method-first layout");
-assert.ok(isSuccessfulPracticeRun(currentTemplate,savedDraft,success,taskId),"saved method-last layout");
-assert.ok(!isSuccessfulPracticeRun(currentTemplate,savedDraft.replace("Solve() == 1","true"),success,taskId),"changed C# check");
-assert.ok(!isSuccessfulPracticeRun(currentTemplate,savedDraft,success+"\nОшибка",taskId),"failed C# run");
-
-const firstInstruction="// Верни заданное число.";
-const secondInstruction="// Входных параметров нет.";
-const starter=[
-  "using System;",
-  "",
-  "static int Solve()",
-  "{",
-  "    "+firstInstruction,
-  "    "+secondInstruction,
-  "",
-  "    throw new NotImplementedException();",
-  "}"
-].join("\n");
-assert.equal(addTaskInstructions(starter,starter),starter,"fresh starter already has instructions");
-
-const legacySource=[
-  "using System;",
-  "using System.Linq;",
-  "",
-  "private static int Solve ()",
-  "{",
-  "    "+firstInstruction,
-  "    // Заметка автора решения.",
-  "    return 1;",
-  "}"
-].join("\r\n");
-const restoredSource=addTaskInstructions(legacySource,starter);
-const restoredPrefix=[
-  "    // Актуальное условие из урока",
-  "    "+firstInstruction,
-  "    "+secondInstruction,
-  ""
-].join("\r\n");
-assert.equal(restoredSource,legacySource.replace("{\r\n","{\r\n"+restoredPrefix),"preserve existing imports, comments, body and newlines");
-assert.equal(addTaskInstructions(restoredSource,starter),restoredSource,"repeat loading does not duplicate comments");
-const restoredProgram=buildTaskProgram(currentTemplate,restoredSource,taskId);
-assert.ok(isSuccessfulPracticeRun(currentTemplate,restoredProgram,success,taskId),"restored comments leave the checks unchanged");
-assert.ok(restoredProgram.indexOf(secondInstruction)<restoredProgram.indexOf("public static void Main()"),"the compiler displays the restored comment before the checks");
-const expressionSource="using System;\n\n"+implementation;
-assert.equal(addTaskInstructions(expressionSource,starter),
-  expressionSource.replace(implementation,["// Актуальное условие из урока",firstInstruction,secondInstruction,implementation].join("\n")),
-  "an expression-bodied method retains its implementation and gains comments above it");
-assert.equal(addTaskInstructions("",starter),"","empty practice remains empty");
-
-const oldGuide="// Условие из предыдущей версии.";
-const notes="    // Личная заметка.\n    return 1;";
-const duplicatedGuide=[
-  "static int Solve()",
-  "{",
-  "    // Актуальное условие из урока",
-  "    "+firstInstruction,
-  "    "+secondInstruction,
-  "    "+oldGuide,
-  notes,
-  "}"
-].join("\n");
-const cleanedGuide=duplicatedGuide.replace("    "+oldGuide+"\n","");
-assert.equal(addTaskInstructions(duplicatedGuide,starter,oldGuide),cleanedGuide,
-  "a saved draft with both guide versions keeps only the current one");
-assert.equal(addTaskInstructions(cleanedGuide,starter,oldGuide),cleanedGuide,
-  "repeated restore keeps the same learner source and instructions");
-
-const openedProgram=buildTaskProgram(currentTemplate,duplicatedGuide,taskId).replace(/\n/g,"\r\n");
-const cleanedProgram=openedProgram.replace("    "+oldGuide+"\r\n","");
-assert.equal(refreshOpenTask(openedProgram,taskId,starter,oldGuide),cleanedProgram,
-  "opening the current task removes only obsolete instructions");
-assert.equal(refreshOpenTask(cleanedProgram,taskId,starter,oldGuide),cleanedProgram,
-  "opening the current task again preserves the exact program");
-assert.equal(refreshOpenTask(openedProgram,"TASK-OTHER",starter,oldGuide),openedProgram,
-  "opening a different task does not alter the file");
+const implementation="    // Заметка ученика.\r\n    static Number Solve() => 1;";
+const imports="using Number = System.Int32;";
+const currentProgram=buildTaskProgram(currentTemplate,imports+"\r\n"+implementation,taskId);
+assert.ok(isSuccessfulPracticeRun(currentTemplate,currentProgram,success,taskId),"exact checks and success output");
+assert.ok(!isSuccessfulPracticeRun(currentTemplate,currentProgram.replace("Solve() == 1","true"),success,taskId),"changed C# check");
+assert.ok(!isSuccessfulPracticeRun(currentTemplate,currentProgram,success+"\nОшибка",taskId),"failed C# run");
+assert.match(extractTaskSource(currentProgram,taskId),/using Number = System\.Int32;[\s\S]*\/\/ Заметка ученика\.[\s\S]*static Number Solve\(\) => 1;/,
+  "the active draft preserves imports, learner notes and implementation");
+assert.ok(!extractTaskSource(currentProgram,"TASK-OTHER"),"drafts are bound to the expected Task-ID");
 
 const [root,...taskFilter]=process.argv.slice(2);
 if(root==="--shared-only" && taskFilter.length===0) process.exit(0);

@@ -248,10 +248,6 @@ jobs:
             grep -q 'INSERT_SOLUTION_HERE' "$page"
             grep -q 'void Assert(' "$page"
           done
-          if grep -q 'practice-tests.js' _site/courses/csharp-dotnet-9-11/lessons/001-params-countby/index.html; then
-            echo "Obsolete practice-tests.js is still loaded"
-            exit 1
-          fi
           grep -q 'course-compiler' _site/courses/csharp-dotnet-9-11/lessons/001-params-countby/index.html
           grep -q 'course-compiler' _site/courses/csharp-dotnet-9-11/lessons/002-aggregateby-null-conditional-assignment/index.html
           grep -q 'course-compiler' _site/courses/memory/lessons/001-allocations-copies-retention/index.html
@@ -259,6 +255,9 @@ jobs:
           test -s _site/courses/csharp-dotnet-9-11/quiz/index.html
           test -s _site/courses/memory/index.html
           test -s _site/courses/csharp-dotnet-9-11/index.html
+          for retired in courses/whats-new lessons quiz labs/001-browser; do
+            test ! -e "_site/$retired"
+          done
           test -s _site/sw.js
           node --check _site/sw.js
           grep -q 'id="page-editor-run"' _site/courses/csharp-dotnet-9-11/lessons/001-params-countby/index.html

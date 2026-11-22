@@ -6,8 +6,8 @@
   let bank;
   try {bank=JSON.parse(source.textContent);} catch {bank=[];}
   if(!Array.isArray(bank)) bank=[];
-  const course=root.dataset.course==="memory"?"memory":"whats-new";
-  const oldDraftKey=course==="memory"?"dotnet-learning:quiz-drafts:memory":"dotnet-learning:quiz-drafts";
+  const course=root.dataset.course;
+  const draftKey="dotnet-courses:quiz-drafts:v1:"+course;
   const fsrsKey="dotnet-courses:fsrs-7:v1:"+course;
   const maxQuestions=5;
   const requested=new URLSearchParams(location.search).getAll("through");
@@ -37,7 +37,7 @@
       return value && typeof value==="object" && !Array.isArray(value)?value:{};
     } catch {return {};}
   }
-  let drafts=read(oldDraftKey);
+  let drafts=read(draftKey);
   let records=read(fsrsKey);
   let displayed=[];
   let showAll=false;
@@ -203,7 +203,7 @@
       else if(previousAssessment && countsForLesson())message.textContent="Поставь самооценку изменённому ответу.";
       input.addEventListener("input",()=>{
         drafts[q.id]=input.value;
-        store(oldDraftKey,drafts);
+        store(draftKey,drafts);
         if(!countsForLesson())return;
         const assessment=selectionAssessments.get(q.id);
         if(assessment) {
@@ -309,9 +309,9 @@
       const oldP=records,oldD=drafts;
       records=data.progress;
       drafts=data.drafts;
-      if(!store(fsrsKey,records)||!store(oldDraftKey,drafts)) {
+      if(!store(fsrsKey,records)||!store(draftKey,drafts)) {
         records=oldP;drafts=oldD;
-        store(fsrsKey,records);store(oldDraftKey,drafts);
+        store(fsrsKey,records);store(draftKey,drafts);
         throw Error("Невозможно сохранить импорт в этом браузере.");
       }
       answeredThisSession=new Set();

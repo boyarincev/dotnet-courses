@@ -21,6 +21,6 @@ permalink: /courses/csharp-dotnet-9-11/
 <div class="lessons">
 {% assign sorted = site.lessons | sort: 'lesson_number' | reverse %}
 {% for lesson in sorted %}
-<a class="lesson-card" href="{{ lesson.url | relative_url }}"><small>Урок {{ lesson.lesson_number }} · {{ lesson.lesson_date }} · {{ lesson.series }}</small><span class="lesson-completion-badge" data-lesson-completion-badge data-course="whats-new" data-lesson="{{ lesson.lesson_number }}" hidden>Пройден</span><h3>{{ lesson.title | escape }}</h3><p>{{ lesson.summary | escape }}</p><span>{{ lesson.csharp_feature }} · {{ lesson.dotnet_feature }}</span><strong>↗</strong></a>
+<a class="lesson-card" href="{{ lesson.url | relative_url }}"><small>Урок {{ lesson.lesson_number }} · {{ lesson.lesson_date }} · {{ lesson.series }}</small><span class="lesson-completion-badge" data-lesson-completion-badge data-course="csharp-dotnet-9-11" data-lesson="{{ lesson.lesson_number }}" hidden>Пройден</span><h3>{{ lesson.title | escape }}</h3><p>{{ lesson.summary | escape }}</p><span>{{ lesson.csharp_feature }} · {{ lesson.dotnet_feature }}</span><strong>↗</strong></a>
 {% endfor %}
 </div>

@@ -9,81 +9,6 @@
   const solutionMarker = "// INSERT_SOLUTION_HERE";
   const practiceImportPattern = /^(?:global\s+)?using\s+(?:(?:static\s+)|(?:\w+\s*=\s*))?(?:global::)?[\w.]+\s*;$/;
 
-  const currentInstructionsHeading = "// Актуальное условие из урока";
-
-  function removePreviousInstructions(leading, previousBlocks) {
-    const lines = leading.match(/[^\n]+\n?|\n/g) || [];
-    const trimmed = lines.map(line => line.trim());
-    const kept = [];
-    for (let index = 0; index < lines.length;) {
-      const start = trimmed[index] === currentInstructionsHeading ? index + 1 : index;
-      const block = previousBlocks.find(block =>
-        block.every((line, offset) => trimmed[start + offset] === line)
-      );
-      if (block) index = start + block.length;
-      else kept.push(lines[index++]);
-    }
-    return kept.join("");
-  }
-
-  function addTaskInstructions(source, starter, previousInstructions = "", onlyReplacePrevious = false) {
-    const opening = normalize(starter).match(
-      /^[ \t]*(static\b[^{]*?)\{[ \t]*\n((?:[ \t]*\/\/[^\n]*\n)+)[ \t\n]*throw new NotImplementedException\(\);/m
-    );
-    if (!opening || !source.trim()) return source;
-
-    const instructions = opening[2].trim().split("\n").map(line => line.trim());
-    const guidance = [currentInstructionsHeading, ...instructions];
-
-    // Only insert inside a body if the source starts with the known signature,
-    // after ordinary imports and line comments. Otherwise keep the code intact.
-    let offset = 0;
-    for (const line of source.match(/[^\n]*\n/g) || []) {
-      const trimmed = line.trim();
-      if (trimmed && !practiceImportPattern.test(trimmed) && !trimmed.startsWith("//")) break;
-      offset += line.length;
-    }
-    let prefix = source.slice(0, offset);
-    const methodSource = source.slice(offset);
-    const tokens = opening[1].match(/\w+|\S/g);
-    const signature = tokens.map((token, index) => {
-      const needsSpace = index > 0 && /^\w/.test(tokens[index - 1]) && /^\w/.test(token);
-      const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, character => "\\" + character);
-      return (needsSpace ? "\\s+" : "\\s*") + escaped;
-    }).join("");
-    const method = methodSource.match(new RegExp(
-      "^([ \\t]*)(?:(?:public|internal|protected|private)\\s+)?" + signature + "\\s*\\{"
-    ));
-    const brace = method?.[0].length ?? 0;
-    const existingNewline = method ? methodSource.slice(brace).match(/^[ \t]*\r?\n/)?.[0] || "" : "";
-    const at = brace + existingNewline.length;
-    const methodOpening = methodSource.slice(0, at);
-    let body = methodSource.slice(at);
-
-    const previousBlocks = normalize(previousInstructions).trim().split(/\n[ \t]*\n/)
-      .map(block => block.split("\n").map(line => line.trim()))
-      .filter(block => block.every(line => line.startsWith("//")));
-    if (previousBlocks.length) {
-      // Match complete historical blocks only in the leading lines, preserving all other bytes.
-      prefix = removePreviousInstructions(prefix, previousBlocks);
-      if (existingNewline) {
-        const comments = body.match(/^(?:[ \t]*(?:\/\/[^\r\n]*)?\r?\n)*/)[0];
-        body = removePreviousInstructions(comments, previousBlocks) + body.slice(comments.length);
-      }
-    }
-
-    const restored = prefix + methodOpening + body;
-    if (onlyReplacePrevious && restored === source) return source;
-    const existing = "\n" + normalize(restored).split("\n").map(line => line.trim()).join("\n") + "\n";
-    if (existing.includes("\n" + instructions.join("\n") + "\n")) return restored;
-
-    const newline = source.includes("\r\n") ? "\r\n" : "\n";
-    if (!method) return prefix + guidance.join(newline) + newline + body;
-
-    const comments = guidance.map(line => method[1] + "    " + line).join(newline);
-    return prefix + methodOpening + (existingNewline ? "" : newline) + comments + newline + body;
-  }
-
   // Only assembles visible C# from the lesson with the student's method.
   // All Assert checks are plain C# in each lesson's practice-program-template.
   function buildTaskProgram(template, source, taskId) {
@@ -130,18 +55,6 @@
     return (imports.length ? imports.join("\n") + "\n\n" : "") + method + "\n";
   }
 
-  function refreshOpenTask(source, taskId, starter, previousInstructions) {
-    if (!previousInstructions) return source;
-    const lines = source.split(/(?<=\n)/);
-    const start = lines.findIndex(line => line.trim() === "// BEGIN " + taskId);
-    const end = lines.findLastIndex(line => line.trim() === "// END " + taskId);
-    if (start < 0 || end <= start) return source;
-
-    const method = lines.slice(start + 1, end).join("");
-    const updated = addTaskInstructions(method, starter, previousInstructions, true);
-    return lines.slice(0, start + 1).join("") + updated + lines.slice(end).join("");
-  }
-
   function matchesPracticeSource(template, source, taskId) {
     const [before, after, ...extra] = template.split("\n" + solutionMarker + "\n");
     if (!after || extra.length || !before.endsWith("// BEGIN " + taskId) ||
@@ -152,41 +65,19 @@
     return source.startsWith(start) && source.endsWith(end) && source.length > start.length + end.length;
   }
 
-  // Saved drafts may still put the solution after Assert. Keep the same C# checks in both layouts.
-  function previousPracticeOrder(template, taskId) {
-    const header = "public static class Program\n{\n";
-    const solution = "// BEGIN " + taskId + "\n" + solutionMarker + "\n// END " + taskId + "\n";
-    if (!template.startsWith(header + solution)) return "";
-
-    const assertStart = template.indexOf("\nprivate static void Assert(");
-    if (assertStart < 0) return "";
-    const classEnd = template.indexOf("\n}\n}", assertStart);
-    if (classEnd < 0) return "";
-    const programEnd = classEnd + "\n}\n".length;
-    return header + template.slice(header.length + solution.length, programEnd) +
-      solution + template.slice(programEnd);
-  }
-
   function isSuccessfulPracticeRun(template, source, output, taskId) {
     if (typeof template !== "string" || typeof source !== "string" || typeof output !== "string") return false;
     if (normalize(output).trimEnd().split("\n").at(-1) !== "Все проверки пройдены") return false;
 
-    return matchesPracticeTemplate(template, source, taskId);
+    return matchesPracticeSource(practiceSource(template), practiceSource(source), taskId);
   }
 
-  function matchesPracticeTemplate(template, source, taskId) {
-    const normalizedTemplate = practiceSource(template);
-    const code = practiceSource(source);
-    return matchesPracticeSource(normalizedTemplate, code, taskId) ||
-      matchesPracticeSource(previousPracticeOrder(normalizedTemplate, taskId), code, taskId);
-  }
-
-  if (typeof module === "object" && module.exports) module.exports = {addTaskInstructions, buildTaskProgram, extractTaskSource, isSuccessfulPracticeRun, refreshOpenTask};
+  if (typeof module === "object" && module.exports) module.exports = {buildTaskProgram, extractTaskSource, isSuccessfulPracticeRun};
   if (typeof document === "undefined") return;
   const frame = document.getElementById("course-compiler");
   if (!frame) return;
   const lesson = Number(frame.dataset.lesson);
-  const course = frame.dataset.course === "memory" ? "memory" : "whats-new";
+  const course = frame.dataset.course;
   const taskId = (course === "memory" ? "ALLOC-TASK-" : "TASK-") + String(lesson).padStart(3, "0");
   const task = document.getElementById("solution-" + taskId);
   const practiceDraftKey = "dotnet-courses:practice-draft:" + course + ":" + lesson;
@@ -262,14 +153,13 @@
     }
     let savedPractice = false;
     if (code !== current) {
-      const workingMethod = extractTaskSource(current, taskId);
-      const updatingCurrentTask = workingMethod && !run;
-      if (!updatingCurrentTask && current.trim() && current !== lastLoadedCode && !api.isInitialCode?.() &&
+      if (current.trim() && current !== lastLoadedCode && !api.isInitialCode?.() &&
           !window.confirm("Заменить текущий код в редакторе? Чтобы сохранить весь файл отдельно, сначала скопируй или скачай Program.cs.")) {
         show(button, "Текущий код оставлен в редакторе.");
         return;
       }
-      if (workingMethod && !updatingCurrentTask) {
+      const workingMethod = extractTaskSource(current, taskId);
+      if (workingMethod) {
         try {
           localStorage.setItem(practiceDraftKey, workingMethod);
           refreshPracticeButton();
@@ -283,7 +173,7 @@
         show(button, "Редактор ещё не готов к загрузке.");
         return;
       }
-      if (!updatingCurrentTask || current === lastLoadedCode) lastLoadedCode = code;
+      lastLoadedCode = code;
     }
     frame.scrollIntoView({behavior:"smooth",block:"start"});
     if (!run) {
@@ -370,37 +260,15 @@
     try {
       const verified = localStorage.getItem(verifiedKey);
       if (verified?.trim()) showVerified(verified, "Решение восстановлено из этого браузера.");
-
-      const previousDraft = localStorage.getItem("dotnet-learning:practice:" + taskId);
-      if (previousDraft?.trim() && previousDraft !== task.defaultValue) {
-        const recovery = document.createElement("div");
-        recovery.className = "practice-actions";
-        const recover = document.createElement("button");
-        recover.type = "button"; recover.className = "button";
-        recover.textContent = "Скачать старый черновик";
-        const recoveryNote = document.createElement("span");
-        recoveryNote.className = "practice-feedback";
-        recoveryNote.setAttribute("role", "status");
-        recover.addEventListener("click", () => {
-          window.DotnetLearning.download(taskId + "-черновик.cs", previousDraft);
-          recoveryNote.textContent = "Старый черновик скачан.";
-        });
-        recovery.append(recover, recoveryNote);
-        verifiedSection.insertAdjacentElement("beforebegin", recovery);
-      }
     } catch {
       show(open, "Не удалось прочитать сохранённое решение в этом браузере.");
     }
 
-    const previousInstructions = document.getElementById("practice-previous-instructions")?.textContent;
     open.addEventListener("click", () => {
       send(open, current => {
-        if (extractTaskSource(current, taskId)) {
-          return refreshOpenTask(current, taskId, task.defaultValue, previousInstructions);
-        }
+        if (extractTaskSource(current, taskId)) return current;
         const source = readPracticeDraft() ?? task.defaultValue;
-        const method = addTaskInstructions(source, task.defaultValue, previousInstructions);
-        return buildTaskProgram(templateElement.textContent, method, taskId);
+        return buildTaskProgram(templateElement.textContent, source, taskId);
       }, false);
     });
 

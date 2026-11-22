@@ -292,36 +292,6 @@ sealed class AuditReport
 }
 </script>
 
-<script type="text/plain" id="practice-previous-instructions">
-// Реализуй GetNoisiestClients для записей HTTP-вызовов.
-// Оставь ответы со StatusCode >= 400 и сгруппируй их через AggregateBy
-// по имени клиента с StringComparer.OrdinalIgnoreCase. Count — число таких ответов.
-// TotalBytes (long) — сумма их ResponseBytes в байтах.
-// Client — имя из первого ответа этого клиента со StatusCode >= 400.
-// Верни до двух элементов (Client, Count, TotalBytes) по убыванию TotalBytes.
-// При равенстве сортируй по Client по возрастанию с StringComparer.OrdinalIgnoreCase.
-// Если audit задан, через ?. запиши в audit.Text пары "клиент=сумма_байтов"
-// из результата в том же порядке, разделяя пары через "; ". Для пустого
-// результата запиши пустую строку. При audit == null отчёт не формируй.
-
-// Реализуй GetNoisiestClients для записей HTTP-вызовов.
-// Оставь ответы со StatusCode >= 400 и сгруппируй их через AggregateBy
-// по имени клиента без учёта регистра. Count — число таких ответов.
-// TotalBytes (long) — сумма их ResponseBytes в байтах.
-// Верни до двух элементов (Client, Count, TotalBytes) по убыванию TotalBytes.
-// При равенстве сортируй по имени клиента по возрастанию без учёта регистра.
-// Если audit задан, через ?. запиши в audit.Text пары "клиент=сумма_байтов"
-// в порядке результата, разделяя пары через "; ". Пустой результат даёт пустой текст.
-
-// Реализуй GetNoisiestClients для записей HTTP-вызовов.
-// Оставь ответы со StatusCode >= 400 и накопи (Count, TotalBytes) через AggregateBy.
-// Группируй по имени клиента без учёта регистра. Для суммы байтов используй long.
-// Верни до двух клиентов, отсортированных по TotalBytes по убыванию.
-// При равенстве сортируй по имени клиента по возрастанию без учёта регистра.
-// Если audit задан, через оператор ?. запиши в audit.Text имена и суммы
-// из результата в том же порядке. Формат пары — "клиент=сумма", разделитель — "; ".
-</script>
-
 <label for="solution-TASK-002" class="editor-label">Заготовка задания</label>
 <textarea id="solution-TASK-002" class="code-editor" readonly spellcheck="false" rows="13">static IReadOnlyList&lt;(string Client, int Count, long TotalBytes)&gt; GetNoisiestClients(
     IEnumerable&lt;Failure&gt; calls, AuditReport? audit)

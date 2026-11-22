@@ -152,10 +152,6 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
     try {
         const page = await context.newPage();
         page.setDefaultTimeout(timeout);
-        const legacyDraft = "// Старый черновик, который не проходил проверки";
-        await context.addInitScript(({taskId, legacyDraft}) => {
-            if (window === window.top) localStorage.setItem("dotnet-learning:practice:" + taskId, legacyDraft);
-        }, {taskId, legacyDraft});
         await page.goto(new URL(coursePath + lessonPath, site).href, { waitUntil: "domcontentloaded" });
         const getCompiler = async () => {
             const iframe = await page.locator("#course-compiler").elementHandle();
@@ -170,17 +166,15 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
         const verifiedField = page.locator("#verified-" + taskId);
         const starter = await taskField.evaluate(field => field.defaultValue);
         assert.ok(!(await taskField.isEditable()), "The task field must be read-only");
-        assert.equal(await taskField.inputValue(), starter, "The unchecked legacy draft must not replace the starter");
-        assert.ok(await verifiedField.isHidden(), "Unverified legacy text must not appear as a solution");
+        assert.equal(await taskField.inputValue(), starter, "The starter displays the author-provided method");
+        assert.ok(await verifiedField.isHidden(), "A fresh task does not have a verified solution");
         const runCurrent = page.locator("#page-editor-run");
         const openStarter = page.getByRole("button", {name: "Открыть заготовку", exact: true});
         assert.ok(await openStarter.isVisible(), "A fresh task must offer the starter");
         const starterActions = page.locator('[data-practice-actions="' + taskId + '"]');
         assert.equal(await starterActions.getByRole("button").count(), 1, "The starter has only one action");
-        assert.ok(await page.getByRole("button", {name: "Скачать старый черновик", exact: true}).isVisible(),
-            "A legacy draft has a separate recovery action");
         const openDraft = page.getByRole("button", {name: "Открыть черновик", exact: true});
-        assert.equal(await openDraft.count(), 0, "A legacy upper draft must not enable practice draft reopening");
+        assert.equal(await openDraft.count(), 0, "A fresh task does not have a saved practice draft");
 
         // Use the real editor, lesson runner and storage, with a synthetic task.
         const template = [
@@ -303,7 +297,6 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
         await verifiedField.waitFor({state: "visible"});
         assert.equal(await taskField.inputValue(), starter, "The canonical starter must survive reload");
         assert.equal(await verifiedField.inputValue(), verified, "The last verified method must survive reload");
-        assert.equal(await page.evaluate(id => localStorage.getItem("dotnet-learning:practice:" + id), taskId), legacyDraft);
         await page.goto(new URL(coursePath, site).href, { waitUntil: "domcontentloaded" });
         const badge = page.locator('[data-lesson-completion-badge][data-lesson="1"]');
         await badge.waitFor({ state: "visible" });
@@ -321,7 +314,7 @@ async function verify() {
             const page = await browser.newPage();
             page.setDefaultTimeout(timeout);
             const url = new URL("browser-compiler-net" + runtime + "/", site);
-            url.searchParams.set("course", runtime === 9 ? "whats-new" : "memory");
+            url.searchParams.set("course", runtime === 9 ? "csharp-dotnet-9-11" : "memory");
             url.searchParams.set("lesson", "1");
             if (revision) url.searchParams.set("v", revision);
             await page.goto(url.href, { waitUntil: "domcontentloaded" });

@@ -60,7 +60,10 @@ audit?.Text = BuildSummary();
 
 Также допустимо `audit?.Counter += 1` и `array?[0] = value`. Но `audit?.Counter++` недопустимо. `?.` не заменяет синхронизацию потоков: между проверкой и использованием состояние других объектов может меняться. Если нужно несколько действий, обычный `if` часто понятнее.
 
-**Не путай с `??=`:** `obj?.Property = value` присваивает, если **объект существует**; `variable ??= value` присваивает, если **сама переменная равна null**.
+**Обновить текст или создать объект отчёта?** Рассмотрим два отдельных варианта для переменной `audit` типа `Audit?`.
+
+- `audit?.Text = BuildSummary()` проверяет ссылку в `audit`. Если объект есть, результат `BuildSummary()` записывается в его свойство `Text`, заменяя любой прежний текст. При `audit == null` значение `audit` остаётся `null`, а вызов `BuildSummary()` пропускается.
+- `audit ??= new Audit()` проверяет текущее значение переменной `audit`. При `audit == null` новый объект с пустым `Text` записывается в саму переменную `audit`. Если объект уже есть, `audit` сохраняет ссылку на него, `Text` сохраняет своё значение, а выражение `new Audit()` пропускается.
 
 ## 3. Полностью запускаемый пример
 
@@ -182,7 +185,7 @@ Failure[] calls =
 
 **Ожидаемый результат:** `api-b: Count=1, TotalBytes=400`; `api-c: Count=1, TotalBytes=400`. `api-A` имеет две ошибки, но всего 200 байт. При наличии `audit`: `api-b=400; api-c=400`.
 
-**Критерии готовности:** фильтр статусов до агрегации; `long` для суммы; объединение `api-A` и `API-a`; максимум два результата и определённый порядок при равенстве; при `audit == null` не создавать текст отчёта. **Пограничный случай:** пустой вход возвращает пустую коллекцию, а ненулевой `audit.Text` становится пустой строкой.
+**Критерии готовности:** фильтр статусов до агрегации; `long` для суммы; объединение `api-A` и `API-a`; максимум два результата и определённый порядок при равенстве; при `audit == null` не создавать текст отчёта. **Пограничный случай:** пустой вход возвращает пустую коллекцию. Если `audit` не равен `null`, в `audit.Text` записывается пустая строка.
 
 <details><summary>Необязательная подсказка</summary><p>После AggregateBy используй OrderByDescending, ThenBy и Take(2). Сначала материализуй результат, затем формируй строку только внутри условного присваивания.</p></details>
 
@@ -276,6 +279,6 @@ sealed class AuditReport
 
 [Квиз по предыдущим темам]({{ '/quiz/' | relative_url }}) содержит вопросы с постоянными Q-ID. Отправка и оценка ответов происходят только в чате.
 
-Microsoft Learn: [C# 14](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14), [null-conditional operators](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/member-access-operators#null-conditional-operators--and-), [Enumerable.AggregateBy](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.aggregateby?view=net-9.0), [.NET 9 LINQ](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-9/libraries#linq).
+Microsoft Learn: [C# 14](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14), [null-conditional operators](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/member-access-operators#null-conditional-operators--and-), [`??` и `??=`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/null-coalescing-operator), [Enumerable.AggregateBy](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.aggregateby?view=net-9.0), [.NET 9 LINQ](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-9/libraries#linq).
 
 *Примеры этого урока проверяются на .NET 10 при сборке сайта; браузерный компилятор использует C# 14 и .NET 10.*

@@ -16,21 +16,30 @@ browser_runtime: '10'
 
 ## 1. .NET 9: Enumerable.AggregateBy
 
-`CountBy(keySelector)` считает элементы по ключу. `AggregateBy(keySelector, seed, func, comparer)` накапливает **произвольное состояние для каждого ключа**. Например, одновременно счётчик и сумму:
+`CountBy(keySelector)` считает элементы по ключу. `AggregateBy` накапливает **произвольное состояние для каждого ключа**. Например, одновременно счётчик и сумму:
 
 ```csharp
 var stats = calls.AggregateBy(
-    x => x.Route,
-    (Count: 0, TotalMs: 0),
-    (acc, x) => (acc.Count + 1, acc.TotalMs + x.DurationMs),
-    StringComparer.OrdinalIgnoreCase);
+    // Ключ группы — маршрут запроса.
+    keySelector: call => call.Route,
+
+    // Для каждого нового маршрута счётчик и сумма начинаются с нуля.
+    seed: (Count: 0, TotalMs: 0),
+
+    // Берём накопленный итог и добавляем к нему текущий запрос.
+    func: (acc, call) => (acc.Count + 1, acc.TotalMs + call.DurationMs),
+
+    // "/orders" и "/ORDERS" попадут в одну группу.
+    keyComparer: StringComparer.OrdinalIgnoreCase);
 ```
 
-`seed` — начальное состояние **каждого** ключа, `func` получает прежнее состояние и очередной элемент. Необязательный `comparer` задаёт сравнение ключей. Есть и перегрузка с `seedSelector`, когда стартовое состояние зависит от ключа.
+Сравнение ключей можно оставить по умолчанию, опустив `keyComparer`. Если стартовое состояние зависит от ключа, используй перегрузку с `seedSelector`. Она принимает функцию, которая вычисляет начальное значение по ключу.
 
 Возвращается **`IEnumerable<KeyValuePair<TKey,TAccumulate>>`**, а не словарь. Как и `CountBy`, это отложенное вычисление: повторное перечисление заново агрегирует исходные данные. `ToArray()` материализует снимок. `AggregateBy` не создаёт промежуточные группы `GroupBy`, но хранит состояние по каждому уникальному ключу и не гарантирует отсутствия аллокаций.
 
-**Когда не использовать:** если нужны сами элементы групп, выбирай `GroupBy`. В EF Core `IQueryable` не рассчитывай на автоматическую трансляцию `Enumerable.AggregateBy` в SQL: для серверной агрегации обычно применяют поддерживаемые `GroupBy`, `Count`, `Sum` и проверяют сгенерированный SQL. Для идентификаторов с чувствительным к регистру сравнением не используй `OrdinalIgnoreCase` механически.
+**Когда пригодится `GroupBy`.** Если нужно перечислить отдельные запросы по маршруту, например посмотреть статус и длительность каждого запроса к `/orders`, используй `GroupBy`. В результате `GroupBy` для каждого маршрута доступны ключ группы и входящие в неё записи `HttpCall`. В результате этого вызова `AggregateBy` для каждого маршрута доступны ключ и накопленный итог `(Count, TotalMs)`.
+
+В EF Core `IQueryable` не рассчитывай на автоматическую трансляцию `Enumerable.AggregateBy` в SQL: для серверной агрегации обычно применяют поддерживаемые `GroupBy`, `Count`, `Sum` и проверяют сгенерированный SQL. Для идентификаторов с чувствительным к регистру сравнением не используй `OrdinalIgnoreCase` механически.
 
 ## 2. C# 14: null-conditional assignment
 
@@ -71,25 +80,25 @@ using System.Linq;
 
 HttpCall[] calls =
 [
-    new("/orders", 200, 40),
-    new("/orders", 201, 90),
-    new("/orders", 503, 250),
-    new("/ORDERS", 200, 60),
-    new("/health", 200, 5),
-    new("/orders", 201, 30)
+    new(Route: "/orders", StatusCode: 200, DurationMs: 40),
+    new(Route: "/orders", StatusCode: 201, DurationMs: 90),
+    new(Route: "/orders", StatusCode: 503, DurationMs: 250),
+    new(Route: "/ORDERS", StatusCode: 200, DurationMs: 60),
+    new(Route: "/health", StatusCode: 200, DurationMs: 5),
+    new(Route: "/orders", StatusCode: 201, DurationMs: 30)
 ];
 
 var stats = calls
-    .Where(x => x.StatusCode is >= 200 and < 300)
+    .Where(call => call.StatusCode is >= 200 and < 300)
     .AggregateBy(
-        x => x.Route,
-        (Count: 0, TotalMs: 0),
-        (acc, x) => (
+        keySelector: call => call.Route,
+        seed: (Count: 0, TotalMs: 0),
+        func: (acc, call) => (
             Count: acc.Count + 1,
-            TotalMs: acc.TotalMs + x.DurationMs
+            TotalMs: acc.TotalMs + call.DurationMs
         ),
-        StringComparer.OrdinalIgnoreCase)
-    .OrderBy(x => x.Key, StringComparer.Ordinal)
+        keyComparer: StringComparer.OrdinalIgnoreCase)
+    .OrderBy(keySelector: pair => pair.Key, comparer: StringComparer.Ordinal)
     .ToArray();
 
 foreach (var x in stats)
@@ -163,11 +172,11 @@ static IReadOnlyList<(string Client, int Count, long TotalBytes)> GetNoisiestCli
 ```csharp
 Failure[] calls =
 [
-    new("api-A", 500, 150),
-    new("API-a", 404, 50),
-    new("api-b", 503, 400),
-    new("api-b", 200, 900),
-    new("api-c", 500, 400)
+    new(Client: "api-A", StatusCode: 500, ResponseBytes: 150),
+    new(Client: "API-a", StatusCode: 404, ResponseBytes: 50),
+    new(Client: "api-b", StatusCode: 503, ResponseBytes: 400),
+    new(Client: "api-b", StatusCode: 200, ResponseBytes: 900),
+    new(Client: "api-c", StatusCode: 500, ResponseBytes: 400)
 ];
 ```
 
@@ -190,9 +199,11 @@ public static class Program
     {
         Failure[] calls =
         [
-            new("api-A", 500, 150), new("API-a", 404, 50),
-            new("api-b", 503, 400), new("api-b", 200, 900),
-            new("api-c", 500, 400)
+            new(Client: "api-A", StatusCode: 500, ResponseBytes: 150),
+            new(Client: "API-a", StatusCode: 404, ResponseBytes: 50),
+            new(Client: "api-b", StatusCode: 503, ResponseBytes: 400),
+            new(Client: "api-b", StatusCode: 200, ResponseBytes: 900),
+            new(Client: "api-c", StatusCode: 500, ResponseBytes: 400)
         ];
 
         var audit = new AuditReport();
@@ -215,9 +226,12 @@ public static class Program
 
         Failure[] mixed =
         [
-            new("Api-X", 500, 300), new("API-x", 404, 50),
-            new("small", 500, 10), new("ignored", 200, 9000)
+            new(Client: "Api-X", StatusCode: 500, ResponseBytes: 300),
+            new(Client: "API-x", StatusCode: 404, ResponseBytes: 50),
+            new(Client: "small", StatusCode: 500, ResponseBytes: 10),
+            new(Client: "ignored", StatusCode: 200, ResponseBytes: 9000)
         ];
+        // null означает, что отчёт не нужен.
         var withoutAudit = GetNoisiestClients(mixed, null);
         Assert(withoutAudit.Count == 2 && withoutAudit[0].Count == 2
             && withoutAudit[0].TotalBytes == 350

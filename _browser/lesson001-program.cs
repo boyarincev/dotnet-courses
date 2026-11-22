@@ -6,6 +6,7 @@ public static class Program
 {
     public static void Main()
     {
+        // Первый аргумент — заголовок, остальные образуют коллекцию HTTP-методов.
         PrintCounts("HTTP methods", "GET", "POST", "get", "PUT", "post", "GET");
         Console.WriteLine($"Sum = {Sum(10, 20, 30)}");
     }
@@ -14,8 +15,8 @@ public static class Program
     {
         Console.WriteLine(title);
         var counts = values
-            .CountBy(x => x, StringComparer.OrdinalIgnoreCase)
-            .OrderByDescending(x => x.Value);
+            .CountBy(keySelector: method => method, keyComparer: StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(keySelector: pair => pair.Value);
         foreach (var (method, count) in counts)
             Console.WriteLine($"{method}: {count}");
     }

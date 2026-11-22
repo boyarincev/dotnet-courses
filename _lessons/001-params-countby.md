@@ -14,10 +14,10 @@ browser_runtime: '9'
 Допустим, мы хотим анализировать HTTP-методы: удобно передавать их в метод и считать количество каждого значения, не создавая лишних групп.
 
 ## 1. C# 13: расширенный `params`
-До C# 13 `params` поддерживал только одномерные массивы:
+До C# 13 `params` поддерживал только одномерные массивы.
 ```csharp
 static int Sum(params int[] numbers) => numbers.Sum();
-Console.WriteLine(Sum(10, 20, 30)); // 60
+Console.WriteLine(Sum(10, 20, 30)); // 60. Три числа образуют один массив numbers.
 ```
 В C# 13 появились *params collections*: поддерживаются, в частности, `ReadOnlySpan<T>`, `Span<T>`, `IEnumerable<T>`, `List<T>` и другие коллекционные типы.
 ```csharp
@@ -27,7 +27,7 @@ static int Sum(params ReadOnlySpan<int> values)
     foreach (int value in values) total += value;
     return total;
 }
-Console.WriteLine(Sum(10, 20, 30)); // 60
+Console.WriteLine(Sum(10, 20, 30)); // 60. Три числа образуют один ReadOnlySpan<int>.
 ```
 **Почему полезно:** `ReadOnlySpan<T>` может избежать выделения отдельного массива в куче при некоторых вызовах. Однако не гарантирует нулевые аллокации во всех сценариях, а также имеет ограничения по времени жизни данных.
 
@@ -35,18 +35,21 @@ Console.WriteLine(Sum(10, 20, 30)); // 60
 ```csharp
 static void Analyze(string title, params IEnumerable<string> methods)
 {
-    // Можно вызвать Analyze("HTTP", "GET", "POST", "GET");
+    // В вызове Analyze("HTTP", "GET", "POST", "GET") "HTTP" — это title.
+    // Три оставшихся аргумента образуют коллекцию methods.
 }
 ```
 ## 2. .NET 9: `Enumerable.CountBy()`
 Раньше для подсчёта частот часто использовали `GroupBy`:
 ```csharp
-var counts = methods.GroupBy(x => x)
-    .Select(g => new { Method = g.Key, Count = g.Count() });
+var counts = methods.GroupBy(keySelector: method => method)
+    .Select(group => new { Method = group.Key, Count = group.Count() });
 ```
 Теперь, если нужны **только счётчики**, можно написать:
 ```csharp
-var counts = methods.CountBy(x => x);
+var counts = methods.CountBy(
+    // Используем само имя HTTP-метода как ключ подсчёта.
+    keySelector: method => method);
 foreach (var (method, count) in counts)
     Console.WriteLine($"{method}: {count}");
 ```
@@ -54,12 +57,15 @@ foreach (var (method, count) in counts)
 
 По умолчанию `"GET"` и `"get"` различаются. Для объединения регистров:
 ```csharp
-var counts = methods.CountBy(x => x, StringComparer.OrdinalIgnoreCase);
+var counts = methods.CountBy(
+    keySelector: method => method,
+    // "GET" и "get" учитываются в одном счётчике.
+    keyComparer: StringComparer.OrdinalIgnoreCase);
 ```
 Если нужны сами группы элементов, `GroupBy` по-прежнему подходит лучше.
 
 ## 3. Полностью запускаемый пример
-Требуется .NET 9 SDK либо более новый SDK, способный собирать `net9.0`.
+Для сборки нужен .NET 9 SDK или более новый SDK с поддержкой `net9.0`. Для запуска требуется среда выполнения .NET 9.
 ```bash
 dotnet new console -n FeatureLab -f net9.0
 cd FeatureLab
@@ -70,6 +76,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+// Первый аргумент — заголовок, остальные образуют коллекцию HTTP-методов.
 PrintCounts("HTTP methods", "GET", "POST", "get", "PUT", "post", "GET");
 Console.WriteLine($"Sum = {Sum(10, 20, 30)}");
 
@@ -77,8 +84,8 @@ static void PrintCounts(string title, params IEnumerable<string> values)
 {
     Console.WriteLine(title);
     var counts = values
-        .CountBy(x => x, StringComparer.OrdinalIgnoreCase)
-        .OrderByDescending(x => x.Value);
+        .CountBy(keySelector: method => method, keyComparer: StringComparer.OrdinalIgnoreCase)
+        .OrderByDescending(keySelector: pair => pair.Value);
     foreach (var (method, count) in counts)
         Console.WriteLine($"{method}: {count}");
 }

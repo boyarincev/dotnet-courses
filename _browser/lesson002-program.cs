@@ -7,25 +7,25 @@ public static class Program
     {
         HttpCall[] calls =
         [
-            new("/orders", 200, 40),
-            new("/orders", 201, 90),
-            new("/orders", 503, 250),
-            new("/ORDERS", 200, 60),
-            new("/health", 200, 5),
-            new("/orders", 201, 30)
+            new(Route: "/orders", StatusCode: 200, DurationMs: 40),
+            new(Route: "/orders", StatusCode: 201, DurationMs: 90),
+            new(Route: "/orders", StatusCode: 503, DurationMs: 250),
+            new(Route: "/ORDERS", StatusCode: 200, DurationMs: 60),
+            new(Route: "/health", StatusCode: 200, DurationMs: 5),
+            new(Route: "/orders", StatusCode: 201, DurationMs: 30)
         ];
 
         var stats = calls
-            .Where(x => x.StatusCode is >= 200 and < 300)
+            .Where(call => call.StatusCode is >= 200 and < 300)
             .AggregateBy(
-                x => x.Route,
-                (Count: 0, TotalMs: 0),
-                (acc, x) => (
+                keySelector: call => call.Route,
+                seed: (Count: 0, TotalMs: 0),
+                func: (acc, call) => (
                     Count: acc.Count + 1,
-                    TotalMs: acc.TotalMs + x.DurationMs
+                    TotalMs: acc.TotalMs + call.DurationMs
                 ),
-                StringComparer.OrdinalIgnoreCase)
-            .OrderBy(x => x.Key, StringComparer.Ordinal)
+                keyComparer: StringComparer.OrdinalIgnoreCase)
+            .OrderBy(keySelector: pair => pair.Key, comparer: StringComparer.Ordinal)
             .ToArray();
 
         foreach (var x in stats)

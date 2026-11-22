@@ -274,16 +274,9 @@
       through?"Уроки №1–"+through:"Весь курс","",
       ...displayed.map(q=>{
         const answer=String(drafts[q.id]??"").trim();
-        const assessment=showAll?null:selectionAssessments.get(q.id);
-        const record=records[q.id];
-        const lastAttempt=Array.isArray(record?.history)?record.history.at(-1):null;
-        const grade=answer && (assessment?.answer===answer?assessment.grade:
-          lastAttempt?.answer===answer?(lastAttempt.rating||record.lastGrade):null);
         return q.id+" · Урок "+q.lesson_number+"\nВопрос\n"+q.prompt+
-          "\nМой ответ\n"+(answer||"(нет ответа)")+
-          "\nСамооценка: "+(gradeNames[grade]||"нет")+"\n";
-      }),
-      "Самооценка не является независимой проверкой правильности ответа."
+          "\nМой ответ\n"+(answer||"(нет ответа)")+"\n";
+      })
     ].join("\n");
   }
 

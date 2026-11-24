@@ -1,8 +1,11 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const { readFileSync } = require("node:fs");
 const { inflateRawSync } = require("node:zlib");
 const { chromium } = require("playwright");
+const { discoverLessons } = require("./lesson-sources.cjs");
+const { prepareLesson } = require("./verify_lessons.cjs");
 
 const site = process.argv[2];
 if (!site) throw new Error("Usage: node verify_compiler_output.cjs <site-url> [revision]");
@@ -77,29 +80,27 @@ async function openLessonCompiler(page) {
     return frame;
 }
 
-async function verifyLessonExample(browser, lessonPath, snippetId) {
+async function verifyLessonExample(browser, lesson) {
+    const { route, startSnippet } = lesson;
     const page = await browser.newPage({ serviceWorkers: "block" });
     try {
         page.setDefaultTimeout(timeout);
-        await page.goto(new URL(lessonPath, site).href, { waitUntil: "domcontentloaded" });
+        await page.goto(new URL(route, site).href, { waitUntil: "domcontentloaded" });
         const reminder = page.locator("#previous-quiz-dialog[open]");
         if (await reminder.isVisible()) await reminder.getByRole("button", { name: "Продолжить урок" }).click();
 
-        const expectedOutput = await page.locator(`pre[data-output-for="${snippetId}"], [data-output-for="${snippetId}"] pre`).textContent();
-        assert.ok(expectedOutput.trim(), "The lesson must show the expected output");
+        const example = prepareLesson(lesson).examples.find(item => item.id === startSnippet);
         const frame = await openLessonCompiler(page);
         const status = page.locator("#page-editor-feedback");
         await status.filter({ hasText: "Редактор готов к запуску." }).waitFor();
-        if (snippetId === "allocations-copies-retention") {
-            await page.waitForFunction(() => document.getElementById("course-compiler").contentWindow
-                .DotnetBrowserEditor?.getCode().includes("List<Order> ParsePaid("));
-        }
-        await page.locator(`button[data-example-id="${snippetId}"]`).click();
+        const code = await page.locator("#course-compiler").evaluate(iframe => iframe.contentWindow.DotnetBrowserEditor.getCode());
+        assert.equal(code.trimEnd(), example.code.trimEnd(), `${route}: unexpected starting code in the editor`);
+        await page.locator(`button[data-example-id="${startSnippet}"]`).click();
         await status.filter({ hasText: /Запуск завершён|Ошибка запуска/ }).waitFor();
         const output = frame.locator("#output");
         await output.locator("pre").first().waitFor({ state: "attached" });
-        assert.equal(await output.textContent(), expectedOutput, `Output of ${lessonPath} (${snippetId})`);
-        console.log(`${lessonPath}: ran the full example and checked its output against the lesson`);
+        assert.equal(await output.textContent(), example.output, `Output of ${route} (${startSnippet})`);
+        console.log(`${route}: ran the starting example and checked its output against the lesson`);
     } finally {
         await page.close();
     }
@@ -198,9 +199,11 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
 
         const taskField = page.locator("#solution-" + taskId);
         const verifiedField = page.locator("#verified-" + taskId);
+        const practiceProgram = page.locator("pre#practice-program, #practice-program pre");
         const starter = await taskField.evaluate(field => field.defaultValue);
         assert.ok(!(await taskField.isEditable()), "The task field must be read-only");
         assert.equal(await taskField.inputValue(), starter, "The starter displays the author-provided method");
+        assert.ok((await practiceProgram.textContent()).includes(starter), "The displayed starter comes from the practice program");
         assert.ok(await verifiedField.isHidden(), "A fresh task does not have a verified solution");
         const runCurrent = page.locator("#page-editor-run");
         const openStarter = page.getByRole("button", {name: "Открыть заготовку", exact: true});
@@ -227,7 +230,7 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
             "    // END " + taskId,
             "}"
         ].join("\n");
-        const installTemplate = () => page.locator("#practice-program-template").evaluate((element, code) => {
+        const installTemplate = () => practiceProgram.evaluate((element, code) => {
             element.textContent = code;
             document.documentElement.dataset.practiceRunSignals = "0";
             window.addEventListener("message", event => {
@@ -303,6 +306,28 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
             "Reopening must retain newer edits already in the editor");
         assert.equal(await compiler.evaluate(() => document.documentElement.dataset.fixtureRunCount), "0",
             "Opening a draft must not run the compiler");
+
+        const updatedTemplate = template.replace("synthetic Assert failed", "updated Assert diagnostic");
+        const setTemplate = code => practiceProgram.evaluate((element, text) => { element.textContent = text; }, code);
+        await setTemplate(updatedTemplate);
+        await openDraft.click();
+        assert.equal(await compiler.evaluate(() => window.DotnetBrowserEditor.getCode()), latest,
+            "Opening an old draft must wait for an explicit update");
+        const updateChecks = page.getByRole("button", { name: "Обновить проверки", exact: true });
+        const downloadPrevious = page.getByRole("button", { name: "Скачать прежний Program.cs", exact: true });
+        await updateChecks.click();
+        assert.equal(await compiler.evaluate(() => window.DotnetBrowserEditor.getCode()),
+            latest.replace("synthetic Assert failed", "updated Assert diagnostic"),
+            "An explicit update replaces only the checks and keeps the learner's method and imports");
+        assert.equal(await compiler.evaluate(() => document.documentElement.dataset.fixtureRunCount), "0",
+            "Updating checks must not auto-run");
+        const [previousDownload] = await Promise.all([page.waitForEvent("download"), downloadPrevious.click()]);
+        assert.equal(previousDownload.suggestedFilename(), "Program.previous.cs");
+        assert.equal(readFileSync(await previousDownload.path(), "utf8"), latest,
+            "The complete old file can still be exported after the update");
+        await setTemplate(template);
+        assert.ok(await compiler.evaluate(code => window.DotnetBrowserEditor.setCode(code), latest));
+
         await runCurrent.click();
         await waitForOutput(compiler, "synthetic Assert failed");
 
@@ -425,9 +450,9 @@ async function verify() {
             console.log(".NET " + runtime + ": checked Assert output, compiler diagnostics, rerun, and interactive exception output");
             await page.close();
         }
-        await verifyLessonExample(browser, "courses/csharp-dotnet-9-11/lessons/001-params-countby/", "full-program");
-        await verifyLessonExample(browser, "courses/csharp-dotnet-9-11/lessons/002-aggregateby-null-conditional-assignment/", "full-program");
-        await verifyLessonExample(browser, "courses/memory/lessons/001-allocations-copies-retention/", "allocations-copies-retention");
+        for (const lesson of discoverLessons().filter(item => item.browserRuntime)) {
+            await verifyLessonExample(browser, lesson);
+        }
         await verifyDotnetLabLink(browser);
         await verifyLessonCompletion(browser, "courses/csharp-dotnet-9-11/", "lessons/001-params-countby/", "TASK-001");
         await verifyLessonCompletion(browser, "courses/memory/", "lessons/001-allocations-copies-retention/", "ALLOC-TASK-001");

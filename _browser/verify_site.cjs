@@ -4,16 +4,13 @@ const assert = require("node:assert/strict");
 const { readdirSync, statSync } = require("node:fs");
 const { join } = require("node:path");
 const { chromium } = require("playwright");
-const { lessonPaths } = require("./select_lesson_checks.cjs");
+const { courses, discoverLessons } = require("./lesson-sources.cjs");
+const { prepareLesson } = require("./verify_lessons.cjs");
 
 const [baseUrl, siteDirectory, revision] = process.argv.slice(2);
 if (!baseUrl || !siteDirectory) throw Error("Usage: node verify_site.cjs <site-url> <site-directory> [revision]");
 const site = new URL(baseUrl);
-const smokeSources = new Set(Object.values(lessonPaths).flat());
-const courses = [
-    { id: "csharp-dotnet-9-11", collection: "_lessons", taskPrefix: "TASK-" },
-    { id: "memory", collection: "_memory_lessons", taskPrefix: "ALLOC-TASK-" },
-];
+const lessons = discoverLessons();
 
 function verifyLocalFile(target, from) {
     assert.ok(target.pathname.startsWith(site.pathname), "Link points outside the Pages base URL: " + target);
@@ -42,52 +39,51 @@ async function visit(page, url) {
     }
 }
 
-async function verifyLesson(page, course, slug, quiz, number) {
-    const url = new URL(`courses/${course.id}/lessons/${slug}/`, site);
+async function verifyLesson(page, lesson, quiz) {
+    const url = new URL(lesson.route, site);
     await visit(page, url);
     const quizLink = new URL(quiz);
-    quizLink.searchParams.set("through", number);
+    quizLink.searchParams.set("through", lesson.number);
     const links = await page.locator("a[href]").evaluateAll(anchors => anchors.map(anchor => anchor.href));
     assert.ok(links.includes(quizLink.href), `Missing current-course quiz link on ${url}`);
 
+    const sourceBlock = id => page.locator(`pre#${id}, #${id} pre`);
+    const normalize = source => source.replace(/\r\n/g, "\n").trimEnd();
+    assert.equal(normalize(await sourceBlock("practice-program").textContent()), normalize(lesson.practice), `${url}: practice code`);
+    for (const example of lesson.examples) {
+        assert.equal(normalize(await sourceBlock(`snippet-${example.id}`).textContent()), normalize(example.code), `${url}: #snippet-${example.id}`);
+        assert.equal(normalize(await sourceBlock(`output-${example.id}`).textContent()), normalize(example.output), `${url}: #output-${example.id}`);
+    }
+
     const frame = page.locator("#course-compiler");
-    if (!await frame.count()) return;
-    assert.equal(await frame.getAttribute("data-course"), course.id, url.href);
-    assert.equal(await frame.getAttribute("data-lesson"), String(number), url.href);
+    if (!lesson.browserRuntime) {
+        assert.equal(await frame.count(), 0, `${url}: local-only lesson must not load a browser compiler`);
+        return;
+    }
+    assert.equal(await frame.getAttribute("data-course"), lesson.course.id, url.href);
+    assert.equal(await frame.getAttribute("data-lesson"), String(lesson.number), url.href);
     const compilerSource = await frame.getAttribute("data-src") ?? await frame.getAttribute("src");
     assert.ok(compilerSource, `Missing compiler URL on ${url}`);
     const compilerUrl = new URL(compilerSource, url);
     assert.equal(compilerUrl.origin, site.origin, `Compiler must share its origin with ${url}`);
-    assert.match(compilerUrl.pathname, /\/browser-compiler-net\d+\/$/);
+    assert.equal(compilerUrl.pathname, new URL(`browser-compiler-net${lesson.browserRuntime}/`, site).pathname);
     verifyLocalFile(compilerUrl, url);
-    const source = `${course.collection}/${slug}.md`;
-    assert.ok(smokeSources.has(source), `${source} has a browser compiler but no registered C# checks`);
 
-    const task = course.taskPrefix + String(number).padStart(3, "0");
+    const task = lesson.taskId;
     assert.equal(await page.locator(`#solution-${task}`).count(), 1, `Missing starter for ${task}`);
-    const program = await page.locator("#practice-program-template").textContent();
-    for (const required of [`// BEGIN ${task}`, "// INSERT_SOLUTION_HERE", `// END ${task}`, "void Assert("]) {
-        assert.ok(program.includes(required), `${task}: expected ${required}`);
-    }
     assert.equal(await page.locator("#page-editor-run").count(), 1, `Missing Run button for ${task}`);
 
     const exampleIds = await page.locator(".snippet-actions button[data-example-id]")
         .evaluateAll(buttons => buttons.map(button => button.dataset.exampleId));
-    const { adapterIds, authoredIds } = await page.evaluate(() => {
+    const runnable = await page.evaluate(ids => ids.map(id => {
+        const block = document.querySelector(`pre#snippet-${id}, #snippet-${id} pre`);
         const adapter = window.DotnetLessonSnippets;
-        const blocks = [...document.querySelectorAll(".prose pre")]
-            .filter(block => block.closest("[data-snippet]"));
-        const authoredIds = blocks.map(block => {
-            const id = block.closest("[data-snippet]").dataset.snippet;
-            if (adapter) adapter.makeRunnable(block.textContent, id);
-            return id;
-        });
-        return { adapterIds: adapter?.snippetIds ?? [], authoredIds };
-    });
-    assert.ok(adapterIds.length, `${task}: no browser adapter`);
-    assert.deepEqual([...authoredIds].sort(), [...adapterIds].sort(), `${task}: rendered example IDs differ from the adapter`);
-    assert.deepEqual([...exampleIds].sort(), [...adapterIds].sort(), `${task}: runnable example IDs differ from the adapter`);
-    assert.ok(exampleIds.includes(await frame.getAttribute("data-start-snippet")), `${task}: invalid starting example`);
+        return adapter?.snippetIds?.includes(id) ? adapter.makeRunnable(block.textContent, id) : block.textContent;
+    }), lesson.examples.map(example => example.id));
+    assert.deepEqual(runnable.map(normalize), prepareLesson(lesson).examples.map(example => normalize(example.code)),
+        `${task}: browser and native example code diverged`);
+    assert.deepEqual(exampleIds.sort(), lesson.examples.map(example => example.id).sort(), `${task}: runnable example buttons`);
+    assert.equal(await frame.getAttribute("data-start-snippet"), lesson.startSnippet, `${task}: invalid starting example`);
 }
 
 async function verifyCourse(page, course) {
@@ -95,16 +91,15 @@ async function verifyCourse(page, course) {
     const quiz = new URL("quiz/", courseUrl);
     const lessonDirectory = join(siteDirectory, "courses", course.id, "lessons");
     const slugs = readdirSync(lessonDirectory, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name);
+    const courseLessons = lessons.filter(lesson => lesson.course.id === course.id);
+    assert.deepEqual(slugs.sort(), courseLessons.map(lesson => lesson.slug).sort(), `Unexpected built lessons for ${course.id}`);
     assert.ok(slugs.length, `No built lessons for ${course.id}`);
-    const numbers = slugs.map(slug => {
-        assert.match(slug, /^\d{3}-[a-z0-9-]+$/, `Unexpected lesson route in ${course.id}`);
-        return Number(slug.slice(0, 3));
-    });
+    const numbers = courseLessons.map(lesson => lesson.number);
     assert.equal(new Set(numbers).size, numbers.length, `Duplicate lesson number in ${course.id}`);
 
     await visit(page, courseUrl);
     const cardLinks = await page.locator("a.lesson-card").evaluateAll(cards => cards.map(card => card.href));
-    assert.deepEqual(cardLinks.sort(), slugs.map(slug => new URL(`lessons/${slug}/`, courseUrl).href).sort(), course.id);
+    assert.deepEqual(cardLinks.sort(), courseLessons.map(lesson => new URL(lesson.route, site).href).sort(), course.id);
 
     await visit(page, quiz);
     const quizRoot = page.locator("#quiz-root");
@@ -122,7 +117,7 @@ async function verifyCourse(page, course) {
     }
     assert.deepEqual([...new Set(bank.map(question => question.lesson_number))].sort(), [...numbers].sort());
 
-    for (const [index, slug] of slugs.entries()) await verifyLesson(page, course, slug, quiz, numbers[index]);
+    for (const lesson of courseLessons) await verifyLesson(page, lesson, quiz);
 }
 
 async function verify() {

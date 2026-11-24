@@ -7,8 +7,8 @@ topic_id: 'ALLOC-001'
 csharp_feature: 'C# · значения и ссылки'
 dotnet_feature: '.NET · память и GC'
 series: 'Модель памяти и измерения'
+code_framework: net10.0
 browser_runtime: '10'
-browser_snippets: browser-snippets-memory001.js
 browser_start_snippet: allocations-copies-retention
 ---
 > **30 минут максимум.** Объяснение и пример — 8 минут, самостоятельная задача — 12 минут, проверка и повторение — около 10 минут. Пока не нужно оптимизировать весь код.
@@ -102,7 +102,7 @@ internal struct Order
     }
 }
 ~~~
-{: #snippet-allocations-copies-retention data-snippet="allocations-copies-retention" }
+{: #snippet-allocations-copies-retention }
 
 Суммы разбираются и выводятся с [десятичной точкой инвариантной культуры](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/Globalization/CultureData.cs#L583-L590). В выводе `F2` [задаёт две цифры после десятичного разделителя](https://learn.microsoft.com/en-us/dotnet/standard/base-types/standard-numeric-format-strings#fixed-point-format-specifier-f).
 
@@ -113,7 +113,7 @@ Paid orders: 2
 First amount: 1499.90
 After copy change: 1499.90
 ~~~
-{: data-output-for="allocations-copies-retention" }
+{: #output-allocations-copies-retention }
 
 ## Разберём три разных затраты
 
@@ -167,9 +167,9 @@ ORD-1046;PAID;30.00
 
 <details><summary>Необязательная подсказка</summary><p>Достаточно двух локальных переменных: счётчика и суммы. Для каждой строки проверь длину массива полей, статус и результат TryParse. Подумай, какие данные после обработки не нужно сохранять.</p></details>
 
-**Проверка решения.** Открой полный `Program.cs` в браузерном редакторе кнопкой «Открыть заготовку». Если черновик уже сохранён, кнопка называется «Открыть черновик». Видимые `Assert` проверяют результат для обычного, пустого и пограничного ввода, а также один проход по входным строкам. Отсутствие промежуточной коллекции проверяется при ревью кода.
+В `Program.cs` проверки `Assert` охватывают обычный, пустой и пограничный ввод, а также проверяют один проход по входным строкам. Отсутствие промежуточной коллекции проверяется при ревью кода.
 
-<script type="text/plain" id="practice-program-template">
+~~~csharp
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -177,7 +177,19 @@ using System.Globalization;
 public static class Program
 {
     // BEGIN ALLOC-TASK-001
-    // INSERT_SOLUTION_HERE
+    static (int PaidCount, decimal Total) SummarizePaid(
+        IEnumerable<string> rows)
+    {
+        // Реализуй SummarizePaid для строк формата "ID;status;amount".
+        // За один проход посчитай записи со статусом "paid" с учётом регистра
+        // и сложи их поля amount. Верни (PaidCount, Total).
+        // Разбирай суммы через decimal.TryParse с NumberStyles.Number
+        // и CultureInfo.InvariantCulture.
+        // Пропускай строки с неверным числом полей или нечисловой суммой.
+        // Разобранные записи не сохраняй в коллекции.
+
+        throw new NotImplementedException();
+    }
     // END ALLOC-TASK-001
 
     public static void Main()
@@ -243,24 +255,12 @@ public static class Program
         if (!condition) throw new InvalidOperationException("❌ ALLOC-TASK-001: " + failureMessage);
     }
 }
+~~~
+{: #practice-program }
+
+<script type="text/plain" id="practice-wrong-body">
+return (0, 0m);
 </script>
-
-<label for="solution-ALLOC-TASK-001" class="editor-label">Заготовка задания</label>
-<textarea id="solution-ALLOC-TASK-001" class="code-editor" readonly spellcheck="false" rows="12">static (int PaidCount, decimal Total) SummarizePaid(
-    IEnumerable&lt;string&gt; rows)
-{
-    // Реализуй SummarizePaid для строк формата "ID;status;amount".
-    // За один проход посчитай записи со статусом "paid" с учётом регистра
-    // и сложи их поля amount. Верни (PaidCount, Total).
-    // Разбирай суммы через decimal.TryParse с NumberStyles.Number
-    // и CultureInfo.InvariantCulture.
-    // Пропускай строки с неверным числом полей или нечисловой суммой.
-    // Разобранные записи не сохраняй в коллекции.
-
-    throw new NotImplementedException();
-}</textarea>
-<div class="practice-actions" data-practice-actions="ALLOC-TASK-001"><span class="practice-feedback" role="status"></span></div>
-<p class="muted">Кнопка открывает код в редакторе без запуска. Напиши решение в редакторе и нажми «Запустить текущий код». При переходе к примеру черновик сохраняется в этом браузере. После успешного запуска с исходными проверками твой код появится в блоке «Последнее успешное решение».</p>
 
 ## Что запомнить
 

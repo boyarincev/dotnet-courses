@@ -6,21 +6,18 @@
   "use strict";
 
   const normalize = value => value.replace(/\r\n?/g, "\n");
-  const solutionMarker = "// INSERT_SOLUTION_HERE";
   const practiceImportPattern = /^(?:global\s+)?using\s+(?:(?:unsafe\s+)?@?[_\p{ID_Start}]\p{ID_Continue}*\s*=\s*[^;{}]+|(?:static\s+)?(?:global::)?[\w.@\p{L}]+(?:\s*<[^;{}]+>)?)\s*;/u;
   const preambleCommentPattern = /^(?:\/\/[^\n]*|\/\*[\s\S]*?\*\/)/;
 
   // Only assembles visible C# from the lesson with the student's method.
-  // All Assert checks are plain C# in each lesson's practice-program-template.
+  // All Assert checks come from the lesson's practice program.
   function buildTaskProgram(template, source, taskId) {
-    const text = String(template).trim();
-    const value = normalize(String(source));
-    if (text.split(solutionMarker).length !== 2 ||
-        !text.includes("// BEGIN " + taskId) ||
-        !text.includes("// END " + taskId)) {
+    const text = normalize(String(template)).trim();
+    const shape = splitTaskProgram(text, taskId);
+    if (!shape) {
       throw Error("Проверочный C#-пример урока отсутствует или повреждён.");
     }
-    const {entries, body: method} = splitPracticeSource(value);
+    const {entries, body: method} = splitPracticeSource(String(source));
     const knownImports = new Set(splitPracticeSource(text).entries.map(entry => entry.key).filter(Boolean));
     const extraImports = [];
     for (const entry of entries) {
@@ -28,10 +25,10 @@
       extraImports.push(entry.text);
       if (entry.key) knownImports.add(entry.key);
     }
-    const body = method.trim();
-    if (!body) throw Error("В задании нет стартового метода.");
+    const body = method.replace(/^\n+/, "").trimEnd();
+    if (!body.trim()) throw Error("В задании нет стартового метода.");
     return (extraImports.length ? extraImports.join("\n") + "\n" : "") +
-      text.replace(solutionMarker, () => body) + "\n";
+      shape.before + "\n" + body + "\n" + shape.after + "\n";
   }
 
   function splitPracticeSource(value) {
@@ -55,32 +52,37 @@
     return splitPracticeSource(value).body.split("\n").map(line => line.trim()).filter(Boolean).join("\n");
   }
 
+  function splitTaskProgram(source, taskId) {
+    const lines = source.split("\n");
+    const start = lines.findIndex(line => line.trim() === "// BEGIN " + taskId);
+    const end = lines.findLastIndex(line => line.trim() === "// END " + taskId);
+    if (start < 0 || end <= start) return null;
+    return {
+      before: lines.slice(0, start + 1).join("\n"),
+      method: lines.slice(start + 1, end).join("\n"),
+      after: lines.slice(end).join("\n")
+    };
+  }
+
   function extractTaskSource(source, taskId) {
     const {preamble, body} = splitPracticeSource(source);
-    const bodyLines = body.split("\n");
-    const start = bodyLines.findIndex(line => line.trim() === "// BEGIN " + taskId);
-    const end = bodyLines.findLastIndex(line => line.trim() === "// END " + taskId);
-    if (start < 0 || end <= start) return null;
-    const method = bodyLines.slice(start + 1, end).join("\n");
-    if (!method.trim()) return null;
-    return (preamble ? preamble + "\n\n" : "") + method + "\n";
+    const parts = splitTaskProgram(body, taskId);
+    if (!parts?.method.trim()) return null;
+    return (preamble ? preamble + "\n\n" : "") + parts.method + "\n";
   }
 
   function matchesPracticeSource(template, source, taskId) {
-    const [before, after, ...extra] = template.split("\n" + solutionMarker + "\n");
-    if (!after || extra.length || !before.endsWith("// BEGIN " + taskId) ||
-        !after.startsWith("// END " + taskId + "\n")) return false;
-
-    const start = before + "\n";
-    const end = "\n" + after;
-    return source.startsWith(start) && source.endsWith(end) && source.length > start.length + end.length;
+    const original = splitTaskProgram(practiceSource(template), taskId);
+    const current = splitTaskProgram(practiceSource(source), taskId);
+    return !!original && !!current?.method &&
+      original.before === current.before && original.after === current.after;
   }
 
   function isSuccessfulPracticeRun(template, source, output, taskId) {
     if (typeof template !== "string" || typeof source !== "string" || typeof output !== "string") return false;
     if (normalize(output).trimEnd().split("\n").at(-1) !== "Все проверки пройдены") return false;
 
-    return matchesPracticeSource(practiceSource(template), practiceSource(source), taskId);
+    return matchesPracticeSource(template, source, taskId);
   }
 
   if (typeof module === "object" && module.exports) module.exports = {buildTaskProgram, extractTaskSource, isSuccessfulPracticeRun};
@@ -90,7 +92,6 @@
   const lesson = Number(frame.dataset.lesson);
   const course = frame.dataset.course;
   const taskId = (course === "memory" ? "ALLOC-TASK-" : "TASK-") + String(lesson).padStart(3, "0");
-  const task = document.getElementById("solution-" + taskId);
   const practiceDraftKey = "dotnet-courses:practice-draft:" + course + ":" + lesson;
   let lastLoadedCode = null;
   let practiceButton = null;
@@ -141,7 +142,7 @@
     }
   }
 
-  function send(button, prepareCode, run = true) {
+  function send(button, prepareCode, {run = true, replaceConfirmed = false} = {}) {
     const api = bridge();
     if (!api) {
       show(button, "Компилятор ещё загружается. Повтори после появления редактора.");
@@ -160,9 +161,10 @@
       show(button, error.message);
       return;
     }
+    if (code === null) return;
     let savedPractice = false;
     if (code !== current) {
-      if (current.trim() && current !== lastLoadedCode && !api.isInitialCode?.() &&
+      if (!replaceConfirmed && current.trim() && current !== lastLoadedCode && !api.isInitialCode?.() &&
           !window.confirm("Заменить текущий код в редакторе? Чтобы сохранить весь файл отдельно, сначала скопируй или скачай Program.cs.")) {
         show(button, "Текущий код оставлен в редакторе.");
         return;
@@ -189,7 +191,7 @@
     if (!run) {
       api.focus?.();
       show(button, "Код задания открыт в редакторе. Для проверки нажми «Запустить текущий код».");
-      return;
+      return true;
     }
     show(button, savedPractice ? "Черновик задания сохранён. Результат примера появится в консоли." : "Результат появится в консоли редактора.");
     if (code === current) {
@@ -206,18 +208,108 @@
     }, 170);
   }
 
+  const codeBlock = block => block?.matches("pre") ? block : block?.querySelector("pre");
+
+  function createPracticeArea() {
+    const block = document.getElementById("practice-program");
+    const template = codeBlock(block);
+    if (!template) return null;
+    const parts = splitTaskProgram(normalize(template.textContent), taskId);
+    if (!parts?.method.trim()) {
+      const error = document.createElement("p");
+      error.setAttribute("role", "status");
+      error.textContent = "Не удалось открыть заготовку. Скачай программу из блока кода или скопируй её для локального запуска.";
+      block.insertAdjacentElement("afterend", error);
+      return null;
+    }
+
+    const field = document.createElement("textarea");
+    field.id = "solution-" + taskId;
+    field.className = "code-editor";
+    field.readOnly = true;
+    field.spellcheck = false;
+    field.defaultValue = parts.method.trimEnd();
+    field.rows = Math.min(14, Math.max(5, field.defaultValue.split("\n").length));
+
+    const label = document.createElement("label");
+    label.htmlFor = field.id;
+    label.className = "editor-label";
+    label.textContent = "Заготовка задания";
+
+    const actions = document.createElement("div");
+    actions.className = "practice-actions";
+    actions.dataset.practiceActions = taskId;
+    const feedback = document.createElement("span");
+    feedback.className = "practice-feedback";
+    feedback.setAttribute("role", "status");
+    actions.append(feedback);
+
+    const area = document.createElement("div");
+    area.append(label, field, actions);
+    const renderedBlock = block.closest(".code-wrap") ?? block;
+    renderedBlock.insertAdjacentElement("afterend", area);
+    renderedBlock.hidden = true;
+    return {template, field, actions};
+  }
+
   function addTaskButtons() {
-    if (!task) return;
-    const templateElement = document.getElementById("practice-program-template");
     const completion = document.getElementById("lesson-completion-status");
-    const actions = document.querySelector('[data-practice-actions="' + taskId + '"]');
-    if (!templateElement || !completion || !actions) return;
+    if (!completion) return;
+    const starter = createPracticeArea();
+    if (!starter) return;
+    const {template: templateElement, field: task, actions} = starter;
 
     const open = document.createElement("button");
     open.type = "button"; open.className = "button primary";
     practiceButton = open;
     refreshPracticeButton();
     actions.append(open);
+
+    const migration = document.createElement("div");
+    migration.hidden = true;
+    const migrationActions = document.createElement("div");
+    migrationActions.className = "practice-actions";
+    const migrationNote = document.createElement("span");
+    migrationNote.className = "practice-feedback";
+    migrationNote.setAttribute("role", "status");
+    const updateChecks = document.createElement("button");
+    updateChecks.type = "button";
+    updateChecks.className = "button";
+    updateChecks.textContent = "Обновить проверки";
+    const downloadPrevious = document.createElement("button");
+    downloadPrevious.type = "button";
+    downloadPrevious.className = "button";
+    downloadPrevious.textContent = "Скачать прежний Program.cs";
+    migrationActions.append(updateChecks, downloadPrevious, migrationNote);
+    migration.append(migrationActions);
+    actions.insertAdjacentElement("afterend", migration);
+
+    let previousProgram = null;
+    downloadPrevious.addEventListener("click", () => {
+      const current = bridge()?.getCode();
+      if (current && extractTaskSource(current, taskId) &&
+          !matchesPracticeSource(templateElement.textContent, current, taskId)) previousProgram = current;
+      if (previousProgram) {
+        window.DotnetLearning.download("Program.previous.cs", previousProgram);
+        show(downloadPrevious, "Прежний файл сохранён в Program.previous.cs.");
+      }
+    });
+    updateChecks.addEventListener("click", () => {
+      if (send(updateChecks, current => {
+        const currentMethod = extractTaskSource(current, taskId);
+        if (!currentMethod) {
+          show(updateChecks, "Открой черновик задания, чтобы обновить проверки.");
+          return null;
+        }
+        const template = templateElement.textContent;
+        if (matchesPracticeSource(template, current, taskId)) return current;
+        previousProgram = current;
+        return buildTaskProgram(template, currentMethod, taskId);
+      }, {run: false, replaceConfirmed: true})) {
+        updateChecks.remove();
+        show(downloadPrevious, "Актуальные проверки загружены. Запусти текущий код для проверки.");
+      }
+    });
 
     const verifiedKey = "dotnet-courses:practice-verified:" + course + ":" + lesson;
     const verifiedSection = document.createElement("section");
@@ -259,7 +351,7 @@
     });
     verifiedActions.append(copy, download, note);
     verifiedSection.append(label, verifiedField, verifiedActions);
-    actions.insertAdjacentElement("afterend", verifiedSection);
+    migration.insertAdjacentElement("afterend", verifiedSection);
 
     function showVerified(source, message) {
       verifiedField.value = source;
@@ -276,10 +368,17 @@
 
     open.addEventListener("click", () => {
       send(open, current => {
-        if (extractTaskSource(current, taskId)) return current;
+        if (extractTaskSource(current, taskId)) {
+          if (matchesPracticeSource(templateElement.textContent, current, taskId)) return current;
+          previousProgram = current;
+          migrationActions.prepend(updateChecks);
+          migration.hidden = false;
+          show(updateChecks, "Проверки в открытом файле отличаются от версии урока. При обновлении сохранятся метод и директивы using.");
+          return null;
+        }
         const source = readPracticeDraft() ?? task.defaultValue;
         return buildTaskProgram(templateElement.textContent, source, taskId);
-      }, false);
+      }, {run: false});
     });
 
     window.addEventListener("storage", event => {
@@ -311,25 +410,17 @@
   }
 
   function addCodeButtons() {
-    const blocks = [...document.querySelectorAll(".prose pre")].filter(pre =>
-      pre.closest(".language-csharp") || pre.querySelector("code.language-csharp")
-    );
-    const marked = blocks.map(pre => ({pre, id: pre.closest("[data-snippet]")?.dataset.snippet}))
-      .filter(({id}) => id !== undefined);
-    const examples = marked.length ? marked : blocks.map((pre, index) => ({
-      pre, id: provider?.snippetIds?.[index] ?? index
-    }));
-    if (!provider && !marked.length) return null;
-    const ids = examples.map(example => example.id);
-    const duplicates = new Set(ids.filter((id, index) => ids.indexOf(id) !== index));
+    const startId = frame.dataset.startSnippet;
+    const prefix = "snippet-";
+    const examples = [...document.querySelectorAll('.prose [id^="snippet-"]')]
+      .map(block => ({pre: codeBlock(block), id: block.id.slice(prefix.length)}))
+      .filter(example => example.pre);
     function prepare({pre, id}) {
-      if (!provider) throw Error("Не загрузился адаптер примеров этого урока.");
-      if (!marked.length && blocks.length !== provider.exampleCount) {
-        throw Error("Количество блоков C# не совпадает с адаптером урока.");
+      if (provider?.snippetIds.includes(id)) return provider.makeRunnable(pre.textContent, id);
+      if (!provider && frame.dataset.snippetAdapter && id !== startId) {
+        throw Error("Не загрузился адаптер примеров этого урока.");
       }
-      if (duplicates.has(id)) throw Error("Идентификатор примера повторяется: " + id + ".");
-      if (marked.length && !provider.snippetIds?.includes(id)) throw Error("Для примера " + id + " нет адаптера.");
-      return provider.makeRunnable(pre.textContent, id);
+      return pre.textContent;
     }
     examples.forEach((example, i) => {
       const holder = example.pre.closest(".code-wrap") || example.pre;
@@ -338,7 +429,7 @@
       const button=document.createElement("button");
       button.type="button";button.className="button";
       button.dataset.exampleId = example.id;
-      const label = example.id === "task-signature" ? "Проверить сигнатуру в компиляторе" : "Запустить этот пример";
+      const label = "Запустить этот пример";
       button.textContent = "▶ " + label;
       button.setAttribute("aria-label", label + " · C#-пример №" + (i + 1));
       const feedback=document.createElement("span");
@@ -352,7 +443,6 @@
         send(button, () => source);
       });
     });
-    const startId = frame.dataset.startSnippet;
     if (!startId) return null;
     return () => {
       const initialExample = examples.find(example => example.id === startId);

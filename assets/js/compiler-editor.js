@@ -26,6 +26,8 @@
   // The iframe URL carries a stable course + lesson identity. Keep authored
   // drafts separate across lessons and courses, without server-side storage.
   const pageParams = new URLSearchParams(location.search);
+  const hasLessonContext = pageParams.has("course") && pageParams.has("lesson");
+  const embeddedLesson = hasLessonContext && window.parent !== window;
   const courseId = pageParams.get("course") || "standalone";
   const lessonId = pageParams.get("lesson") || "0";
   const storageKey = "dotnet-courses:compiler-draft:" + courseId + ":" + lessonId;
@@ -163,9 +165,14 @@
   function ensure() {
     // Lessons edit a complete Program.cs. The upstream simplified view rebuilds
     // the source from Main and can discard using directives and helper methods.
-    if (pageParams.has("course") && pageParams.has("lesson")) {
+    if (hasLessonContext) {
       const codeViewToggle = document.getElementById("code-view-desc")?.closest(".toggle-container");
       if (codeViewToggle) codeViewToggle.style.display = "none";
+    }
+    // Opening a lesson example must go through the draft-preserving parent controls.
+    if (embeddedLesson) {
+      const sampleButton = document.querySelector('button[aria-describedby="sample-code-desc"]');
+      if (sampleButton) sampleButton.style.display = "none";
     }
     const textarea = document.getElementById("code-editor");
     if (!textarea) return;
@@ -175,6 +182,10 @@
     }
     initialCode ??= textarea.value;
     original = textarea;
+    if (embeddedLesson) {
+      const instructions = document.getElementById("editor-instructions");
+      if (instructions) instructions.textContent = "Редактируй полный файл Program.cs. Ctrl+Enter запускает текущий код.";
+    }
     instance = cmReady() ? window.CodeMirror.fromTextArea(textarea, {
       mode: "text/x-csharp",
       lineNumbers: true,
@@ -204,6 +215,11 @@
       textarea.closest(".editor-container")?.classList.add("enhanced-csharp-editor");
     } else {
       textarea.addEventListener("input", () => saveDraft(textarea.value));
+      if (embeddedLesson) {
+        textarea.addEventListener("keydown", event => {
+          if (event.ctrlKey && event.key.toLowerCase() === "l") event.stopPropagation();
+        });
+      }
     }
     installRunButton();
     try {

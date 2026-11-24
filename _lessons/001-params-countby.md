@@ -6,12 +6,11 @@ summary: 'Принимаем произвольное число аргумен�
 csharp_feature: 'C# 13 · params collections'
 dotnet_feature: '.NET 9 · CountBy'
 series: 'Коллекции и LINQ'
+code_framework: net9.0
 browser_runtime: '9'
 browser_snippets: browser-snippets.js
 browser_start_snippet: full-program
 ---
-> **Браузерный запуск включён.** Под каждым C#-примером доступна кнопка запуска, а ниже находится общий редактор с Roslyn.
-
 ## Зачем это нужно
 Посчитаем, сколько раз встречается каждый HTTP-метод в учебной выгрузке. Метки `GET` и `get` здесь считаем одной категорией.
 
@@ -21,7 +20,15 @@ browser_start_snippet: full-program
 static int Sum(params int[] numbers) => numbers.Sum();
 Console.WriteLine(Sum(10, 20, 30)); // 60. Три числа образуют один массив numbers.
 ```
-{: #snippet-params-array data-snippet="params-array" }
+{: #snippet-params-array }
+
+Вывод
+
+~~~text
+60
+~~~
+{: #output-params-array }
+
 В C# 13 появились [коллекции `params`](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-13#params-collections), например `ReadOnlySpan<T>`, `Span<T>`, `IEnumerable<T>` или `List<T>`. При [развёрнутом вызове](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/classes#15624-parameter-collections) компилятор собирает отдельные элементы в одну коллекцию. Можно также передать готовую коллекцию подходящего типа.
 ```csharp
 static int Sum(params ReadOnlySpan<int> values)
@@ -32,7 +39,15 @@ static int Sum(params ReadOnlySpan<int> values)
 }
 Console.WriteLine(Sum(10, 20, 30)); // 60. Три числа образуют один ReadOnlySpan<int>.
 ```
-{: #snippet-params-span data-snippet="params-span" }
+{: #snippet-params-span }
+
+Вывод
+
+~~~text
+60
+~~~
+{: #output-params-span }
+
 Для вызова `Sum(10, 20, 30)` с `ReadOnlySpan<int>` компилятор из .NET 9 SDK [сохраняет константы в данных сборки](https://github.com/dotnet/roslyn/blob/f3348c2a2be16ec6525cb3df7be12952c3e2de9d/src/Compilers/CSharp/Portable/CodeGen/EmitArrayInitializer.cs#L606-L623). На .NET 9 x64 `ReadOnlySpan<int>` [ссылается на эти данные](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Private.CoreLib/src/System/Runtime/CompilerServices/RuntimeHelpers.cs#L148-L149), поэтому вызов обходится без выделения массива для аргументов. Элементы удобно обработать сразу в `foreach`. Сам параметр [нельзя захватить в лямбде](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/ref-struct).
 
 Заголовок можно передать отдельным аргументом, а метки собрать в `IEnumerable<string>`.
@@ -46,15 +61,32 @@ static void Analyze(string title, params IEnumerable<string> methods)
     Console.WriteLine($"{title}: {methods.Count()}");
 }
 ```
-{: #snippet-params-enumerable data-snippet="params-enumerable" }
+{: #snippet-params-enumerable }
+
+Вывод
+
+~~~text
+HTTP: 3
+~~~
+{: #output-params-enumerable }
 
 ## 2. .NET 9: `Enumerable.CountBy()`
-[`GroupBy`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.groupby?view=net-9.0) собирает строки с одинаковым ключом. Из каждой группы `Select` берёт ключ и число элементов.
+[`GroupBy`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.groupby?view=net-9.0) собирает строки с одинаковым ключом. Из каждой группы `Select` берёт ключ и число элементов. Во всех трёх коротких примерах `methods` содержит `["GET", "POST", "GET", "get"]`.
 ```csharp
 var counts = methods.GroupBy(keySelector: method => method)
     .Select(group => new { Method = group.Key, Count = group.Count() });
 ```
-{: #snippet-groupby-count data-snippet="groupby-count" }
+{: #snippet-groupby-count }
+
+Вывод
+
+~~~text
+GET: 2
+POST: 1
+get: 1
+~~~
+{: #output-groupby-count }
+
 Если нужны **только счётчики**, [`CountBy` в .NET 9](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-9/libraries#linq) вычисляет их без промежуточных групп строк.
 ```csharp
 var counts = methods.CountBy(
@@ -63,7 +95,17 @@ var counts = methods.CountBy(
 foreach (var (method, count) in counts)
     Console.WriteLine($"{method}: {count}");
 ```
-{: #snippet-countby data-snippet="countby" }
+{: #snippet-countby }
+
+Вывод
+
+~~~text
+GET: 2
+POST: 1
+get: 1
+~~~
+{: #output-countby }
+
 Вызов возвращает [`IEnumerable<KeyValuePair<TKey, int>>`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.countby?view=net-9.0#returns). Каждый элемент — пара из ключа и количества его вхождений. В .NET 9 [подсчёт начинается при перечислении](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/src/System/Linq/CountBy.cs#L27-L62). Перед выдачей первой пары `CountBy` читает весь источник и накапливает счётчики по ключам.
 
 При сравнении строк по умолчанию `"GET"` и `"get"` дают два ключа ([тесты `CountBy` в .NET 9](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/tests/CountByTests.cs#L93-L113)). Для нашей выгрузки передадим [`StringComparer.OrdinalIgnoreCase`](https://learn.microsoft.com/en-us/dotnet/api/system.stringcomparer.ordinalignorecase?view=net-9.0), который сравнивает метки без учёта регистра.
@@ -73,7 +115,16 @@ var counts = methods.CountBy(
     // "GET" и "get" учитываются в одном счётчике.
     keyComparer: StringComparer.OrdinalIgnoreCase);
 ```
-{: #snippet-countby-comparer data-snippet="countby-comparer" }
+{: #snippet-countby-comparer }
+
+Вывод
+
+~~~text
+GET: 3
+POST: 1
+~~~
+{: #output-countby-comparer }
+
 Используй `GroupBy`, когда нужно обработать записи внутри каждой группы, например вывести все записи для отдельного метода.
 
 ## 3. Полностью запускаемый пример
@@ -90,28 +141,35 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-// Первый аргумент — заголовок, остальные образуют коллекцию HTTP-методов.
-PrintCounts("HTTP methods", "GET", "POST", "get", "PUT", "post", "GET");
-Console.WriteLine($"Sum = {Sum(10, 20, 30)}");
-
-static void PrintCounts(string title, params IEnumerable<string> values)
+public static class Program
 {
-    Console.WriteLine(title);
-    var counts = values
-        .CountBy(keySelector: method => method, keyComparer: StringComparer.OrdinalIgnoreCase)
-        .OrderByDescending(keySelector: pair => pair.Value);
-    foreach (var (method, count) in counts)
-        Console.WriteLine($"{method}: {count}");
-}
+    public static void Main()
+    {
+        // Первый аргумент — заголовок, остальные образуют коллекцию HTTP-методов.
+        PrintCounts("HTTP methods", "GET", "POST", "get", "PUT", "post", "GET");
+        Console.WriteLine($"Sum = {Sum(10, 20, 30)}");
+    }
 
-static int Sum(params ReadOnlySpan<int> values)
-{
-    int total = 0;
-    foreach (int value in values) total += value;
-    return total;
+    private static void PrintCounts(string title, params IEnumerable<string> values)
+    {
+        Console.WriteLine(title);
+        var counts = values
+            .CountBy(keySelector: method => method, keyComparer: StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(keySelector: pair => pair.Value);
+        foreach (var (method, count) in counts)
+            Console.WriteLine($"{method}: {count}");
+    }
+
+    private static int Sum(params ReadOnlySpan<int> values)
+    {
+        int total = 0;
+        foreach (int value in values)
+            total += value;
+        return total;
+    }
 }
 ```
-{: #snippet-full-program data-snippet="full-program" }
+{: #snippet-full-program }
 Запусти проект.
 ```bash
 dotnet run
@@ -124,7 +182,7 @@ POST: 2
 PUT: 1
 Sum = 60
 ```
-{: data-output-for="full-program" }
+{: #output-full-program }
 
 ## 4. Напиши код сам · TASK-001 {#lesson-task}
 **Условие.** Реализуй `GetTopMethods`. Метод принимает последовательность меток из той же выгрузки и возвращает до трёх пар `(Method, Count)`. `Count` — число вхождений метки с учётом правила сравнения.
@@ -139,9 +197,7 @@ Sum = 60
 
 <details><summary>Необязательная подсказка</summary><p>После CountBy подумай о двух ключах сортировки и Take(3).</p></details>
 
-**Проверка решения:** открой `Program.cs` кнопкой «Открыть заготовку». Если черновик уже сохранён, кнопка называется «Открыть черновик». В файле есть метод, тестовые данные и видимые C#-проверки `Assert` на обычный, пустой и пограничный ввод. При ошибке в выводе будет указано нарушенное условие.
-
-<script type="text/plain" id="practice-program-template">
+~~~csharp
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -149,7 +205,17 @@ using System.Linq;
 public static class Program
 {
     // BEGIN TASK-001
-    // INSERT_SOLUTION_HERE
+    static IEnumerable<(string Method, int Count)> GetTopMethods(
+        IEnumerable<string> methods)
+    {
+        // Вход — последовательность меток HTTP-методов из выгрузки.
+        // Используй CountBy с StringComparer.OrdinalIgnoreCase для подсчёта вхождений.
+        // Верни до трёх пар (Method, Count) по убыванию Count.
+        // При равных Count сортируй Method по возрастанию с StringComparer.OrdinalIgnoreCase.
+        // Регистр имён произвольный. Пустой вход даёт пустой результат.
+
+        throw new NotImplementedException();
+    }
     // END TASK-001
 
     public static void Main()
@@ -194,26 +260,12 @@ public static class Program
         if (!condition) throw new InvalidOperationException("❌ TASK-001: " + failureMessage);
     }
 }
+~~~
+{: #practice-program }
+
+<script type="text/plain" id="practice-wrong-body">
+return Array.Empty<(string, int)>();
 </script>
-
-<label for="solution-TASK-001" class="editor-label">Заготовка задания</label>
-<textarea id="solution-TASK-001" class="code-editor" readonly spellcheck="false" rows="12">using System;
-using System.Collections.Generic;
-using System.Linq;
-
-static IEnumerable&lt;(string Method, int Count)&gt; GetTopMethods(
-    IEnumerable&lt;string&gt; methods)
-{
-    // Вход — последовательность меток HTTP-методов из выгрузки.
-    // Используй CountBy с StringComparer.OrdinalIgnoreCase для подсчёта вхождений.
-    // Верни до трёх пар (Method, Count) по убыванию Count.
-    // При равных Count сортируй Method по возрастанию с StringComparer.OrdinalIgnoreCase.
-    // Регистр имён произвольный. Пустой вход даёт пустой результат.
-
-    throw new NotImplementedException();
-}</textarea>
-<div class="practice-actions" data-practice-actions="TASK-001"><span class="practice-feedback" role="status"></span></div>
-<p class="muted">Кнопка открывает код в редакторе без запуска. Напиши решение в редакторе и нажми «Запустить текущий код». При переходе к примеру черновик сохраняется в этом браузере. После успешного запуска с исходными проверками твой код появится в блоке «Последнее успешное решение».</p>
 
 ## 5. Что запомнить
 - C# 13 `params` может принимать коллекционные типы помимо массива, в том числе `ReadOnlySpan<T>`.

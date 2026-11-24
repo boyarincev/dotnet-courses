@@ -6,6 +6,7 @@ summary: 'Сохраняем поиск по ключу и добавляем д
 csharp_feature: 'C# 15 · расширяющие индексаторы'
 dotnet_feature: '.NET 9 · OrderedDictionary.GetAt'
 series: 'Коллекции и LINQ'
+code_framework: net11.0
 ---
 
 > **Практика локально.** Для примеров и задания понадобится SDK .NET 11 (версия 11.0.100 или новее). Проект с `net11.0` по умолчанию использует C# 15.
@@ -37,7 +38,6 @@ cd ServiceBoard
 
 Замени содержимое `Program.cs` программой ниже и выполни `dotnet run`.
 
-<!-- lesson-demo -->
 ```csharp
 using System;
 using System.Collections.Generic;
@@ -63,16 +63,17 @@ public static class ServiceBoardExtensions
     }
 }
 ```
+{: #snippet-full-program }
 
 Ожидаемый вывод:
 
-<!-- lesson-output -->
 ```text
 Ошибки gateway: 5
 Первая строка: worker = 2
 ```
+{: #output-full-program }
 
-## Напиши код сам · TASK-003
+## Напиши код сам · TASK-003 {#lesson-task}
 
 В задании объявим индексатор, который получает `Index` напрямую. `Index middle = 1` задаёт позицию с начала, а `^1` — позицию с конца. [Спецификация System.Index](https://learn.microsoft.com/dotnet/csharp/language-reference/language-specification/ranges#182-the-index-type)
 
@@ -80,7 +81,6 @@ public static class ServiceBoardExtensions
 
 Замени `Program.cs` заготовкой, допиши тело индексатора и снова выполни `dotnet run`. После прохождения всех `Assert` терминал выведет «Все проверки пройдены».
 
-<!-- lesson-practice -->
 ```csharp
 using System;
 using System.Collections.Generic;
@@ -162,6 +162,11 @@ public static class Program
     }
 }
 ```
+{: #practice-program }
+
+<script type="text/plain" id="practice-wrong-body">
+return entries.GetAt(index: position.Value);
+</script>
 
 <details>
 <summary>Подсказка</summary>

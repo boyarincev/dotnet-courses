@@ -32,7 +32,7 @@ jobs:
           path: |
             ${{ runner.temp }}/compiler-net9/wwwroot
             ${{ runner.temp }}/compiler-net9/LICENSE.txt
-          key: wasm-${{ runner.os }}-net9-v1-${{ env.COMPILER_SOURCE_SHA }}-${{ hashFiles('_browser/prepare_compiler.py', '_browser/lesson001-program.cs') }}
+          key: wasm-${{ runner.os }}-net9-v1-${{ env.COMPILER_SOURCE_SHA }}-${{ hashFiles('_browser/prepare_compiler.py') }}
       - name: Restore C# 14 / .NET 10 WebAssembly compiler
         id: wasm10
         uses: actions/cache@v5
@@ -40,7 +40,7 @@ jobs:
           path: |
             ${{ runner.temp }}/compiler-net10/wwwroot
             ${{ runner.temp }}/compiler-net10/LICENSE.txt
-          key: wasm-${{ runner.os }}-net10-v1-${{ env.COMPILER_SOURCE_SHA }}-${{ hashFiles('_browser/prepare_compiler.py', '_browser/lesson002-program.cs') }}
+          key: wasm-${{ runner.os }}-net10-v1-${{ env.COMPILER_SOURCE_SHA }}-${{ hashFiles('_browser/prepare_compiler.py') }}
       - name: Checkout pinned C# compiler source (only when a cache misses)
         if: steps.wasm9.outputs.cache-hit != 'true' || steps.wasm10.outputs.cache-hit != 'true'
         uses: actions/checkout@v5
@@ -49,11 +49,6 @@ jobs:
           ref: ${{ env.COMPILER_SOURCE_SHA }}
           path: _compiler_src
           persist-credentials: false
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: |
-            9.0.x
-            10.0.x
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
@@ -62,19 +57,18 @@ jobs:
         id: lesson_checks
         env:
           GH_TOKEN: ${{ github.token }}
+          REBUILD_WASM9: ${{ steps.wasm9.outputs.cache-hit != 'true' }}
+          REBUILD_WASM10: ${{ steps.wasm10.outputs.cache-hit != 'true' }}
         run: node _browser/select_lesson_checks.cjs
-      - name: Check editor JavaScript syntax
+      - uses: actions/setup-dotnet@v5
+        if: steps.lesson_checks.outputs.sdk_versions != ''
+        with:
+          dotnet-version: ${{ steps.lesson_checks.outputs.sdk_versions }}
+      - name: Check JavaScript syntax
         run: |
-          node --check assets/js/compiler-editor.js
-          node --check assets/js/course-runner.js
-          node --check _browser/verify_practice_assertions.cjs
-          node --check _browser/verify_compiler_output.cjs
-          node --check assets/js/browser-snippets-lesson002.js
-          node --check assets/js/browser-snippets-memory001.js
-          node --check assets/js/quiz.js
-          node --check _browser/quiz-fsrs-entry.mjs
-          node --check _browser/quiz-fsrs.test.mjs
-          node --check assets/js/site.js
+          for script in assets/js/*.js _browser/*.cjs _browser/*.mjs; do
+            node --check "$script"
+          done
       - name: Verify service worker URL handling
         run: node _browser/verify_service_worker.cjs
       - name: Install pinned FSRS scheduler and bundler
@@ -85,102 +79,12 @@ jobs:
           _browser/node_modules/.bin/esbuild _browser/quiz-fsrs-entry.mjs --bundle --platform=browser --format=iife --target=es2022 --minify --outfile=assets/js/quiz-fsrs.js
           test -s assets/js/quiz-fsrs.js
           node --check assets/js/quiz-fsrs.js
-      - name: Pin installed .NET 9 SDK for selected checks
-        if: contains(fromJSON(steps.lesson_checks.outputs.tasks), 'task001')
-        run: |
-          sdk9=$(dotnet --list-sdks | awk '$1 ~ /^9\.0\.[0-9]+$/ { version=$1 } END { print version }')
-          test -n "$sdk9"
-          printf '{"sdk":{"version":"%s","rollForward":"disable"}}\n' "$sdk9" > "$RUNNER_TEMP/sdk9-global.json"
-      - name: Verify lesson 001 C# examples on .NET 9
-        if: contains(fromJSON(steps.lesson_checks.outputs.tasks), 'task001')
-        run: |
-          folder="$RUNNER_TEMP/lesson001smoke"
-          mkdir -p "$folder"
-          cp "$RUNNER_TEMP/sdk9-global.json" "$folder/global.json"
-          (
-            cd "$folder"
-            dotnet --version
-            dotnet new console -n Lesson001Smoke -f net9.0 -o .
-            cp "$GITHUB_WORKSPACE/_browser/lesson001-program.cs" Program.cs
-            dotnet run > "$RUNNER_TEMP/lesson001-output.txt"
-          )
-          printf 'HTTP methods\nGET: 3\nPOST: 2\nPUT: 1\nSum = 60\n' > "$RUNNER_TEMP/lesson001-expected.txt"
-          diff -u "$RUNNER_TEMP/lesson001-expected.txt" "$RUNNER_TEMP/lesson001-output.txt"
-          node _browser/verify_snippets.cjs "$RUNNER_TEMP/lesson001smoke"
-      - name: Verify lesson 002 C# examples on .NET 10
-        if: contains(fromJSON(steps.lesson_checks.outputs.tasks), 'task002')
-        run: |
-          dotnet new console -n Lesson002Smoke -f net10.0 -o "$RUNNER_TEMP/lesson002smoke"
-          cp _browser/lesson002-program.cs "$RUNNER_TEMP/lesson002smoke/Program.cs"
-          dotnet build "$RUNNER_TEMP/lesson002smoke"
-          dotnet run --no-build --project "$RUNNER_TEMP/lesson002smoke" > "$RUNNER_TEMP/lesson002-output.txt"
-          printf '/health: Count=1, TotalMs=5\n/orders: Count=4, TotalMs=220\nBuilds when null: 0\nBuilds when present: 1\nAudit: /health=1/5; /orders=4/220\n' > "$RUNNER_TEMP/lesson002-expected.txt"
-          diff -u "$RUNNER_TEMP/lesson002-expected.txt" "$RUNNER_TEMP/lesson002-output.txt"
-          node _browser/verify_snippets_lesson2.cjs "$RUNNER_TEMP/lesson002smoke"
-      - name: Verify memory lesson 001 C# example on .NET 10
-        if: contains(fromJSON(steps.lesson_checks.outputs.tasks), 'alloc001')
-        run: |
-          dotnet new console -n Memory001Smoke -f net10.0 -o "$RUNNER_TEMP/memory001smoke"
-          cp _browser/memory-lesson001-program.cs "$RUNNER_TEMP/memory001smoke/Program.cs"
-          dotnet run --project "$RUNNER_TEMP/memory001smoke" > "$RUNNER_TEMP/memory001-output.txt"
-          printf 'Paid orders: 2\nFirst amount: 1499.90\nAfter copy change: 1499.90\n' > "$RUNNER_TEMP/memory001-expected.txt"
-          diff -u "$RUNNER_TEMP/memory001-expected.txt" "$RUNNER_TEMP/memory001-output.txt"
-          node -e "const p=require('./assets/js/browser-snippets-memory001.js'); if(p.exampleCount!==1) process.exit(1)"
-          node -e "const f=require('fs');if(!f.readFileSync('_memory_lessons/001-allocations-copies-retention.md','utf8').includes(f.readFileSync('_browser/memory-lesson001-program.cs','utf8').trim())) process.exit(1)"
-      - name: Verify shared practice JavaScript and selected C# Assert templates (reject wrong solutions)
+      - name: Verify authored C# examples and practice
         env:
-          SELECTED_TASKS: ${{ join(fromJSON(steps.lesson_checks.outputs.tasks), ' ') }}
+          SELECTED_LESSONS: ${{ steps.lesson_checks.outputs.lessons }}
         run: |
-          read -r -a tasks <<< "$SELECTED_TASKS"
-          browser_tasks=()
-          for task in "${tasks[@]}"; do
-            if test "$task" != task003; then
-              browser_tasks+=("$task")
-            fi
-          done
-          tasks=("${browser_tasks[@]}")
-          if ((${#tasks[@]} == 0)); then
-            node _browser/verify_practice_assertions.cjs --shared-only
-            exit
-          fi
-          for task in "${tasks[@]}"; do
-            folder="$RUNNER_TEMP/practice/$task"
-            mkdir -p "$folder"
-            framework=net10.0
-            if test "$task" = task001; then
-              framework=net9.0
-              cp "$RUNNER_TEMP/sdk9-global.json" "$folder/global.json"
-            fi
-            (
-              cd "$folder"
-              dotnet new console -n "Practice_${task}" -f "$framework" -o .
-            )
-          done
-          node _browser/verify_practice_assertions.cjs "$RUNNER_TEMP/practice" "${tasks[@]}"
-          for task in "${tasks[@]}"; do
-            folder="$RUNNER_TEMP/practice/$task"
-            (
-              cd "$folder"
-              dotnet build --no-restore
-            )
-            if (
-              cd "$folder"
-              dotnet run --no-build
-            ) > "$folder/run.log" 2>&1; then
-              echo "ERROR: intentionally wrong $task solution passed its assertions"
-              exit 1
-            fi
-            case "$task" in
-              task001) assert_id=TASK-001 ;;
-              task002) assert_id=TASK-002 ;;
-              alloc001) assert_id=ALLOC-TASK-001 ;;
-            esac
-            if ! grep -Fq "❌ $assert_id:" "$folder/run.log"; then
-              cat "$folder/run.log"
-              exit 1
-            fi
-            echo "$task: invalid solution correctly rejected"
-          done
+          node _browser/verify_practice_assertions.cjs
+          node _browser/verify_lessons.cjs
       - name: Prepare C# 13 browser compiler (cache miss)
         if: steps.wasm9.outputs.cache-hit != 'true'
         run: |
@@ -201,31 +105,6 @@ jobs:
         run: |
           dotnet publish _compiler_src_net10/CSharpCompilerWasm/CSharpCompilerWasm.csproj --configuration Release --output "$RUNNER_TEMP/compiler-net10"
           cp _compiler_src/LICENSE "$RUNNER_TEMP/compiler-net10/LICENSE.txt"
-      - name: Install .NET 11 SDK for lesson 003 checks
-        if: contains(fromJSON(steps.lesson_checks.outputs.tasks), 'task003')
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '11.0.100'
-      - name: Verify lesson 003 example and practice on .NET 11
-        if: contains(fromJSON(steps.lesson_checks.outputs.tasks), 'task003')
-        run: |
-          folder="$RUNNER_TEMP/lesson003smoke"
-          mkdir -p "$folder"
-          node _browser/prepare_lesson003_check.cjs "$folder"
-          cd "$folder"
-          printf '{"sdk":{"version":"11.0.100","rollForward":"disable"}}\n' > global.json
-          dotnet new console -n Lesson003Smoke -f net11.0 -o .
-          cp demo.cs.txt Program.cs
-          dotnet build --no-restore
-          dotnet run --no-build > demo-output.txt
-          diff -u expected.txt demo-output.txt
-          cp wrong.cs.txt Program.cs
-          dotnet build --no-restore
-          if dotnet run --no-build > wrong-output.txt 2>&1; then
-            echo 'ERROR: intentionally wrong TASK-003 solution passed its assertions'
-            exit 1
-          fi
-          grep -F '❌ TASK-003: Неверная последняя пара.' wrong-output.txt
       - name: Restore pinned CodeMirror assets
         id: codemirror
         uses: actions/cache@v5

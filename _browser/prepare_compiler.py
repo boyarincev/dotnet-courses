@@ -13,8 +13,16 @@ root = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("_compiler_src/CSharpCom
 razor = root / "Pages/Compiler.razor"
 html = root / "wwwroot/index.html"
 csproj = root / "CSharpCompilerWasm.csproj"
-sample_file = "_browser/lesson001-program.cs" if runtime == "9" else "_browser/lesson002-program.cs"
-sample = Path(sample_file).read_text(encoding="utf-8").strip()
+# Lesson pages load their own examples. This sample is for opening the runtime directly.
+sample = """using System;
+
+public static class Program
+{
+    public static void Main()
+    {
+        Console.WriteLine("Компилятор C# готов.");
+    }
+}"""
 literal = '@"' + sample.replace('"', '""') + '"'
 source = razor.read_text(encoding="utf-8")
 

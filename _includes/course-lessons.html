@@ -1,0 +1,22 @@
+{% assign sorted_lessons = include.lessons | sort: 'lesson_number' %}
+{% assign first_lesson = sorted_lessons | first %}
+<div class="course-nav">
+{% if first_lesson %}
+  <a class="button primary" data-course-start="{{ include.course }}" href="{{ first_lesson.url | relative_url }}">Начать с первого урока</a>
+{% endif %}
+  <a class="button" href="{{ include.quiz | relative_url }}">Квиз и повторение</a>
+  <a class="button" href="{{ include.related | relative_url }}">{{ include.related_label }}</a>
+</div>
+<h2 id="course-lessons">Уроки · {{ sorted_lessons.size }}</h2>
+<div class="lessons">
+{% for lesson in sorted_lessons %}
+  <a class="lesson-card" href="{{ lesson.url | relative_url }}">
+    <small>Урок {{ lesson.lesson_number }} · {{ lesson.lesson_date }} · {{ lesson.series }}</small>
+    <span class="lesson-completion-badge" data-lesson-completion-badge data-course="{{ include.course }}" data-lesson="{{ lesson.lesson_number }}" hidden>Пройден</span>
+    <h3>{{ lesson.title | escape }}</h3>
+    <p>{{ lesson.summary | escape }}</p>
+    <span>{{ lesson.topic_id }}{% if lesson.topic_id and lesson.dotnet_feature %} · {% endif %}{{ lesson.csharp_feature }}{% if lesson.csharp_feature and lesson.dotnet_feature %} · {% endif %}{{ lesson.dotnet_feature }}</span>
+    <strong aria-hidden="true">↗</strong>
+  </a>
+{% endfor %}
+</div>

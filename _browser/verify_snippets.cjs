@@ -1,43 +1,56 @@
 // Smoke-test the exact seven C# examples shown in the Jekyll lesson.
 // The browser loads the same JS transformer; each example must compile and run.
 "use strict";
+const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const cp = require("node:child_process");
-const {makeRunnable, exampleCount} = require("../assets/js/browser-snippets.js");
 
-const projectArgument = process.argv[2];
-if (!projectArgument) throw Error("Usage: node _browser/verify_snippets.cjs <path-to-net9-console-project>");
-const project = path.resolve(projectArgument);
-const markdown = fs.readFileSync("_lessons/001-params-countby.md", "utf8");
-const fence = new RegExp("^\\x60\\x60\\x60csharp\\n([\\s\\S]*?)\\n\\x60\\x60\\x60", "gm");
-const snippets = [...markdown.matchAll(fence)].map(m => m[1]);
-if (snippets.length !== exampleCount) {
-  throw Error("Expected " + exampleCount + " C# code fences; found " + snippets.length);
+function readSnippets(filename) {
+  const markdown = fs.readFileSync(filename, "utf8").replace(/\r\n/g, "\n");
+  const snippets = new Map();
+  for (const [, , code, attributes] of markdown.matchAll(/^(```|~~~)csharp\n([\s\S]*?)\n\1(?:\n\{:(.*)\})?$/gm)) {
+    const id = attributes?.match(/\bdata-snippet="([a-z0-9-]+)"/)?.[1];
+    assert.ok(id, `${filename}: C# example without a data-snippet ID`);
+    assert.ok(!snippets.has(id), `${filename}: duplicate C# example ID ${id}`);
+    snippets.set(id, code);
+  }
+  return snippets;
 }
-const expected = [
-  "60\n",
-  "60\n",
-  "HTTP: 3\n",
-  "GET: 2\nPOST: 1\nget: 1\n",
-  "GET: 2\nPOST: 1\nget: 1\n",
-  "GET: 3\nPOST: 1\n",
-  "HTTP methods\nGET: 3\nPOST: 2\nPUT: 1\nSum = 60\n"
-];
-for (let i = 0; i < snippets.length; i++) {
-  const source = makeRunnable(snippets[i], i);
-  fs.writeFileSync(path.join(project, "Program.cs"), source, "utf8");
-  const run = cp.spawnSync("dotnet", ["run", "--no-restore", "--project", project], {
-    cwd: project,
-    encoding: "utf8",
-    timeout: 120000
+
+function verifySnippets(projectDirectory, filename, adapter, expected) {
+  const project = path.resolve(projectDirectory);
+  const snippets = readSnippets(filename);
+  assert.deepEqual([...snippets.keys()].sort(), [...adapter.snippetIds].sort(), `${filename}: adapter IDs`);
+  assert.deepEqual([...snippets.keys()].sort(), Object.keys(expected).sort(), `${filename}: expected outputs`);
+  for (const [id, code] of snippets) {
+    const source = adapter.makeRunnable(code, id);
+    fs.writeFileSync(path.join(project, "Program.cs"), source, "utf8");
+    const run = cp.spawnSync("dotnet", ["run", "--no-restore", "--project", project], {
+      cwd: project,
+      encoding: "utf8",
+      timeout: 120000
+    });
+    if (run.status !== 0) {
+      throw Error(`${filename} (${id}) failed to compile or run:\n${run.stdout}\n${run.stderr}\n${source}`);
+    }
+    assert.equal(run.stdout.replace(/\r\n/g, "\n"), expected[id], `${filename} (${id}): unexpected output`);
+    console.log(`${filename} (${id}): verified output`);
+  }
+}
+
+if (require.main === module) {
+  const project = process.argv[2];
+  if (!project) throw Error("Usage: node _browser/verify_snippets.cjs <path-to-net9-console-project>");
+  verifySnippets(project, "_lessons/001-params-countby.md", require("../assets/js/browser-snippets.js"), {
+    "params-array": "60\n",
+    "params-span": "60\n",
+    "params-enumerable": "HTTP: 3\n",
+    "groupby-count": "GET: 2\nPOST: 1\nget: 1\n",
+    countby: "GET: 2\nPOST: 1\nget: 1\n",
+    "countby-comparer": "GET: 3\nPOST: 1\n",
+    "full-program": "HTTP methods\nGET: 3\nPOST: 2\nPUT: 1\nSum = 60\n"
   });
-  if (run.status !== 0) {
-    throw Error("Example " + (i + 1) + " failed to compile/run:\n" + run.stdout + "\n" + run.stderr + "\nSOURCE:\n" + source);
-  }
-  const output = run.stdout.replace(/\r\n/g, "\n");
-  if (output !== expected[i]) {
-    throw Error("Example " + (i + 1) + ": incorrect output.\nExpected: " + JSON.stringify(expected[i]) + "\nActual: " + JSON.stringify(output) + "\nSOURCE:\n" + source);
-  }
-  console.log("C# example " + (i + 1) + "/" + exampleCount + ": compiled and executed with expected output.");
 }
+
+module.exports = { readSnippets, verifySnippets };

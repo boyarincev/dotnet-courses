@@ -10,13 +10,13 @@
 <a class="skip-link" href="#main">К содержимому</a>
 <header><div class="shell header-inner"><a class="brand" href="{{ '/' | relative_url }}"><span class="logo">{ }</span>.NET Courses</a>
 <nav aria-label="Основная навигация">
-<a href="{{ '/' | relative_url }}">Курсы</a>
-<a href="{{ '/courses/csharp-dotnet-9-11/' | relative_url }}">Новое в .NET</a>
-<a href="{{ '/courses/memory/' | relative_url }}">Память</a>
-<a href="{{ '/about/' | relative_url }}">Как учиться</a>
-<a href="https://t.me/dotnetterslessons" target="_blank" rel="noopener noreferrer">тг чат</a>
+<a href="{{ '/' | relative_url }}"{% if page.url == '/' %} aria-current="page"{% endif %}>Курсы</a>
+<a href="{{ '/courses/csharp-dotnet-9-11/' | relative_url }}"{% if page.url == '/courses/csharp-dotnet-9-11/' %} aria-current="page"{% elsif page.url contains '/courses/csharp-dotnet-9-11/' %} aria-current="location"{% endif %}>Новое в .NET</a>
+<a href="{{ '/courses/memory/' | relative_url }}"{% if page.url == '/courses/memory/' %} aria-current="page"{% elsif page.url contains '/courses/memory/' %} aria-current="location"{% endif %}>Память</a>
+<a href="{{ '/about/' | relative_url }}"{% if page.url == '/about/' %} aria-current="page"{% endif %}>Как учиться</a>
+<a href="https://t.me/dotnetterslessons" target="_blank" rel="noopener noreferrer">Чат в Telegram</a>
 </nav></div></header>
-<main id="main" class="shell main">{{ content }}</main>
+<main id="main" class="shell main" tabindex="-1">{{ content }}</main>
 <footer><div class="shell">C#/.NET · Два практических курса · <a href="{{ '/copyright/' | relative_url }}">Авторские права</a></div></footer>
 <script defer src="{{ '/assets/js/site.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
 <script>

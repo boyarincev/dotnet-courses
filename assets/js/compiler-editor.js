@@ -19,6 +19,10 @@
   let instance = null;
   let original = null;
   let initialCode = null;
+  let hasDraft = false;
+  let applyingInitialCode = false;
+  let wasBusy = false;
+  let runSucceeded = false;
   // The iframe URL carries a stable course + lesson identity. Keep authored
   // drafts separate across lessons and courses, without server-side storage.
   const pageParams = new URLSearchParams(location.search);
@@ -30,6 +34,8 @@
     if (draftNotice) draftNotice.textContent = text;
   }
   function saveDraft(source) {
+    if (applyingInitialCode) return;
+    hasDraft = true;
     try {
       localStorage.setItem(storageKey, source);
       showDraft("✓ Код автоматически сохранён в этом браузере.");
@@ -38,11 +44,36 @@
     }
   }
   const cmReady = () => typeof window.CodeMirror === "function";
+  const currentCode = () => instance ? instance.getValue() : original?.value ?? "";
+
+  function reportState(state) {
+    if (window.parent === window) return;
+    window.parent.postMessage({ type: "dotnet-courses:compiler-state", state }, location.origin);
+  }
+
+  function updateRunState() {
+    const busy = document.querySelector(".compile-btn")?.disabled === true;
+    if (busy && !wasBusy) {
+      runSucceeded = false;
+      reportState("running");
+    }
+    if (!busy && wasBusy && !runSucceeded) reportState("error");
+    wasBusy = busy;
+  }
+
+  function replaceCode(source) {
+    if (instance) {
+      instance.setValue(source);
+    } else {
+      original.value = source;
+      original.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
 
   // A real "run current code" control next to the CodeMirror editor:
   // the example-loader can replace the source, but this button never does.
   function installRunButton() {
-    const wrapper = instance?.getWrapperElement();
+    const wrapper = instance?.getWrapperElement() ?? original;
     if (!wrapper?.isConnected || wrapper.nextElementSibling?.id === "editor-run-bar") return;
 
     const bar = document.createElement("div");
@@ -136,16 +167,15 @@
       const codeViewToggle = document.getElementById("code-view-desc")?.closest(".toggle-container");
       if (codeViewToggle) codeViewToggle.style.display = "none";
     }
-    if (!cmReady()) return;
     const textarea = document.getElementById("code-editor");
     if (!textarea) return;
-    if (original === textarea && instance && instance.getWrapperElement().isConnected) {
+    if (original === textarea && (!instance || instance.getWrapperElement().isConnected)) {
       installRunButton();
       return;
     }
     initialCode ??= textarea.value;
     original = textarea;
-    instance = window.CodeMirror.fromTextArea(textarea, {
+    instance = cmReady() ? window.CodeMirror.fromTextArea(textarea, {
       mode: "text/x-csharp",
       lineNumbers: true,
       matchBrackets: true,
@@ -154,43 +184,54 @@
       tabSize: 4,
       lineWrapping: false,
       extraKeys: {
-        "Ctrl-Space": cm => cm.showHint({hint,completeSingle:false}),
+        "Ctrl-Space": cm => cm.showHint?.({hint,completeSingle:false}),
         "Ctrl-Enter": cm => {synchronize(cm); document.querySelector(".compile-btn")?.click();},
         "Cmd-Enter": cm => {synchronize(cm); document.querySelector(".compile-btn")?.click();}
       }
-    });
-    instance.setSize("100%", 430);
-    instance.on("change", cm => {
-      synchronize(cm);
-      saveDraft(cm.getValue());
-    });
-    instance.on("inputRead", (cm, change) => {
-      if (change.origin !== "+input" || !/^[\w]+$/.test(change.text?.join("") || "")) return;
-      if (cm.state.completionActive) return;
-      const suggestions = hint(cm);
-      if (suggestions.list.length) cm.showHint({hint,completeSingle:false});
-    });
-    textarea.closest(".editor-container")?.classList.add("enhanced-csharp-editor");
+    }) : null;
+    if (instance) {
+      instance.setSize("100%", 430);
+      instance.on("change", cm => {
+        synchronize(cm);
+        saveDraft(cm.getValue());
+      });
+      instance.on("inputRead", (cm, change) => {
+        if (change.origin !== "+input" || !/^[\w]+$/.test(change.text?.join("") || "")) return;
+        if (cm.state.completionActive) return;
+        const suggestions = hint(cm);
+        if (suggestions.list.length) cm.showHint?.({hint,completeSingle:false});
+      });
+      textarea.closest(".editor-container")?.classList.add("enhanced-csharp-editor");
+    } else {
+      textarea.addEventListener("input", () => saveDraft(textarea.value));
+    }
     installRunButton();
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved !== null) {
-        instance.setValue(saved);
-        synchronize(instance);
+        hasDraft = true;
+        applyingInitialCode = true;
+        replaceCode(saved);
         showDraft("✓ Восстановлен черновик этого урока из браузера.");
       } else {
         showDraft("Автосохранение включено. Код останется в этом браузере.");
       }
     } catch {
       showDraft("⚠ Локальное хранилище недоступно. Для сохранения используй «Скачать .cs».");
+    } finally {
+      applyingInitialCode = false;
     }
+    reportState("ready");
   }
 
-  const watcher = new MutationObserver(() => ensure());
+  const watcher = new MutationObserver(() => {
+    ensure();
+    updateRunState();
+  });
   const start = () => {
     ensure();
     const app = document.getElementById("app");
-    if (app) watcher.observe(app, {childList:true,subtree:true});
+    if (app) watcher.observe(app, {childList:true,subtree:true,attributes:true,attributeFilter:["disabled"]});
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start,{once:true});
   else start();
@@ -198,15 +239,25 @@
   window.DotnetBrowserEditor = {
     setCode(code) {
       ensure();
-      if (!instance) return false;
-      instance.setValue(String(code));
-      synchronize(instance);
-      instance.focus();
+      if (!original?.isConnected) return false;
+      replaceCode(String(code));
+      (instance ?? original).focus();
       return true;
+    },
+    setInitialCode(code) {
+      ensure();
+      if (!original?.isConnected || hasDraft || currentCode() !== initialCode) return;
+      applyingInitialCode = true;
+      try {
+        replaceCode(code);
+        initialCode = currentCode();
+      } finally {
+        applyingInitialCode = false;
+      }
     },
     getCode() {
       ensure();
-      return instance ? instance.getValue() : document.getElementById("code-editor")?.value ?? "";
+      return currentCode();
     },
     focus() {
       ensure();
@@ -215,9 +266,11 @@
     },
     isInitialCode() {
       ensure();
-      return instance !== null && instance.getValue() === initialCode;
+      return !!original && !hasDraft && currentCode() === initialCode;
     },
     reportSuccessfulRun(source, output) {
+      runSucceeded = true;
+      reportState("complete");
       if (window.parent === window) return;
       window.parent.postMessage({ type: "dotnet-courses:practice-run-success", source, output }, location.origin);
     },

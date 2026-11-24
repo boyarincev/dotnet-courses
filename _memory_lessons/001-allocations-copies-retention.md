@@ -8,6 +8,8 @@ csharp_feature: 'C# · значения и ссылки'
 dotnet_feature: '.NET · память и GC'
 series: 'Модель памяти и измерения'
 browser_runtime: '10'
+browser_snippets: browser-snippets-memory001.js
+browser_start_snippet: allocations-copies-retention
 ---
 > **30 минут максимум.** Объяснение и пример — 8 минут, самостоятельная задача — 12 минут, проверка и повторение — около 10 минут. Пока не нужно оптимизировать весь код.
 
@@ -100,6 +102,7 @@ internal struct Order
     }
 }
 ~~~
+{: #snippet-allocations-copies-retention data-snippet="allocations-copies-retention" }
 
 Суммы разбираются и выводятся с [десятичной точкой инвариантной культуры](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/Globalization/CultureData.cs#L583-L590). В выводе `F2` [задаёт две цифры после десятичного разделителя](https://learn.microsoft.com/en-us/dotnet/standard/base-types/standard-numeric-format-strings#fixed-point-format-specifier-f).
 
@@ -110,6 +113,7 @@ Paid orders: 2
 First amount: 1499.90
 After copy change: 1499.90
 ~~~
+{: data-output-for="allocations-copies-retention" }
 
 ## Разберём три разных затраты
 
@@ -141,7 +145,7 @@ snapshot.Id ------------------------------------------+
 
 По одному примеру нельзя судить о выигрыше в производительности: на следующем занятии измерим варианты с BenchmarkDotNet.
 
-## Напиши код сам · ALLOC-TASK-001
+## Напиши код сам · ALLOC-TASK-001 {#lesson-task}
 
 **Задача на 12 минут.** Реализуй `SummarizePaid`: на входе — строки формата `ID;status;amount`. Верни количество записей со статусом `paid` и сумму их полей `amount` **без создания списка заказов**.
 

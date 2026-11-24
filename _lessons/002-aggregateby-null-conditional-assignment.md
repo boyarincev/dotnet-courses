@@ -7,6 +7,8 @@ csharp_feature: 'C# 14 · null-conditional assignment'
 dotnet_feature: '.NET 9 · AggregateBy'
 series: 'Коллекции и LINQ'
 browser_runtime: '10'
+browser_snippets: browser-snippets-lesson002.js
+browser_start_snippet: full-program
 ---
 > **Браузерный запуск включён.** Все C#-примеры можно открывать в редакторе на .NET 10 и проверять без локальной установки SDK.
 
@@ -16,7 +18,7 @@ browser_runtime: '10'
 
 ## 1. .NET 9: Enumerable.AggregateBy
 
-`CountBy(keySelector)` считает элементы по ключу. `AggregateBy` накапливает **произвольное состояние для каждого ключа**. В этой сводке считаем маршруты одинаковыми без учёта регистра и накапливаем для каждого счётчик и сумму.
+`CountBy(keySelector)` возвращает пары «ключ, количество элементов». Если выбрать маршрут в качестве ключа, два запроса к `/orders` и один к `/health` дадут пары `(/orders, 2)` и `(/health, 1)`. `AggregateBy` накапливает **произвольное состояние для каждого ключа**. В этой сводке сравниваем маршруты без учёта регистра и накапливаем для каждого счётчик и сумму длительностей.
 
 ```csharp
 var stats = calls.AggregateBy(
@@ -32,6 +34,7 @@ var stats = calls.AggregateBy(
     // "/orders" и "/ORDERS" попадут в одну группу.
     keyComparer: StringComparer.OrdinalIgnoreCase);
 ```
+{: #snippet-aggregateby data-snippet="aggregateby" }
 
 Если опустить `keyComparer`, применяется [сравнение по умолчанию для типа ключа](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/Dictionary.cs#L58-L82). Когда начальное значение зависит от ключа, используй [перегрузку с `seedSelector`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.aggregateby?view=net-9.0#overloads). Функция типа `Func<TKey, TAccumulate>` вычисляет начальное значение [при первой встрече ключа в очередном перечислении](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/src/System/Linq/AggregateBy.cs#L103-L131).
 
@@ -43,18 +46,22 @@ var stats = calls.AggregateBy(
 
 ## 2. C# 14: null-conditional assignment
 
+**Как читать `Audit?`.** [Знак `?` после имени ссылочного типа](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/nullable-reference-types) отмечает, что переменная может содержать ссылку на объект или `null`. В примере `Audit? audit` может содержать объект `Audit` или `null`. В задании `AuditReport?` означает то же самое для типа `AuditReport`. При включённом nullable-анализе компилятор использует аннотацию, чтобы предупреждать о возможном обращении к `null`. Оператор `?.` проверяет значение ссылки во время выполнения.
+
 Раньше:
 
 ```csharp
 if (audit is not null)
     audit.Text = BuildSummary();
 ```
+{: #snippet-explicit-null-check data-snippet="explicit-null-check" }
 
 Теперь:
 
 ```csharp
 audit?.Text = BuildSummary();
 ```
+{: #snippet-conditional-assignment data-snippet="conditional-assignment" }
 
 При `audit == null` **[правая часть не вычисляется](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/proposals/csharp-14.0/null-conditional-assignment#specification)**. В этом примере вызов `BuildSummary()` и построение строки отчёта пропускаются.
 
@@ -130,6 +137,7 @@ sealed class Audit
     public string Text { get; set; } = "";
 }
 ```
+{: #snippet-full-program data-snippet="full-program" }
 
 Запуск:
 
@@ -146,12 +154,13 @@ Builds when null: 0
 Builds when present: 1
 Audit: /health=1/5; /orders=4/220
 ```
+{: data-output-for="full-program" }
 
 Фильтр пропустил только ответы со статусами 2xx. Запросы к `/orders` и `/ORDERS` вошли в один итог с [написанием первого встреченного ключа](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/Dictionary.cs#L1124-L1132) `/orders`.
 
 `BuildSummary` вызван один раз, когда появился объект `Audit`. Попробуй убрать `StringComparer.OrdinalIgnoreCase` и предскажи, сколько ключей получится.
 
-## 4. Напиши код сам · TASK-002
+## 4. Напиши код сам · TASK-002 {#lesson-task}
 
 **15–20 минут.** Реализуй `GetNoisiestClients` для записей HTTP-вызовов. Оставь ответы со статусом `400` и выше. Сгруппируй их через `AggregateBy` по имени клиента с `StringComparer.OrdinalIgnoreCase`.
 
@@ -167,6 +176,7 @@ sealed class AuditReport
     public string Text { get; set; } = "";
 }
 ```
+{: #snippet-task-types data-snippet="task-types" }
 
 **Сигнатура без реализации:**
 
@@ -174,6 +184,7 @@ sealed class AuditReport
 static IReadOnlyList<(string Client, int Count, long TotalBytes)> GetNoisiestClients(
     IEnumerable<Failure> calls, AuditReport? audit)
 ```
+{: #snippet-task-signature data-snippet="task-signature" }
 
 **Пример входа:**
 
@@ -189,6 +200,7 @@ Failure[] calls =
     new(Client: "API-c", StatusCode: 404, ResponseBytes: 50)
 ];
 ```
+{: #snippet-task-input data-snippet="task-input" }
 
 **Ожидаемый результат.** Сначала клиент `api-c` с двумя ошибками на 400 байт суммарно, затем клиент `api-b` с одной ошибкой на 390 байт. Регистр имён может отличаться. Если метод вернул имена `API-c` и `api-b`, в `audit.Text` должна быть строка `API-c=400; api-b=390`.
 

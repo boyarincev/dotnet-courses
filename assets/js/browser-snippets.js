@@ -4,12 +4,16 @@
   "use strict";
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
-  if (typeof window !== "undefined") window.DotnetLesson001Snippets = api;
+  if (typeof window !== "undefined") window.DotnetLessonSnippets = api;
 })(function () {
   "use strict";
 
   const imports = "using System;\nusing System.Collections.Generic;\nusing System.Linq;\n";
   const sampleMethods = 'string[] methods = ["GET", "POST", "GET", "get"];';
+  const snippetIds = [
+    "params-array", "params-span", "params-enumerable", "groupby-count",
+    "countby", "countby-comparer", "full-program"
+  ];
 
   function indent(source, spaces) {
     return source.trim().split("\n").map(line => line ? " ".repeat(spaces) + line : "").join("\n");
@@ -23,33 +27,33 @@
       "}\n";
   }
 
-  function makeRunnable(snippet, exampleIndex) {
+  function makeRunnable(snippet, id) {
     const code = snippet.replace(/\r\n?/g, "\n").trim();
 
-    switch (exampleIndex) {
-      case 0: // Old-style params int[]
-      case 1: { // C# 13 params ReadOnlySpan<int>
+    switch (typeof id === "number" ? snippetIds[id] : id) {
+      case "params-array":
+      case "params-span": {
         const pos = code.lastIndexOf("Console.WriteLine(Sum(");
         if (pos <= 0) throw Error("В примере Sum изменилась структура.");
         return wrapInProgram(code.slice(pos).trim(), code.slice(0, pos).trim());
       }
-      case 2: { // params IEnumerable<string>
+      case "params-enumerable": {
         const pos = code.indexOf("\nstatic void Analyze(");
         if (pos <= 0) throw Error("В примере Analyze изменилась структура.");
         return wrapInProgram(code.slice(0, pos).trim(), code.slice(pos).trim());
       }
-      case 3: // GroupBy + Select
+      case "groupby-count":
         if (!code.includes("GroupBy(")) throw Error("В примере GroupBy изменилась структура.");
         return wrapInProgram(sampleMethods + "\n" + code +
           '\nforeach (var row in counts) Console.WriteLine($"{row.Method}: {row.Count}");');
-      case 4: // CountBy (case-sensitive)
+      case "countby":
         if (!code.includes("CountBy(")) throw Error("В примере CountBy изменилась структура.");
         return wrapInProgram(sampleMethods + "\n" + code);
-      case 5: // CountBy + StringComparer
+      case "countby-comparer":
         if (!code.includes("StringComparer.OrdinalIgnoreCase")) throw Error("В примере comparer изменилась структура.");
         return wrapInProgram(sampleMethods + "\n" + code +
           '\nforeach (var (method, count) in counts) Console.WriteLine($"{method}: {count}");');
-      case 6: { // Full lesson example with top-level statements and local methods
+      case "full-program": {
         const marker = "\nstatic void PrintCounts(";
         const pos = code.indexOf(marker);
         if (pos <= 0) throw Error("В полном примере изменилась структура.");
@@ -62,5 +66,5 @@
     }
   }
 
-  return { makeRunnable, exampleCount: 7 };
+  return { makeRunnable, exampleCount: snippetIds.length, snippetIds };
 });

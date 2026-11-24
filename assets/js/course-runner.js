@@ -7,7 +7,8 @@
 
   const normalize = value => value.replace(/\r\n?/g, "\n");
   const solutionMarker = "// INSERT_SOLUTION_HERE";
-  const practiceImportPattern = /^(?:global\s+)?using\s+(?:(?:static\s+)|(?:\w+\s*=\s*))?(?:global::)?[\w.]+\s*;$/;
+  const practiceImportPattern = /^(?:global\s+)?using\s+(?:(?:unsafe\s+)?@?[_\p{ID_Start}]\p{ID_Continue}*\s*=\s*[^;{}]+|(?:static\s+)?(?:global::)?[\w.@\p{L}]+(?:\s*<[^;{}]+>)?)\s*;/u;
+  const preambleCommentPattern = /^(?:\/\/[^\n]*|\/\*[\s\S]*?\*\/)/;
 
   // Only assembles visible C# from the lesson with the student's method.
   // All Assert checks are plain C# in each lesson's practice-program-template.
@@ -19,40 +20,50 @@
         !text.includes("// END " + taskId)) {
       throw Error("Проверочный C#-пример урока отсутствует или повреждён.");
     }
-    const {imports, bodyLines} = splitPracticeSource(value);
-    const templateImports = new Set(splitPracticeSource(text).imports.map(line => line.trim()));
-    const extraImports = [...new Set(imports.map(line => line.trim()))].filter(line => !templateImports.has(line));
-    const body = bodyLines.join("\n").trim();
+    const {entries, body: method} = splitPracticeSource(value);
+    const knownImports = new Set(splitPracticeSource(text).entries.map(entry => entry.key).filter(Boolean));
+    const extraImports = [];
+    for (const entry of entries) {
+      if (entry.key && knownImports.has(entry.key)) continue;
+      extraImports.push(entry.text);
+      if (entry.key) knownImports.add(entry.key);
+    }
+    const body = method.trim();
     if (!body) throw Error("В задании нет стартового метода.");
     return (extraImports.length ? extraImports.join("\n") + "\n" : "") +
       text.replace(solutionMarker, () => body) + "\n";
   }
 
   function splitPracticeSource(value) {
-    const lines = normalize(value).split("\n");
-    const imports = [];
-    let start = 0;
-    for (; start < lines.length; start++) {
-      const line = lines[start].trim();
-      if (!line) continue;
-      if (!practiceImportPattern.test(line)) break;
-      imports.push(lines[start]);
+    const source = normalize(value);
+    const entries = [];
+    let end = 0;
+    while (end < source.length) {
+      const remaining = source.slice(end);
+      const next = remaining.trimStart();
+      const directive = next.match(practiceImportPattern)?.[0];
+      const text = directive ?? next.match(preambleCommentPattern)?.[0];
+      if (!text) break;
+      const key = directive?.replace(/\s+/g, " ").replace(/\s*([=;])\s*/g, "$1");
+      entries.push({ text, key });
+      end += remaining.length - next.length + text.length;
     }
-    return {imports, bodyLines: lines.slice(start)};
+    return { entries, preamble: source.slice(0, end).trim(), body: source.slice(end) };
   }
 
   function practiceSource(value) {
-    return splitPracticeSource(value).bodyLines.map(line => line.trim()).filter(Boolean).join("\n");
+    return splitPracticeSource(value).body.split("\n").map(line => line.trim()).filter(Boolean).join("\n");
   }
 
   function extractTaskSource(source, taskId) {
-    const {imports, bodyLines} = splitPracticeSource(source);
+    const {preamble, body} = splitPracticeSource(source);
+    const bodyLines = body.split("\n");
     const start = bodyLines.findIndex(line => line.trim() === "// BEGIN " + taskId);
     const end = bodyLines.findLastIndex(line => line.trim() === "// END " + taskId);
     if (start < 0 || end <= start) return null;
     const method = bodyLines.slice(start + 1, end).join("\n");
     if (!method.trim()) return null;
-    return (imports.length ? imports.join("\n") + "\n\n" : "") + method + "\n";
+    return (preamble ? preamble + "\n\n" : "") + method + "\n";
   }
 
   function matchesPracticeSource(template, source, taskId) {
@@ -83,9 +94,7 @@
   const practiceDraftKey = "dotnet-courses:practice-draft:" + course + ":" + lesson;
   let lastLoadedCode = null;
   let practiceButton = null;
-  const provider = course === "memory" ? (lesson === 1 ? window.DotnetMemoryLesson001Snippets : null) :
-                   lesson === 1 ? window.DotnetLesson001Snippets :
-                   lesson === 2 ? window.DotnetLesson002Snippets : null;
+  const provider = window.DotnetLessonSnippets;
 
   function bridge() {
     try {
@@ -95,7 +104,7 @@
       if (!editor) return null;
       const api = win.DotnetBrowserEditor;
       if (api && typeof api.setCode === "function") return api;
-      // Plain textarea fallback if CodeMirror scripts are unavailable.
+      // Minimal fallback if the shared editor script itself is unavailable.
       const run = win.document.querySelector(".compile-btn");
       if (!run) return null;
       return {
@@ -175,13 +184,14 @@
       }
       lastLoadedCode = code;
     }
-    frame.scrollIntoView({behavior:"smooth",block:"start"});
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    frame.scrollIntoView({behavior: reduceMotion ? "instant" : "smooth", block: "start"});
     if (!run) {
       api.focus?.();
       show(button, "Код задания открыт в редакторе. Для проверки нажми «Запустить текущий код».");
       return;
     }
-    show(button, savedPractice ? "Черновик задания сохранён. Компиляция и выполнение..." : "Компиляция и выполнение...");
+    show(button, savedPractice ? "Черновик задания сохранён. Результат примера появится в консоли." : "Результат появится в консоли редактора.");
     if (code === current) {
       if (!api.run()) show(button, "Запуск не начался. Проверь кнопку запуска.");
       return;
@@ -301,33 +311,54 @@
   }
 
   function addCodeButtons() {
-    if (!provider) return;
-    const examples=[...document.querySelectorAll(".prose pre")].filter(pre=>
+    const blocks = [...document.querySelectorAll(".prose pre")].filter(pre =>
       pre.closest(".language-csharp") || pre.querySelector("code.language-csharp")
     );
-    if(examples.length!==provider.exampleCount){
-      console.error("C# examples mismatch",lesson,examples.length,provider.exampleCount);
-      return;
+    const marked = blocks.map(pre => ({pre, id: pre.closest("[data-snippet]")?.dataset.snippet}))
+      .filter(({id}) => id !== undefined);
+    const examples = marked.length ? marked : blocks.map((pre, index) => ({
+      pre, id: provider?.snippetIds?.[index] ?? index
+    }));
+    if (!provider && !marked.length) return null;
+    const ids = examples.map(example => example.id);
+    const duplicates = new Set(ids.filter((id, index) => ids.indexOf(id) !== index));
+    function prepare({pre, id}) {
+      if (!provider) throw Error("Не загрузился адаптер примеров этого урока.");
+      if (!marked.length && blocks.length !== provider.exampleCount) {
+        throw Error("Количество блоков C# не совпадает с адаптером урока.");
+      }
+      if (duplicates.has(id)) throw Error("Идентификатор примера повторяется: " + id + ".");
+      if (marked.length && !provider.snippetIds?.includes(id)) throw Error("Для примера " + id + " нет адаптера.");
+      return provider.makeRunnable(pre.textContent, id);
     }
-    examples.forEach((pre,i)=>{
-      const holder=pre.closest(".code-wrap")||pre;
+    examples.forEach((example, i) => {
+      const holder = example.pre.closest(".code-wrap") || example.pre;
       const actions=document.createElement("div");
       actions.className="practice-actions snippet-actions";
       const button=document.createElement("button");
       button.type="button";button.className="button";
-      button.textContent=i===5&&lesson===2?"▶ Проверить сигнатуру в компиляторе":"▶ Запустить этот пример";
-      button.setAttribute("aria-label","Открыть C#-пример №"+(i+1)+" в браузерном компиляторе");
+      button.dataset.exampleId = example.id;
+      const label = example.id === "task-signature" ? "Проверить сигнатуру в компиляторе" : "Запустить этот пример";
+      button.textContent = "▶ " + label;
+      button.setAttribute("aria-label", label + " · C#-пример №" + (i + 1));
       const feedback=document.createElement("span");
       feedback.className="practice-feedback";feedback.setAttribute("role","status");
       actions.append(button,feedback);
       holder.insertAdjacentElement("afterend",actions);
       button.addEventListener("click",()=>{
         let source;
-        try {source=provider.makeRunnable(pre.textContent,i);}
+        try {source=prepare(example);}
         catch(error){show(button,"Ошибка подготовки: "+error.message);return;}
         send(button, () => source);
       });
     });
+    const startId = frame.dataset.startSnippet;
+    if (!startId) return null;
+    return () => {
+      const initialExample = examples.find(example => example.id === startId);
+      if (!initialExample) throw Error("Не найден стартовый пример: " + startId + ".");
+      return prepare(initialExample);
+    };
   }
 
   function protobufBytes(fieldNumber, bytes) {
@@ -378,13 +409,45 @@
 
   // Controls live on the lesson page, outside the iframe. They work even if
   // the embedded CodeMirror's own toolbar is hidden by the compiler layout.
-  function addEditorToolbar() {
+  function addEditorToolbar(prepareInitialExample) {
     const run = document.getElementById("page-editor-run");
     const copy = document.getElementById("page-editor-copy");
     const download = document.getElementById("page-editor-download");
     const dotnetLab = document.getElementById("page-editor-dotnet-lab");
     const status = document.getElementById("page-editor-feedback");
     if (!run || !copy || !download || !status) return;
+    let initialized = false;
+    function editorReady() {
+      const api = bridge();
+      if (initialized || !api) return;
+      initialized = true;
+      try {
+        if (prepareInitialExample && api.setInitialCode) api.setInitialCode(prepareInitialExample());
+        status.textContent = "Редактор готов к запуску.";
+      } catch (error) {
+        status.textContent = "Не удалось открыть стартовый пример. " + error.message;
+      }
+    }
+    window.addEventListener("message", event => {
+      if (event.origin !== location.origin || event.source !== frame.contentWindow ||
+          event.data?.type !== "dotnet-courses:compiler-state") return;
+      switch (event.data.state) {
+        case "ready":
+          editorReady();
+          break;
+        case "running":
+          status.textContent = "Выполняется текущий код.";
+          break;
+        case "complete":
+          status.textContent = "Запуск завершён. Результат в консоли.";
+          break;
+        case "error":
+          status.textContent = "Ошибка запуска. Подробности в консоли.";
+          break;
+      }
+    });
+    frame.addEventListener("load", editorReady);
+    editorReady();
     const getEditor = () => {
       const api = bridge();
       if (!api) status.textContent = "Редактор ещё загружается. Попробуй после появления кода.";
@@ -394,7 +457,7 @@
       const api = getEditor();
       if (!api) return;
       if (api.busy()) { status.textContent = "Компилятор ещё загружается или занят."; return; }
-      if (api.run()) status.textContent = "Выполняется текущий код, включая твои изменения.";
+      if (api.run()) status.textContent = "Выполняется текущий код.";
       else status.textContent = "Запуск пока недоступен. Проверь состояние компилятора.";
     });
     copy.addEventListener("click", async () => {
@@ -436,7 +499,11 @@
     });
   }
 
-  const init=()=>{addCodeButtons();addTaskButtons();addEditorToolbar();};
+  const init = () => {
+    const prepareInitialExample = addCodeButtons();
+    addTaskButtons();
+    addEditorToolbar(prepareInitialExample);
+  };
   // Wait for site.js to install shared progress and export helpers.
   if(document.readyState==="complete")init();
   else document.addEventListener("DOMContentLoaded",init,{once:true});

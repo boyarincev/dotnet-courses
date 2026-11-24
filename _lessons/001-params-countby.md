@@ -7,6 +7,8 @@ csharp_feature: 'C# 13 · params collections'
 dotnet_feature: '.NET 9 · CountBy'
 series: 'Коллекции и LINQ'
 browser_runtime: '9'
+browser_snippets: browser-snippets.js
+browser_start_snippet: full-program
 ---
 > **Браузерный запуск включён.** Под каждым C#-примером доступна кнопка запуска, а ниже находится общий редактор с Roslyn.
 
@@ -19,6 +21,7 @@ browser_runtime: '9'
 static int Sum(params int[] numbers) => numbers.Sum();
 Console.WriteLine(Sum(10, 20, 30)); // 60. Три числа образуют один массив numbers.
 ```
+{: #snippet-params-array data-snippet="params-array" }
 В C# 13 появились [коллекции `params`](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-13#params-collections), например `ReadOnlySpan<T>`, `Span<T>`, `IEnumerable<T>` или `List<T>`. При [развёрнутом вызове](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/classes#15624-parameter-collections) компилятор собирает отдельные элементы в одну коллекцию. Можно также передать готовую коллекцию подходящего типа.
 ```csharp
 static int Sum(params ReadOnlySpan<int> values)
@@ -29,6 +32,7 @@ static int Sum(params ReadOnlySpan<int> values)
 }
 Console.WriteLine(Sum(10, 20, 30)); // 60. Три числа образуют один ReadOnlySpan<int>.
 ```
+{: #snippet-params-span data-snippet="params-span" }
 Для вызова `Sum(10, 20, 30)` с `ReadOnlySpan<int>` компилятор из .NET 9 SDK [сохраняет константы в данных сборки](https://github.com/dotnet/roslyn/blob/f3348c2a2be16ec6525cb3df7be12952c3e2de9d/src/Compilers/CSharp/Portable/CodeGen/EmitArrayInitializer.cs#L606-L623). На .NET 9 x64 `ReadOnlySpan<int>` [ссылается на эти данные](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Private.CoreLib/src/System/Runtime/CompilerServices/RuntimeHelpers.cs#L148-L149), поэтому вызов обходится без выделения массива для аргументов. Элементы удобно обработать сразу в `foreach`. Сам параметр [нельзя захватить в лямбде](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/ref-struct).
 
 Заголовок можно передать отдельным аргументом, а метки собрать в `IEnumerable<string>`.
@@ -42,6 +46,7 @@ static void Analyze(string title, params IEnumerable<string> methods)
     Console.WriteLine($"{title}: {methods.Count()}");
 }
 ```
+{: #snippet-params-enumerable data-snippet="params-enumerable" }
 
 ## 2. .NET 9: `Enumerable.CountBy()`
 [`GroupBy`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.groupby?view=net-9.0) собирает строки с одинаковым ключом. Из каждой группы `Select` берёт ключ и число элементов.
@@ -49,6 +54,7 @@ static void Analyze(string title, params IEnumerable<string> methods)
 var counts = methods.GroupBy(keySelector: method => method)
     .Select(group => new { Method = group.Key, Count = group.Count() });
 ```
+{: #snippet-groupby-count data-snippet="groupby-count" }
 Если нужны **только счётчики**, [`CountBy` в .NET 9](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-9/libraries#linq) вычисляет их без промежуточных групп строк.
 ```csharp
 var counts = methods.CountBy(
@@ -57,6 +63,7 @@ var counts = methods.CountBy(
 foreach (var (method, count) in counts)
     Console.WriteLine($"{method}: {count}");
 ```
+{: #snippet-countby data-snippet="countby" }
 Вызов возвращает [`IEnumerable<KeyValuePair<TKey, int>>`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.countby?view=net-9.0#returns). Каждый элемент — пара из ключа и количества его вхождений. В .NET 9 [подсчёт начинается при перечислении](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/src/System/Linq/CountBy.cs#L27-L62). Перед выдачей первой пары `CountBy` читает весь источник и накапливает счётчики по ключам.
 
 При сравнении строк по умолчанию `"GET"` и `"get"` дают два ключа ([тесты `CountBy` в .NET 9](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/tests/CountByTests.cs#L93-L113)). Для нашей выгрузки передадим [`StringComparer.OrdinalIgnoreCase`](https://learn.microsoft.com/en-us/dotnet/api/system.stringcomparer.ordinalignorecase?view=net-9.0), который сравнивает метки без учёта регистра.
@@ -66,6 +73,7 @@ var counts = methods.CountBy(
     // "GET" и "get" учитываются в одном счётчике.
     keyComparer: StringComparer.OrdinalIgnoreCase);
 ```
+{: #snippet-countby-comparer data-snippet="countby-comparer" }
 Используй `GroupBy`, когда нужно обработать записи внутри каждой группы, например вывести все записи для отдельного метода.
 
 ## 3. Полностью запускаемый пример
@@ -103,6 +111,7 @@ static int Sum(params ReadOnlySpan<int> values)
     return total;
 }
 ```
+{: #snippet-full-program data-snippet="full-program" }
 Запусти проект.
 ```bash
 dotnet run
@@ -115,13 +124,16 @@ POST: 2
 PUT: 1
 Sum = 60
 ```
+{: data-output-for="full-program" }
 
-## 4. Напиши код сам · TASK-001
+## 4. Напиши код сам · TASK-001 {#lesson-task}
 **Условие.** Реализуй `GetTopMethods`. Метод принимает последовательность меток из той же выгрузки и возвращает до трёх пар `(Method, Count)`. `Count` — число вхождений метки с учётом правила сравнения.
 
 - Подсчитай вхождения через `CountBy` с `StringComparer.OrdinalIgnoreCase`.
 - Отсортируй по убыванию `Count`. При равных частотах отсортируй `Method` по возрастанию с тем же `StringComparer.OrdinalIgnoreCase`.
 - Верни первые три пары или все пары, если их меньше трёх. Для пустого входа верни пустую последовательность. Регистр букв в возвращаемых именах произвольный.
+
+**Выражения коллекций из C# 12.** В [выражении коллекции](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/collection-expressions) `[a, b]` элементы перечислены в квадратных скобках. В `string[] methods = ["GET", "POST"];` тип слева указывает, что нужен массив строк. В вызове `GetTopMethods(["GET", "POST"])` целевой тип выражения задаёт параметр `IEnumerable<string>`.
 
 Для `["get", "POST", "GET", "put", "post", "DELETE", "delete", "GET"]` ожидаются `GET: 3`, `DELETE: 2`, `POST: 2` в этом порядке. Здесь имена записаны прописными буквами для наглядности.
 

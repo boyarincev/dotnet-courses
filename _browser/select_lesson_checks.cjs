@@ -13,6 +13,7 @@ const lessonPaths = {
   task002: [
     "_lessons/002-aggregateby-null-conditional-assignment.md",
     "_browser/lesson002-program.cs",
+    "_browser/verify_snippets.cjs",
     "_browser/verify_snippets_lesson2.cjs",
     "assets/js/browser-snippets-lesson002.js"
   ],
@@ -52,9 +53,9 @@ function selectFromDiff(diff) {
       return all("Deleted, renamed or changed-type path: " + JSON.stringify(file));
     }
 
-    const task = allTasks.find(id => lessonPaths[id].includes(file));
-    if (task) {
-      selected.add(task);
+    const tasks = allTasks.filter(id => lessonPaths[id].includes(file));
+    if (tasks.length) {
+      for (const id of tasks) selected.add(id);
     } else if (!contentOnlyPaths.has(file)) {
       return all("Shared or unrecognized path: " + JSON.stringify(file));
     }
@@ -114,4 +115,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { selectFromDiff, selectVerification };
+module.exports = { lessonPaths, selectFromDiff, selectVerification };

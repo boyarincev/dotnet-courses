@@ -70,6 +70,41 @@ async function checkFailure(page, expectedStdout, error) {
     assert.equal(await output.locator("input").count(), 0);
 }
 
+async function openLessonCompiler(page) {
+    await page.locator("#course-compiler").scrollIntoViewIfNeeded();
+    const frame = page.frameLocator("#course-compiler");
+    await frame.locator("#editor-run-current").waitFor({ state: "attached" });
+    return frame;
+}
+
+async function verifyLessonExample(browser, lessonPath, snippetId) {
+    const page = await browser.newPage({ serviceWorkers: "block" });
+    try {
+        page.setDefaultTimeout(timeout);
+        await page.goto(new URL(lessonPath, site).href, { waitUntil: "domcontentloaded" });
+        const reminder = page.locator("#previous-quiz-dialog[open]");
+        if (await reminder.isVisible()) await reminder.getByRole("button", { name: "Продолжить урок" }).click();
+
+        const expectedOutput = await page.locator(`pre[data-output-for="${snippetId}"], [data-output-for="${snippetId}"] pre`).textContent();
+        assert.ok(expectedOutput.trim(), "The lesson must show the expected output");
+        const frame = await openLessonCompiler(page);
+        const status = page.locator("#page-editor-feedback");
+        await status.filter({ hasText: "Редактор готов к запуску." }).waitFor();
+        if (snippetId === "allocations-copies-retention") {
+            await page.waitForFunction(() => document.getElementById("course-compiler").contentWindow
+                .DotnetBrowserEditor?.getCode().includes("List<Order> ParsePaid("));
+        }
+        await page.locator(`button[data-example-id="${snippetId}"]`).click();
+        await status.filter({ hasText: /Запуск завершён|Ошибка запуска/ }).waitFor();
+        const output = frame.locator("#output");
+        await output.locator("pre").first().waitFor({ state: "attached" });
+        assert.equal(await output.textContent(), expectedOutput, `Output of ${lessonPath} (${snippetId})`);
+        console.log(`${lessonPath}: ran the full example and checked its output against the lesson`);
+    } finally {
+        await page.close();
+    }
+}
+
 function readLengthDelimitedFields(bytes) {
     const fields = new Map();
     let offset = 0;
@@ -106,8 +141,7 @@ async function verifyDotnetLabLink(browser) {
         page.setDefaultTimeout(timeout);
         const url = new URL("courses/memory/lessons/001-allocations-copies-retention/", site);
         await page.goto(url.href, { waitUntil: "domcontentloaded" });
-        const compiler = page.frameLocator("#course-compiler");
-        await compiler.locator("#editor-run-current").waitFor({ state: "attached" });
+        await openLessonCompiler(page);
         const source = [
             "",
             "using System;",
@@ -154,13 +188,13 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
         page.setDefaultTimeout(timeout);
         await page.goto(new URL(coursePath + lessonPath, site).href, { waitUntil: "domcontentloaded" });
         const getCompiler = async () => {
+            await openLessonCompiler(page);
             const iframe = await page.locator("#course-compiler").elementHandle();
             const frame = await iframe.contentFrame();
             assert.ok(frame, "Lesson compiler frame is missing");
             return frame;
         };
         let compiler = await getCompiler();
-        await compiler.locator("#editor-run-current").waitFor({ state: "attached" });
 
         const taskField = page.locator("#solution-" + taskId);
         const verifiedField = page.locator("#verified-" + taskId);
@@ -230,7 +264,7 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
         assert.equal(await taskField.inputValue(), starter, "The starter must remain unchanged on failure");
         assert.ok(await verifiedField.isHidden(), "A failed run must not show a solution");
 
-        const example = page.getByRole("button", {name: "Открыть C#-пример №1 в браузерном компиляторе", exact: true});
+        const example = page.locator(".snippet-actions button[data-example-id]").first();
         page.once("dialog", dialog => dialog.accept());
         await example.click();
         const demoSource = await compiler.evaluate(() => window.DotnetBrowserEditor.getCode());
@@ -243,7 +277,6 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
         });
         await page.reload({waitUntil: "domcontentloaded"});
         compiler = await getCompiler();
-        await compiler.locator("#editor-run-current").waitFor({state: "attached"});
         assert.equal(await compiler.evaluate(() => window.DotnetBrowserEditor.getCode()), demoSource);
         await installTemplate();
         await compiler.evaluate(() => {
@@ -301,9 +334,50 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
         const badge = page.locator('[data-lesson-completion-badge][data-lesson="1"]');
         await badge.waitFor({ state: "visible" });
         assert.equal(await badge.textContent(), "Пройден");
+        const courseStart = page.locator("[data-course-start]");
+        const nextBadge = page.locator("[data-lesson-completion-badge][hidden]").first();
+        if (await nextBadge.count()) {
+            assert.equal(await courseStart.textContent(), "Продолжить с урока " + await nextBadge.getAttribute("data-lesson"));
+            assert.equal(await courseStart.getAttribute("href"), await nextBadge.evaluate(node => node.closest("a").getAttribute("href")));
+        } else {
+            assert.equal(await courseStart.textContent(), "К списку уроков");
+            assert.equal(await courseStart.getAttribute("href"), "#course-lessons");
+        }
         console.log(taskId + ": checked practice completion through WebAssembly and the course badge");
     } finally {
         await context.close();
+    }
+}
+
+async function verifyCodeMirrorFallback(browser) {
+    const page = await browser.newPage({ serviceWorkers: "block" });
+    try {
+        page.setDefaultTimeout(timeout);
+        await page.route("**/assets/vendor/codemirror/**/*.js", route => route.abort());
+        await page.goto(new URL("courses/memory/lessons/001-allocations-copies-retention/", site).href,
+            { waitUntil: "domcontentloaded" });
+        const frame = await openLessonCompiler(page);
+        const editor = frame.locator("#code-editor");
+        await editor.waitFor({ state: "visible" });
+        const feedback = page.locator("#page-editor-feedback");
+        await feedback.filter({ hasText: "Редактор готов к запуску." }).waitFor();
+        assert.match(await editor.inputValue(), /List<Order> ParsePaid\(/,
+            "The plain editor must open with the lesson's program");
+        await page.getByRole("button", { name: "Открыть заготовку", exact: true }).click();
+        assert.match(await editor.inputValue(), /static \(int PaidCount, decimal Total\) SummarizePaid\(/,
+            "The lesson button must open the practice in the plain editor");
+
+        const edited = 'public static class Program { public static void Main() { System.Console.WriteLine("Plain editor draft"); } }';
+        await editor.fill(edited);
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await openLessonCompiler(page);
+        assert.equal(await editor.inputValue(), edited, "The plain editor must restore learner changes");
+        await page.locator("#page-editor-run").click();
+        await frame.locator("#output pre").filter({ hasText: "Plain editor draft" }).waitFor();
+        await feedback.filter({ hasText: "Запуск завершён. Результат в консоли." }).waitFor();
+        console.log("CodeMirror unavailable: checked the plain editor, restored draft and Roslyn result");
+    } finally {
+        await page.close();
     }
 }
 
@@ -351,9 +425,13 @@ async function verify() {
             console.log(".NET " + runtime + ": checked Assert output, compiler diagnostics, rerun, and interactive exception output");
             await page.close();
         }
+        await verifyLessonExample(browser, "courses/csharp-dotnet-9-11/lessons/001-params-countby/", "full-program");
+        await verifyLessonExample(browser, "courses/csharp-dotnet-9-11/lessons/002-aggregateby-null-conditional-assignment/", "full-program");
+        await verifyLessonExample(browser, "courses/memory/lessons/001-allocations-copies-retention/", "allocations-copies-retention");
         await verifyDotnetLabLink(browser);
         await verifyLessonCompletion(browser, "courses/csharp-dotnet-9-11/", "lessons/001-params-countby/", "TASK-001");
         await verifyLessonCompletion(browser, "courses/memory/", "lessons/001-allocations-copies-retention/", "ALLOC-TASK-001");
+        await verifyCodeMirrorFallback(browser);
     } finally {
         await browser.close();
     }

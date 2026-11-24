@@ -39,6 +39,7 @@
 
   const lessonStatus = document.getElementById("lesson-completion-status");
   const lessonBadges = document.querySelectorAll("[data-lesson-completion-badge]");
+  const courseStart = document.querySelector("[data-course-start]");
   const previousQuiz = document.getElementById("previous-quiz-dialog");
   let quizReminderShown = false;
 
@@ -53,6 +54,15 @@
     lessonBadges.forEach(badge => {
       badge.hidden = progress.get("lesson", badge.dataset.course, badge.dataset.lesson) !== true;
     });
+
+    if (courseStart) {
+      const courseBadges = [...lessonBadges].filter(badge => badge.dataset.course === courseStart.dataset.courseStart);
+      const nextLesson = courseBadges.find(badge => badge.hidden);
+      const hasProgress = courseBadges.some(badge => !badge.hidden);
+      courseStart.setAttribute("href", nextLesson?.closest(".lesson-card").getAttribute("href") ?? "#course-lessons");
+      courseStart.textContent = !hasProgress ? "Начать с первого урока"
+        : nextLesson ? `Продолжить с урока ${nextLesson.dataset.lesson}` : "К списку уроков";
+    }
 
     if (previousQuiz && typeof previousQuiz.showModal === "function") {
       const completed = progress.get("quiz", previousQuiz.dataset.course, previousQuiz.dataset.lesson);

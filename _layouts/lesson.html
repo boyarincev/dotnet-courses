@@ -33,7 +33,15 @@ layout: default
 <div class="eyebrow"><a href="{{ course_url | relative_url }}">{{ course_title }}</a> · Урок {{ page.lesson_number }} · {{ page.lesson_date }}</div>
 <h1>{{ page.title | escape }}</h1>
 <p class="lead">{{ page.summary | escape }}</p>
-<div class="chips"><span>{{ page.csharp_feature }}</span><span>{{ page.dotnet_feature }}</span><span>{{ page.series }}</span></div>
+<div class="chips">{% if page.csharp_feature %}<span>{{ page.csharp_feature | escape }}</span>{% endif %}{% if page.dotnet_feature %}<span>{{ page.dotnet_feature | escape }}</span>{% endif %}{% if page.series %}<span>{{ page.series | escape }}</span>{% endif %}</div>
+{% if page.browser_start_snippet %}
+<nav class="lesson-jump-nav" aria-label="Разделы урока">
+  <a href="#snippet-{{ page.browser_start_snippet | escape }}">Пример</a>
+  <a href="#lesson-task">Задание</a>
+  <a href="#browser-runner">Редактор</a>
+  <a href="{{ quiz_url | relative_url }}?through={{ page.lesson_number }}">Квиз</a>
+</nav>
+{% endif %}
 <div class="content prose">{{ content }}</div>
 {% if page.browser_runtime %}
 <section class="lesson-browser" id="browser-runner">
@@ -47,17 +55,13 @@ layout: default
     <button type="button" class="button" id="page-editor-copy">Копировать весь код</button>
     <button type="button" class="button" id="page-editor-download">Скачать Program.cs</button>
     <button type="button" class="button" id="page-editor-dotnet-lab">Открыть в .NET Lab</button>
-    <span class="practice-feedback" id="page-editor-feedback" role="status">Кнопки работают с текущим текстом в редакторе ниже.</span>
+    <span class="practice-feedback" id="page-editor-feedback" role="status">Загружается редактор C#…</span>
   </div>
-  <iframe id="course-compiler" data-lesson="{{ page.lesson_number }}" data-course="{{ course_id }}" title="C#-редактор и компилятор Roslyn для .NET {{ page.browser_runtime }}" src="{{ '/browser-compiler-net' | append: page.browser_runtime | append: '/' | relative_url }}?course={{ course_id }}&amp;lesson={{ page.lesson_number }}&amp;v={{ site.data.build.revision | default: 'dev' }}" loading="eager" style="display:block;width:100%;min-height:890px;border:1px solid var(--border);border-radius:14px;background:#fff" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+  <iframe id="course-compiler" data-lesson="{{ page.lesson_number }}" data-course="{{ course_id }}" data-start-snippet="{{ page.browser_start_snippet | escape }}" title="C#-редактор и компилятор Roslyn для .NET {{ page.browser_runtime }}" src="{{ '/browser-compiler-net' | append: page.browser_runtime | append: '/' | relative_url }}?course={{ course_id }}&amp;lesson={{ page.lesson_number }}&amp;v={{ site.data.build.revision | default: 'dev' }}" loading="eager" style="display:block;width:100%;min-height:890px;border:1px solid var(--border);border-radius:14px;background:#fff" referrerpolicy="strict-origin-when-cross-origin"></iframe>
   <p class="muted">Изменения кода в редакторе автоматически сохраняются в локальном хранилище этого браузера для конкретного урока. После обновления страницы черновик восстанавливается, пока ты не очистишь данные сайта. Кнопка «Открыть в .NET Lab» открывает текущий код во внешнем редакторе в новой вкладке. Для резервной копии используй «Скачать Program.cs». Рабочие секреты в браузер не вставляй.</p>
 </section>
-{% if course_id == 'memory' and page.lesson_number == 1 %}
-<script defer src="{{ '/assets/js/browser-snippets-memory001.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
-{% elsif course_id == 'csharp-dotnet-9-11' and page.lesson_number == 1 %}
-<script defer src="{{ '/assets/js/browser-snippets.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
-{% elsif course_id == 'csharp-dotnet-9-11' and page.lesson_number == 2 %}
-<script defer src="{{ '/assets/js/browser-snippets-lesson002.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
+{% if page.browser_snippets %}
+<script defer src="{{ '/assets/js/' | append: page.browser_snippets | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
 {% endif %}
 <script defer src="{{ '/assets/js/course-runner.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
 {% endif %}

@@ -28,14 +28,11 @@ self.addEventListener("fetch", event => {
     return;
   }
   // The shared editor's script is referenced by a cached compiler shell;
-  // version it here even when that shell's HTML has not changed.
+  // supply a version only when the document didn't specify one.
   if (url.pathname.startsWith(root.pathname + "assets/js/") ||
       url.pathname.startsWith(root.pathname + "assets/css/")) {
-    const fresh = new URL(url);
-    fresh.searchParams.set("v", revision);
-    event.respondWith(fetch(fresh.href, {
-      cache: "no-store",
-      credentials: "same-origin"
-    }));
+    if (url.searchParams.has("v")) return;
+    url.searchParams.set("v", revision);
+    event.respondWith(fetch(url.href, {credentials: "same-origin"}));
   }
 });

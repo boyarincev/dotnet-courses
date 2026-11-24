@@ -31,6 +31,28 @@ assert.match(extractTaskSource(currentProgram,taskId),/using Number = System\.In
   "the active draft preserves imports, learner notes and implementation");
 assert.ok(!extractTaskSource(currentProgram,"TASK-OTHER"),"drafts are bound to the expected Task-ID");
 
+const preamble = [
+  "// Заметка перед директивами.",
+  "using Scores = System.Int32[]; // Псевдоним массива.",
+  "/* Комментарий между директивами. */",
+  "using Pair = (int First,",
+  "              int Second);",
+  "using System.Linq;"
+].join("\n");
+const withPreamble = preamble + "\n" + currentProgram;
+assert.ok(isSuccessfulPracticeRun(currentTemplate, withPreamble, success, taskId),
+  "comments and modern using aliases do not invalidate the original checks");
+assert.ok(!isSuccessfulPracticeRun(currentTemplate, withPreamble.replace("Solve() == 1", "true"), success, taskId),
+  "comment and alias handling must still check the canonical Assert");
+const saved = extractTaskSource(withPreamble, taskId);
+assert.ok(saved.startsWith(preamble), "the saved draft preserves the full import preamble");
+const newerTemplate = "using System.Linq;\nusing Number=System.Int32;\n" + currentTemplate;
+const reopened = buildTaskProgram(newerTemplate, saved, taskId);
+assert.equal(reopened.match(/using System\.Linq;/g).length, 1);
+assert.equal(reopened.match(/using Number\s*=/g).length, 1);
+assert.match(reopened, /using Pair = \(int First,\n +int Second\);/);
+assert.ok(isSuccessfulPracticeRun(newerTemplate, reopened, success, taskId));
+
 const [root,...taskFilter]=process.argv.slice(2);
 if(root==="--shared-only" && taskFilter.length===0) process.exit(0);
 if(!root || root.startsWith("--")) {

@@ -2,17 +2,17 @@ name: Publish Jekyll learning site
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   actions: read
   contents: read
-  pages: write
-  id-token: write
 env:
   # This upstream revision is also part of the immutable WASM cache keys.
   COMPILER_SOURCE_SHA: e07376cb38bbebdb38fe8821666509e46906e2bf
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   build:
@@ -22,6 +22,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          persist-credentials: false
       # The two WASM outputs are versioned independently. Editing Markdown, CSS,
       # quiz data or the shared editor JavaScript does not invalidate them.
       - name: Restore C# 13 / .NET 9 WebAssembly compiler
@@ -74,6 +75,8 @@ jobs:
           node --check _browser/quiz-fsrs-entry.mjs
           node --check _browser/quiz-fsrs.test.mjs
           node --check assets/js/site.js
+      - name: Verify service worker URL handling
+        run: node _browser/verify_service_worker.cjs
       - name: Install pinned FSRS scheduler and bundler
         run: npm install --prefix _browser --no-save --no-package-lock --no-audit --no-fund ts-fsrs@6.0.0 esbuild@0.25.12
       - name: Verify FSRS-7 scheduling with real ts-fsrs and build browser module
@@ -200,7 +203,6 @@ jobs:
       - name: Install CodeMirror editor assets (cache miss)
         if: steps.codemirror.outputs.cache-hit != 'true'
         run: npm install --prefix "$RUNNER_TEMP/cm" --no-save --no-package-lock --no-audit --no-fund codemirror@5.65.21
-      - uses: actions/configure-pages@v6
       - name: Set revision for fresh page assets and navigation
         run: |
           printf 'revision: "%s"\n' "$GITHUB_SHA" > _data/build.yml
@@ -216,9 +218,10 @@ jobs:
             mkdir -p "_site/browser-compiler-net$runtime"
             cp -a "$RUNNER_TEMP/compiler-net$runtime/wwwroot/." "_site/browser-compiler-net$runtime/"
             cp "$RUNNER_TEMP/compiler-net$runtime/LICENSE.txt" "_site/browser-compiler-net$runtime/LICENSE.txt"
-            # The compiler shell is cached, but this editor JS changes separately.
-            sed -i "s#../assets/js/compiler-editor.js#../assets/js/compiler-editor.js?v=$GITHUB_SHA#g" "_site/browser-compiler-net$runtime/index.html"
-            test -s "_site/browser-compiler-net$runtime/index.html"
+            # Stamp only the staged shell so first loads are fresh without invalidating the WASM cache.
+            shell="_site/browser-compiler-net$runtime/index.html"
+            sed -i 's|src="\.\./assets/js/compiler-editor\.js"|src="../assets/js/compiler-editor.js?v='"$GITHUB_SHA"'"|' "$shell"
+            grep -Fq "src=\"../assets/js/compiler-editor.js?v=$GITHUB_SHA\"" "$shell"
             test -s "_site/browser-compiler-net$runtime/_framework/blazor.webassembly.js"
           done
           mkdir -p _site/assets/vendor/codemirror/lib
@@ -233,39 +236,13 @@ jobs:
           cp "$RUNNER_TEMP/cm/node_modules/codemirror/addon/edit/matchbrackets.js" _site/assets/vendor/codemirror/addon/edit/
           cp "$RUNNER_TEMP/cm/node_modules/codemirror/addon/edit/closebrackets.js" _site/assets/vendor/codemirror/addon/edit/
           if test -f "$RUNNER_TEMP/cm/node_modules/codemirror/LICENSE"; then cp "$RUNNER_TEMP/cm/node_modules/codemirror/LICENSE" _site/assets/vendor/codemirror/LICENSE.txt; fi
-          test -s _site/assets/js/compiler-editor.js
-          test -s _site/assets/js/course-runner.js
-          test -s _site/assets/js/quiz-fsrs.js
-          grep -q 'quiz-fsrs.js' _site/courses/csharp-dotnet-9-11/quiz/index.html
-          grep -q 'quiz-fsrs.js' _site/courses/memory/quiz/index.html
-          grep -q 'through=1' _site/courses/csharp-dotnet-9-11/lessons/001-params-countby/index.html
-          grep -q 'through=2' _site/courses/csharp-dotnet-9-11/lessons/002-aggregateby-null-conditional-assignment/index.html
-          for page in \
-            _site/courses/csharp-dotnet-9-11/lessons/001-params-countby/index.html \
-            _site/courses/csharp-dotnet-9-11/lessons/002-aggregateby-null-conditional-assignment/index.html \
-            _site/courses/memory/lessons/001-allocations-copies-retention/index.html; do
-            grep -q 'id="practice-program-template"' "$page"
-            grep -q 'INSERT_SOLUTION_HERE' "$page"
-            grep -q 'void Assert(' "$page"
-          done
-          grep -q 'course-compiler' _site/courses/csharp-dotnet-9-11/lessons/001-params-countby/index.html
-          grep -q 'course-compiler' _site/courses/csharp-dotnet-9-11/lessons/002-aggregateby-null-conditional-assignment/index.html
-          grep -q 'course-compiler' _site/courses/memory/lessons/001-allocations-copies-retention/index.html
-          test -s _site/courses/memory/quiz/index.html
-          test -s _site/courses/csharp-dotnet-9-11/quiz/index.html
-          test -s _site/courses/memory/index.html
-          test -s _site/courses/csharp-dotnet-9-11/index.html
           for retired in courses/whats-new lessons quiz labs/001-browser; do
             test ! -e "_site/$retired"
           done
           test -s _site/sw.js
           node --check _site/sw.js
-          grep -q 'id="page-editor-run"' _site/courses/csharp-dotnet-9-11/lessons/001-params-countby/index.html
-          grep -q 'id="page-editor-run"' _site/courses/memory/lessons/001-allocations-copies-retention/index.html
-          grep -q "$GITHUB_SHA" _site/index.html
           grep -q "$GITHUB_SHA" _site/sw.js
-          grep -q "$GITHUB_SHA" _site/courses/memory/lessons/001-allocations-copies-retention/index.html
-      - name: Verify console output in both published WASM builds
+      - name: Verify built pages, quizzes and WASM compilers in Chromium
         run: |
           npm install --prefix "$RUNNER_TEMP/browser-tests" --no-save --no-package-lock --no-audit --no-fund playwright@1.62.1
           "$RUNNER_TEMP/browser-tests/node_modules/.bin/playwright" install --with-deps chromium
@@ -274,15 +251,24 @@ jobs:
           python3 -m http.server 4173 --bind 127.0.0.1 --directory "$RUNNER_TEMP/browser-site" &
           trap 'kill $!' EXIT
           curl -fsS --retry 5 --retry-connrefused http://127.0.0.1:4173/dotnet-courses/ >/dev/null
-          NODE_PATH="$RUNNER_TEMP/browser-tests/node_modules" node _browser/verify_compiler_output.cjs \
-            http://127.0.0.1:4173/dotnet-courses/ "$GITHUB_SHA"
+          export NODE_PATH="$RUNNER_TEMP/browser-tests/node_modules"
+          site_url=http://127.0.0.1:4173/dotnet-courses/
+          node _browser/verify_site.cjs "$site_url" _site "$GITHUB_SHA"
+          node _browser/verify_quiz.cjs "$site_url"
+          node _browser/verify_compiler_output.cjs "$site_url" "$GITHUB_SHA"
       - uses: actions/upload-pages-artifact@v5
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
   deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build
     steps:
+      - uses: actions/configure-pages@v6
       - id: deployment
         uses: actions/deploy-pages@v5

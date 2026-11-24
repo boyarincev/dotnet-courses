@@ -9,13 +9,15 @@
   const course=root.dataset.course;
   const draftKey="dotnet-courses:quiz-drafts:v1:"+course;
   const fsrsKey="dotnet-courses:fsrs-7:v1:"+course;
+  const prefix="dotnet-courses:quiz:v2:"+course+":";
+  const importKey=prefix+"import";
   const maxQuestions=5;
   const requested=new URLSearchParams(location.search).getAll("through");
-  const courseWide=requested.length===0;
   const n=requested.length===1 && /^\d+$/.test(requested[0])?Number(requested[0]):null;
-  const through=Number.isSafeInteger(n) && n>0?n:null;
-  const publishedLessons=(root.dataset.lessonNumbers||"").split(",").map(Number);
-  const lessonQuiz=through!==null && publishedLessons.includes(through);
+  const publishedLessons=(root.dataset.lessonNumbers||"").split(",").map(Number).filter(number=>number>0);
+  const through=publishedLessons.includes(n)?n:null;
+  const lessonQuiz=through!==null;
+  const selectionKey=prefix+"lesson:"+through;
   const ids=new Set(bank.map(q=>q.id));
   const gradeNames={wrong:"Неверно",partial:"Частично",correct:"Верно",easy:"Легко"};
   const count=document.getElementById("quiz-count");
@@ -23,6 +25,7 @@
   const lessonNotice=document.getElementById("quiz-lesson-progress");
   const lessonStatus=lessonNotice?.querySelector('[role="status"]');
   const feedback=document.getElementById("quiz-feedback");
+  const backupFeedback=document.getElementById("quiz-backup-feedback");
   const allButton=document.getElementById("quiz-show-all");
   const nextButton=document.getElementById("quiz-next");
   const nextControl=document.getElementById("quiz-next-control");
@@ -33,17 +36,28 @@
 
   function read(key) {
     try {
-      const value=JSON.parse(localStorage.getItem(key)||"null");
-      return value && typeof value==="object" && !Array.isArray(value)?value:{};
-    } catch {return {};}
+      return JSON.parse(localStorage.getItem(key));
+    } catch {return null;}
   }
-  let drafts=read(draftKey);
-  let records=read(fsrsKey);
+  const isObject=value=>value!==null && typeof value==="object" && !Array.isArray(value);
+
+  function loadSavedData() {
+    const imported=read(importKey);
+    if(typeof imported?.revision==="string" && isObject(imported.progress) && isObject(imported.drafts)) {
+      return imported;
+    }
+    const progress=read(fsrsKey);
+    const drafts=read(draftKey);
+    return {revision:"initial",progress:isObject(progress)?progress:{},drafts:isObject(drafts)?drafts:{}};
+  }
+
+  let savedData=loadSavedData();
+  const unsavedDrafts=new Map();
   let displayed=[];
   let showAll=false;
   let answeredThisSession=new Set();
-  const selectionAssessments=new Map();
   let lessonSelection=null;
+  let selectionId=null;
   let lessonCompleted=false;
   let extraSelection=false;
   let engine=null;
@@ -52,10 +66,36 @@
     try {
       localStorage.setItem(key,JSON.stringify(value));
       return true;
-    } catch {
-      feedback.textContent="Не удалось сохранить прогресс. Экспортируй данные или проверь настройки браузера.";
-      return false;
-    }
+    } catch {return false;}
+  }
+
+  // Keep writes for unrelated questions independent across tabs. An import
+  // replaces the baseline in one write and invalidates overrides by revision.
+  function readOverride(key) {
+    const entry=read(key);
+    return entry?.revision===savedData.revision?entry.value:undefined;
+  }
+
+  function writeOverride(key,value) {
+    return store(key,{revision:savedData.revision,value});
+  }
+
+  function draftFor(id) {
+    const draft=unsavedDrafts.get(id)??readOverride(prefix+"draft:"+id)??savedData.drafts[id];
+    return typeof draft==="string"?draft:"";
+  }
+
+  function recordFor(id) {
+    return readOverride(prefix+"card:"+id)??savedData.progress[id];
+  }
+
+  function assessmentFor(id) {
+    const entry=readOverride(selectionKey+":assessment:"+id);
+    return entry?.selectionId===selectionId?entry:undefined;
+  }
+
+  function saveAssessment(id,answer,grade) {
+    return writeOverride(selectionKey+":assessment:"+id,{selectionId,answer,grade});
   }
 
   const currentTime=()=>new Date();
@@ -97,6 +137,7 @@
     extraSelection=false;
     if(showAll)return getEligible();
     const now=currentTime();
+    const records=Object.fromEntries(bank.map(q=>[q.id,recordFor(q.id)]));
     const scheduled=engine.select(bank,records,now,through,maxQuestions,Math.random,[...answeredThisSession]);
     if(scheduled.length || !countsForLesson())return scheduled;
 
@@ -107,12 +148,35 @@
     return extra;
   }
 
+  function loadLessonSelection() {
+    if(lessonCompleted) return choose();
+    const saved=readOverride(selectionKey);
+    if(Array.isArray(saved?.ids)) {
+      const eligible=new Map(getEligible().map(question=>[question.id,question]));
+      const questions=saved.ids.map(id=>eligible.get(id)).filter(Boolean);
+      if(questions.length) {
+        selectionId=saved.id;
+        extraSelection=saved.extra;
+        return questions;
+      }
+    }
+
+    const questions=choose();
+    if(questions.length) {
+      selectionId=crypto.randomUUID();
+      if(!writeOverride(selectionKey,{id:selectionId,ids:questions.map(q=>q.id),extra:extraSelection})) {
+        feedback.textContent="Не удалось сохранить подборку в этом браузере.";
+      }
+    }
+    return questions;
+  }
+
   function refresh() {
     lessonCompleted=lessonQuiz && window.DotnetLearning?.progress?.get("quiz",course,through)===true;
     if(!lessonQuiz)displayed=choose();
     else if(showAll)displayed=getEligible();
     else {
-      lessonSelection??=choose();
+      lessonSelection??=loadLessonSelection();
       displayed=lessonSelection;
     }
     render();
@@ -133,8 +197,7 @@
       return;
     }
 
-    const assessed=displayed.filter(q=>
-      selectionAssessments.get(q.id)?.answer===String(drafts[q.id]??"").trim()).length;
+    const assessed=displayed.filter(q=>assessmentFor(q.id)?.answer===draftFor(q.id).trim()).length;
     if(assessed===displayed.length) {
       lessonCompleted=window.DotnetLearning?.progress?.mark("quiz",course,through)===true;
       lessonStatus.textContent=lessonCompleted?
@@ -143,7 +206,7 @@
       return;
     }
 
-    lessonStatus.textContent="Ответы с самооценкой в этой подборке: "+assessed+" из "+displayed.length+"."+
+    lessonStatus.textContent="С самооценкой: "+assessed+" из "+displayed.length+"."+
       (extraSelection?" Самооценки в этой подборке сохраняют текущее расписание FSRS.":"");
   }
 
@@ -164,15 +227,14 @@
       root.append(empty);
       return;
     }
-    displayed.forEach((q,i)=>{
-      const record=records[q.id];
+    displayed.forEach(q=>{
+      const record=recordFor(q.id);
       const isDue=engine.due(record,currentTime());
       const box=document.createElement("article");
       box.className="question";
       const meta=document.createElement("div");
       meta.className="question-meta";
-      meta.textContent="ВОПРОС "+(i+1)+" · УРОК №"+q.lesson_number+
-        " · "+q.id+" · "+q.tag+" · "+q.type;
+      meta.textContent="Урок №"+q.lesson_number+" · "+q.id+" · "+q.tag;
       const heading=document.createElement("h2");
       heading.textContent=q.prompt;
       const status=document.createElement("p");
@@ -187,7 +249,7 @@
       const input=document.createElement("textarea");
       input.id="a-"+q.id;
       input.rows=4;
-      input.value=drafts[q.id]||"";
+      input.value=draftFor(q.id);
       input.placeholder="Напиши свой ответ или пример C#…";
       const controls=document.createElement("div");
       controls.className="question-grade-actions";
@@ -197,15 +259,23 @@
       const message=document.createElement("span");
       message.className="practice-feedback";
       message.setAttribute("role","status");
-      const previousAssessment=showAll?null:selectionAssessments.get(q.id);
+      const draftStatus=document.createElement("p");
+      draftStatus.className="quiz-draft-status muted";
+      draftStatus.setAttribute("role","status");
+      if(unsavedDrafts.has(q.id))draftStatus.textContent="Черновик не сохранён. Скопируй ответ перед закрытием страницы.";
+      else if(input.value)draftStatus.textContent="Черновик восстановлен";
+      const previousAssessment=showAll?null:assessmentFor(q.id);
       const assessed=previousAssessment?.answer===input.value.trim();
       if(assessed)message.textContent="Самооценка «"+gradeNames[previousAssessment.grade]+"» учтена в подборке.";
       else if(previousAssessment && countsForLesson())message.textContent="Поставь самооценку изменённому ответу.";
       input.addEventListener("input",()=>{
-        drafts[q.id]=input.value;
-        store(draftKey,drafts);
+        const saved=writeOverride(prefix+"draft:"+q.id,input.value);
+        if(saved)unsavedDrafts.delete(q.id);
+        else unsavedDrafts.set(q.id,input.value);
+        const draftMessage=saved?"Черновик сохранён":"Черновик не сохранён. Скопируй ответ перед закрытием страницы.";
+        if(draftStatus.textContent!==draftMessage)draftStatus.textContent=draftMessage;
         if(!countsForLesson())return;
-        const assessment=selectionAssessments.get(q.id);
+        const assessment=assessmentFor(q.id);
         if(assessment) {
           const matches=assessment.answer===input.value.trim();
           controls.querySelectorAll("button").forEach(b=>b.disabled=matches);
@@ -228,10 +298,13 @@
             return;
           }
           const forLesson=countsForLesson();
-          const prior=records[q.id];
+          const prior=recordFor(q.id);
           const now=currentTime();
           if(forLesson && (extraSelection || answeredThisSession.has(q.id) || !engine.due(prior,now))) {
-            selectionAssessments.set(q.id,{answer,grade});
+            if(!saveAssessment(q.id,answer,grade)) {
+              message.textContent="Не удалось сохранить самооценку в этом браузере.";
+              return;
+            }
             message.textContent="Самооценка «"+title+"» учтена в подборке. Расписание FSRS сохранено.";
             controls.querySelectorAll("button").forEach(b=>b.disabled=true);
             updateLessonStatus();
@@ -239,21 +312,21 @@
           }
           try {
             const updated=engine.evaluate(prior,q.id,grade,input.value,now);
-            records[q.id]=updated;
-            if(!store(fsrsKey,records)) {
-              if(prior)records[q.id]=prior;
-              else delete records[q.id];
+            if(!writeOverride(prefix+"card:"+q.id,updated)) {
               message.textContent="Оценка не сохранена. Попробуй экспортировать ответы.";
               return;
             }
             answeredThisSession.add(q.id);
-            if(forLesson)selectionAssessments.set(q.id,{answer,grade});
             status.textContent="Самооценка: "+title+
               " · Следующее повторение: "+prettyDate(updated.card.dueAt)+
               " · Попыток: "+updated.history.length;
+            renderAnswerHistory(answerHistory,updated.history);
+            if(forLesson && !saveAssessment(q.id,answer,grade)) {
+              message.textContent="Расписание FSRS сохранено. Не удалось учесть оценку в подборке. Повтори самооценку.";
+              return;
+            }
             message.textContent="Оценка сохранена локально. Дату рассчитал FSRS-7.";
             controls.querySelectorAll("button").forEach(b=>b.disabled=true);
-            renderAnswerHistory(answerHistory,updated.history);
             if(forLesson)updateLessonStatus();
           } catch (error) {
             message.textContent="Не удалось оценить: "+error.message;
@@ -261,7 +334,7 @@
         });
         controls.append(button);
       });
-      box.append(meta,heading,status,label,input,controls,message,answerHistory);
+      box.append(meta,heading,status,label,input,draftStatus,controls,message,answerHistory);
       root.append(box);
     });
   }
@@ -273,7 +346,7 @@
       "Дата: "+currentTime().toLocaleString("ru-RU"),
       through?"Уроки №1–"+through:"Весь курс","",
       ...displayed.map(q=>{
-        const answer=String(drafts[q.id]??"").trim();
+        const answer=draftFor(q.id).trim();
         return q.id+" · Урок "+q.lesson_number+"\nВопрос\n"+q.prompt+
           "\nМой ответ\n"+(answer||"(нет ответа)")+"\n";
       })
@@ -281,23 +354,35 @@
   }
 
   function saveProgress() {
-    const payload={format:"dotnet-courses-fsrs-v1",algorithm:"FSRS-7",
-      course,exportedAt:currentTime().toISOString(),progress:records,drafts};
+    const progress={...savedData.progress};
+    const drafts={...savedData.drafts};
+    for(const id of ids) {
+      const record=recordFor(id);
+      if(record)progress[id]=record;
+      const draft=draftFor(id);
+      if(draft)drafts[id]=draft;
+      else delete drafts[id];
+    }
+    const completedLessons=publishedLessons.filter(lesson=>window.DotnetLearning.progress.get("quiz",course,lesson)===true);
+    const payload={format:"dotnet-courses-fsrs-v2",algorithm:"FSRS-7",
+      course,exportedAt:currentTime().toISOString(),progress,drafts,completedLessons};
     window.DotnetLearning.download("progress-"+course+".json",JSON.stringify(payload,null,2));
-    feedback.textContent="Прогресс скачан. В JSON содержатся твои ответы — храни файл приватно.";
+    backupFeedback.textContent="Копия скачана. В JSON содержатся твои ответы.";
   }
 
   async function restore(file) {
-    if(!file||file.size>10_000_000) {
-      feedback.textContent="Нужен JSON-файл прогресса размером не более 10 МБ.";
-      return;
-    }
+    backupFeedback.textContent="";
     try {
+      if(!file||file.size>10_000_000) throw Error("Нужен JSON-файл размером не более 10 МБ.");
       const data=JSON.parse(await file.text());
-      if(data.format!=="dotnet-courses-fsrs-v1"||data.course!==course||
-         !data.progress||typeof data.progress!=="object"||Array.isArray(data.progress)||
-         !data.drafts||typeof data.drafts!=="object"||Array.isArray(data.drafts)) {
+      const oldFormat=data?.format==="dotnet-courses-fsrs-v1";
+      if((!oldFormat && data?.format!=="dotnet-courses-fsrs-v2")||data.course!==course||
+         !isObject(data.progress)||!isObject(data.drafts)) {
         throw Error("Это не файл прогресса данного курса.");
+      }
+      const completedLessons=oldFormat?[]:data.completedLessons;
+      if(!Array.isArray(completedLessons)||completedLessons.some(number=>!publishedLessons.includes(number))) {
+        throw Error("Некорректные отметки о прохождении квизов.");
       }
       for(const [id,record] of Object.entries(data.progress)) {
         if(!ids.has(id)||!record||!record.card||!Array.isArray(record.history)||
@@ -305,35 +390,42 @@
           throw Error("Некорректная карточка: "+id);
         }
       }
-      if(!window.confirm("Заменить текущие локальные данные импортированными? Перед импортом лучше сохранить резервную копию."))return;
-      const oldP=records,oldD=drafts;
-      records=data.progress;
-      drafts=data.drafts;
-      if(!store(fsrsKey,records)||!store(draftKey,drafts)) {
-        records=oldP;drafts=oldD;
-        store(fsrsKey,records);store(draftKey,drafts);
+      if(Object.values(data.drafts).some(value=>typeof value!=="string")) {
+        throw Error("Некорректные черновики ответов.");
+      }
+      if(!window.confirm("Заменить черновики и расписание FSRS данными из копии? Отметки о пройденных квизах будут добавлены."))return;
+      const imported={revision:crypto.randomUUID(),progress:data.progress,drafts:data.drafts};
+      if(!store(importKey,imported)) {
         throw Error("Невозможно сохранить импорт в этом браузере.");
       }
-      answeredThisSession=new Set();
-      selectionAssessments.clear();
+      const failedMarks=completedLessons.filter(lesson=>!window.DotnetLearning.progress.mark("quiz",course,lesson));
+      savedData=imported;
+      unsavedDrafts.clear();
+      resetSelection();
       refresh();
-      feedback.textContent="Прогресс импортирован.";
+      backupFeedback.textContent=failedMarks.length?
+        "Черновики и расписание импортированы. Отметки квизов не удалось сохранить.":"Копия импортирована.";
     } catch(error) {
-      feedback.textContent="Ошибка импорта: "+error.message;
+      backupFeedback.textContent="Ошибка импорта: "+error.message;
     } finally {
       importFile.value="";
     }
+  }
+
+  function resetSelection() {
+    answeredThisSession.clear();
+    lessonSelection=null;
+    selectionId=null;
   }
 
   function init(srs) {
     engine=srs;
     if(lessonNotice)lessonNotice.hidden=!lessonQuiz;
     context.textContent=through?
-      "Случайные вопросы по урокам №1–"+through+
-      ". Приоритет — трудным и просроченным карточкам; затем новым.":
-      "Общее повторение всего курса: случайные просроченные и новые вопросы.";
-    if(nextControl)nextControl.hidden=!courseWide;
-    if(courseWide)nextButton.addEventListener("click",refresh);
+      "Уроки №1–"+through+". Ответь на каждый вопрос подборки и поставь самооценку.":
+      "Весь курс. Ответь на вопрос и поставь себе оценку, чтобы запланировать повторение.";
+    if(nextControl)nextControl.hidden=lessonQuiz;
+    if(!lessonQuiz)nextButton.addEventListener("click",refresh);
     allButton.addEventListener("click",()=>{showAll=!showAll;refresh();});
     document.getElementById("quiz-copy").addEventListener("click",async()=>{
       try {
@@ -350,6 +442,12 @@
     exportButton.addEventListener("click",saveProgress);
     importButton.addEventListener("click",()=>importFile.click());
     importFile.addEventListener("change",()=>restore(importFile.files?.[0]));
+    window.addEventListener("storage",event=>{
+      if(event.key!==null && event.key!==importKey)return;
+      savedData=loadSavedData();
+      resetSelection();
+      refresh();
+    });
     refresh();
   }
 

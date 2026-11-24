@@ -21,6 +21,10 @@ const lessonPaths = {
     "_memory_lessons/001-allocations-copies-retention.md",
     "_browser/memory-lesson001-program.cs",
     "assets/js/browser-snippets-memory001.js"
+  ],
+  task003: [
+    "_lessons/003-ordered-dictionary-extension-indexers.md",
+    "_browser/prepare_lesson003_check.cjs"
   ]
 };
 const allTasks = Object.keys(lessonPaths);

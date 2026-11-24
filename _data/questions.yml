@@ -158,3 +158,54 @@
     и количество ошибок, а неверный критерий меняет состав пары. Запиши
     ожидаемых клиентов по убыванию суммы байтов, число ошибок и сумму байтов
     для каждого.
+- id: CS15-EI-01
+  lesson_number: 3
+  topic: CS15-EXT-INDEXER
+  tag: 'C# 15 · расширяющие индексаторы'
+  type: понимание
+  available_from: '2026-11-24'
+  prompt: >-
+    В блоке extension(OrderedDictionary<string, int> entries) объявлен
+    индексатор this[Index position]. Какую роль играют entries и position
+    при вызове board[^1]?
+- id: CS15-EI-02
+  lesson_number: 3
+  topic: CS15-EXT-INDEXER
+  tag: 'C# 15 · расширяющие индексаторы'
+  type: прогноз результата
+  available_from: '2026-11-24'
+  prompt: >-
+    Словарь содержит четыре пары. Что вернёт position.GetOffset(length: 4),
+    если position равен 0, ^1 или ^0? Какие из полученных позиций допустимы
+    для GetAt?
+- id: CS15-EI-03
+  lesson_number: 3
+  topic: CS15-EXT-INDEXER
+  tag: 'C# 15 · расширяющие индексаторы'
+  type: проектирование проверки
+  available_from: '2026-11-24'
+  prompt: >-
+    Индексатор должен поддерживать позиции с начала и с конца. Ошибочная
+    реализация передаёт position.Value в GetAt, не учитывая направление.
+    Придумай словарь и вызов, на которых она вернёт другую пару без исключения.
+    Укажи пару, которую должен вернуть корректный индексатор.
+- id: N9-OD-01
+  lesson_number: 3
+  topic: NET9-ORDERED-DICTIONARY
+  tag: '.NET 9 · OrderedDictionary.GetAt'
+  type: сравнение
+  available_from: '2026-11-24'
+  prompt: >-
+    Словарь OrderedDictionary<string, int> содержит пары ("worker", 2),
+    ("gateway", 5) именно в этом порядке. Какой результат и какого типа
+    дают entries["gateway"] и entries.GetAt(0)?
+- id: N9-OD-02
+  lesson_number: 3
+  topic: NET9-ORDERED-DICTIONARY
+  tag: '.NET 9 · OrderedDictionary.GetAt'
+  type: прогноз результата
+  available_from: '2026-11-24'
+  prompt: >-
+    В словарь добавлены пары ("worker", 2) и ("gateway", 5) в этом порядке.
+    Затем вызывается entries.Insert(0, "metrics", 1). Какую пару вернёт
+    GetAt(1) и почему?

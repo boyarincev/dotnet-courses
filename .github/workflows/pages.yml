@@ -132,6 +132,13 @@ jobs:
           SELECTED_TASKS: ${{ join(fromJSON(steps.lesson_checks.outputs.tasks), ' ') }}
         run: |
           read -r -a tasks <<< "$SELECTED_TASKS"
+          browser_tasks=()
+          for task in "${tasks[@]}"; do
+            if test "$task" != task003; then
+              browser_tasks+=("$task")
+            fi
+          done
+          tasks=("${browser_tasks[@]}")
           if ((${#tasks[@]} == 0)); then
             node _browser/verify_practice_assertions.cjs --shared-only
             exit
@@ -194,6 +201,31 @@ jobs:
         run: |
           dotnet publish _compiler_src_net10/CSharpCompilerWasm/CSharpCompilerWasm.csproj --configuration Release --output "$RUNNER_TEMP/compiler-net10"
           cp _compiler_src/LICENSE "$RUNNER_TEMP/compiler-net10/LICENSE.txt"
+      - name: Install .NET 11 SDK for lesson 003 checks
+        if: contains(fromJSON(steps.lesson_checks.outputs.tasks), 'task003')
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '11.0.100'
+      - name: Verify lesson 003 example and practice on .NET 11
+        if: contains(fromJSON(steps.lesson_checks.outputs.tasks), 'task003')
+        run: |
+          folder="$RUNNER_TEMP/lesson003smoke"
+          mkdir -p "$folder"
+          node _browser/prepare_lesson003_check.cjs "$folder"
+          cd "$folder"
+          printf '{"sdk":{"version":"11.0.100","rollForward":"disable"}}\n' > global.json
+          dotnet new console -n Lesson003Smoke -f net11.0 -o .
+          cp demo.cs.txt Program.cs
+          dotnet build --no-restore
+          dotnet run --no-build > demo-output.txt
+          diff -u expected.txt demo-output.txt
+          cp wrong.cs.txt Program.cs
+          dotnet build --no-restore
+          if dotnet run --no-build > wrong-output.txt 2>&1; then
+            echo 'ERROR: intentionally wrong TASK-003 solution passed its assertions'
+            exit 1
+          fi
+          grep -F '❌ TASK-003: Неверная последняя пара.' wrong-output.txt
       - name: Restore pinned CodeMirror assets
         id: codemirror
         uses: actions/cache@v5

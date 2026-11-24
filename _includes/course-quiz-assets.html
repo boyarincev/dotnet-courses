@@ -1,0 +1,3 @@
+<script type="application/json" id="question-bank">{{ include.questions | jsonify }}</script>
+<script defer src="{{ '/assets/js/quiz-fsrs.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
+<script defer src="{{ '/assets/js/quiz.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>

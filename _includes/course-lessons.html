@@ -7,6 +7,11 @@
   <a class="button" href="{{ include.quiz | relative_url }}">Квиз и повторение</a>
   <a class="button" href="{{ include.related | relative_url }}">{{ include.related_label }}</a>
 </div>
+<div class="notice" data-course-review data-course="{{ include.course }}" data-lesson-numbers="{{ sorted_lessons | map: 'lesson_number' | join: ',' }}" hidden>
+  <strong data-course-review-status role="status"></strong>
+  <span data-course-review-action hidden><a class="button" href="{{ include.quiz | relative_url }}?review=today">Повторить сегодня</a></span>
+</div>
+{% include course-quiz-assets.html questions=include.questions %}
 <h2 id="course-lessons">Уроки · {{ sorted_lessons.size }}</h2>
 <div class="lessons">
 {% for lesson in sorted_lessons %}

@@ -8,7 +8,7 @@
   <strong id="quiz-count" role="status">Вопросы</strong>
   <div>
     <span id="quiz-next-control" hidden><button type="button" id="quiz-next" class="button">Другая подборка</button></span>
-    <button type="button" id="quiz-show-all" class="button">Все вопросы</button>
+    <span id="quiz-all-control"><button type="button" id="quiz-show-all" class="button">Все вопросы</button></span>
   </div>
 </div>
 <section id="quiz-root" aria-label="Вопросы квиза" data-course="{{ include.course_id }}" data-lesson-numbers="{{ include.lessons | map: 'lesson_number' | join: ',' }}"></section>
@@ -18,16 +18,28 @@
 </div>
 <p id="quiz-feedback" role="status"></p>
 <p class="muted">Ответы сохраняются в этом браузере. Их можно отправить на проверку отдельно. Расписание FSRS учитывает твою самооценку.</p>
-<details class="quiz-backup">
-  <summary>Резервная копия квизов курса</summary>
-  <p class="muted">В JSON входят черновики ответов, расписание и история FSRS, отметки о пройденных квизах.</p>
+<details class="quiz-backup" data-practice-lessons="{% for lesson in include.lessons %}{% if lesson.browser_runtime %}{{ lesson.lesson_number }},{% endif %}{% endfor %}">
+  <summary>Резервная копия курса</summary>
+  <p class="muted">В JSON входят ответы и история FSRS, черновики кода, успешные решения и отметки о прохождении уроков и квизов.</p>
   <div class="quiz-progress-actions">
     <button type="button" id="quiz-export-progress" class="button">Скачать копию (.json)</button>
     <button type="button" id="quiz-import-progress" class="button">Импортировать копию</button>
     <input id="quiz-import-file" type="file" accept="application/json,.json" hidden>
   </div>
   <p id="quiz-backup-feedback" class="muted" role="status"></p>
+  <dialog id="quiz-import-preview" aria-labelledby="quiz-import-title">
+    <h2 id="quiz-import-title">Изменения из резервной копии</h2>
+    <p id="quiz-import-notice" class="muted" role="status"></p>
+    <ul id="quiz-import-changes"></ul>
+    <details id="quiz-import-records">
+      <summary>Какие записи изменятся</summary>
+      <ul></ul>
+    </details>
+    <form method="dialog" class="quiz-actions">
+      <button type="submit" class="button primary" value="import">Импортировать</button>
+      <button type="submit" class="button" value="cancel" autofocus>Отмена</button>
+    </form>
+  </dialog>
 </details>
-<script type="application/json" id="question-bank">{{ include.questions | jsonify }}</script>
-<script defer src="{{ '/assets/js/quiz-fsrs.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
-<script defer src="{{ '/assets/js/quiz.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
+<script defer src="{{ '/assets/js/course-backup.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>
+{% include course-quiz-assets.html questions=include.questions %}

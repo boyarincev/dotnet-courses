@@ -50,20 +50,67 @@ source = source.replace(
     "            var compiledSource = sourceCode;\n"
     "            var result = await CompileCSharpCode(compiledSource);",
 )
-parse = "CSharpSyntaxTree.ParseText(combinedCode);"
-if source.count(parse) != 1:
-    raise RuntimeError("Missing CSharpSyntaxTree.ParseText")
-source = source.replace(
-    parse,
-    f"CSharpSyntaxTree.ParseText(combinedCode, new CSharpParseOptions(LanguageVersion.CSharp{language_version}));",
-)
-
-
 def replace_once(text, old, new):
     if text.count(old) != 1:
         raise RuntimeError("Upstream console code changed; cannot patch: " + old.splitlines()[0].strip())
     return text.replace(old, new)
 
+
+# Compile the Console shim separately so diagnostic spans are relative to
+# the original Program.cs, including when it has no leading using directives.
+source, count = re.subn(
+    r"            // Extract using statements from user code and put them at the top\n.*?"
+    r"            var syntaxTree = CSharpSyntaxTree.ParseText\(combinedCode\);",
+    f'''            var parseOptions = new CSharpParseOptions(LanguageVersion.CSharp{language_version});
+            var syntaxTree = CSharpSyntaxTree.ParseText(code, parseOptions, path: "Program.cs");
+            var consoleTree = CSharpSyntaxTree.ParseText(ConsoleCodeProvider.GetConsoleReplacementCode(), parseOptions, path: "Console.cs");''',
+    source,
+    flags=re.DOTALL,
+)
+if count != 1:
+    raise RuntimeError("Upstream syntax tree preparation changed")
+source = replace_once(source, "new[] { syntaxTree },", "new[] { syntaxTree, consoleTree },")
+source = replace_once(
+    source,
+    "    private bool showSystemOutput = false;",
+    "    private bool showSystemOutput = false;\n    private int diagnosticRun;",
+)
+source = replace_once(
+    source,
+    '''                foreach (var error in result.Errors)
+                {
+                    var lineNumber = error.Location.GetLineSpan().StartLinePosition.Line + 1;
+                    AddErrorOutput($"Line {lineNumber}: {error.GetMessage()}", "error");
+                }''',
+    '''                var run = ++diagnosticRun;
+                foreach (var error in result.Errors)
+                {
+                    var message = $"{error.Id}: {error.GetMessage()}";
+                    if (error.Location.SourceTree?.FilePath == "Program.cs")
+                    {
+                        var position = error.Location.GetLineSpan().StartLinePosition;
+                        message = $"Строка {position.Line + 1}, столбец {position.Character + 1}. {message}";
+                        if (showFullCode)
+                        {
+                            AddErrorOutput(message, "error", run, error.Location.SourceSpan);
+                            continue;
+                        }
+                    }
+                    AddErrorOutput(message, "error");
+                }
+
+                if (showFullCode)
+                {
+                    try
+                    {
+                        await JSRuntime.InvokeVoidAsync("DotnetBrowserEditor.reportCompilationErrors", compiledSource, run);
+                    }
+                    catch (JSException)
+                    {
+                        // The error text remains available without the editor bridge.
+                    }
+                }''',
+)
 
 source = replace_once(
     source,
@@ -209,10 +256,18 @@ source = replace_once(
 )
 source = replace_once(
     source,
+    "    private void AddErrorOutput(string text, string cssClass)",
+    "    private void AddErrorOutput(string text, string cssClass, int? run = null, Microsoft.CodeAnalysis.Text.TextSpan span = default)",
+)
+source = replace_once(
+    source,
     "        var line = $\"<span class='{cssClass}'>[{timestamp}] {text.Replace(\"\\n\", \"<br/>\")}</span><br/>\";\n"
     "        errorOutput += line;",
     "        var escaped = System.Net.WebUtility.HtmlEncode(text).Replace(\"\\n\", \"<br/>\");\n"
-    "        var line = $\"<span class='{cssClass}'>[{timestamp}] {escaped}</span><br/>\";\n"
+    "        var content = run is int id\n"
+    "            ? $\"<button type='button' class='compiler-diagnostic' data-diagnostic-run='{id}' data-source-start='{span.Start}' data-source-end='{span.End}' disabled>{escaped}</button>\"\n"
+    "            : escaped;\n"
+    "        var line = $\"<span class='{cssClass}'>[{timestamp}] {content}</span><br/>\";\n"
     "        errorOutput += line;",
 )
 

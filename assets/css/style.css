@@ -91,6 +91,10 @@ html.lesson-editor-expanded{overflow:hidden}
 #quiz-context,#quiz-lesson-progress p{margin:6px 0}
 .quiz-draft-status{margin:4px 0}
 .quiz-draft-status:empty,#quiz-feedback:empty,#quiz-backup-feedback:empty{margin:0}
+#quiz-import-preview{width:min(570px,calc(100% - 32px));padding:22px;border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--ink)}
+#quiz-import-preview::backdrop{background:rgb(0 0 0 / 55%)}
+#quiz-import-preview h2{margin:0}
+#quiz-import-notice:empty{margin:0}
 .quiz-toolbar>div{display:flex;gap:6px;flex-wrap:wrap}
 @media(max-width:650px){.quiz-toolbar{align-items:flex-start;flex-direction:column}.question{padding:15px}}
 

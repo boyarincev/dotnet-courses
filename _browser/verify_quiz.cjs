@@ -32,15 +32,42 @@ async function exportProgress(page) {
     return JSON.parse(await readFile(await download.path(), "utf8"));
 }
 
-async function importProgress(page, data, expectedFeedback, accept = true) {
-    if (accept) page.once("dialog", dialog => dialog.accept());
+const importPreview = page => page.locator("#quiz-import-preview");
+const applyImport = page => importPreview(page).getByRole("button", {name:"Импортировать", exact:true}).click();
+
+async function chooseBackup(page, data) {
     await page.locator("#quiz-import-file").setInputFiles({
         name: "progress.json",
         mimeType: "application/json",
         buffer: Buffer.from(JSON.stringify(data))
     });
+}
+
+async function importProgress(page, data, expectedFeedback, accept = true) {
+    await chooseBackup(page, data);
+    if (accept) await applyImport(page);
     await page.locator("#quiz-backup-feedback").filter({hasText:expectedFeedback}).waitFor();
 }
+
+const lessonKey = (kind, courseId, number = 1) =>
+    "dotnet-courses:" + kind + ":" + courseId + ":" + number;
+const practice = {
+    editorDrafts: {1:"// Черновик Program.cs"},
+    taskDrafts: {1:"// Черновик метода"},
+    verifiedSolutions: {1:"// Последнее успешное решение"},
+    completedLessons: [1]
+};
+const draftEditor = lessonKey("compiler-draft", course);
+const draftTask = lessonKey("practice-draft", course);
+const verified = lessonKey("practice-verified", course);
+const completedLesson = lessonKey("progress:lesson", course);
+const otherCourse = lessonKey("compiler-draft", "memory");
+const lessonState = {
+    [draftEditor]: practice.editorDrafts[1],
+    [draftTask]: practice.taskDrafts[1],
+    [verified]: practice.verifiedSolutions[1],
+    [completedLesson]: "1"
+};
 
 async function verifyLessonQuiz(browser) {
     const context = await browser.newContext();
@@ -81,8 +108,13 @@ async function verifyLessonQuiz(browser) {
 
         for (const id of selection.slice(2)) await submitAnswer(first, id, "Тестовый ответ");
         assert.match(await lessonStatus(first).textContent(), /Квиз урока №1 пройден/);
+        await first.evaluate(items => {
+            for (const [key, value] of Object.entries(items)) localStorage.setItem(key, value);
+        }, {...lessonState, [otherCourse]:"// Другой курс", [lessonKey("practice-draft", course, 999)]:"// Неопубликованный урок"});
         await openBackup(first);
         const backup = await exportProgress(first);
+        assert.equal(backup.format, "dotnet-courses-course-v1");
+        assert.deepEqual(backup.practice, practice, "Include only practice keys from this course and published lessons");
         assert.deepEqual(backup.completedLessons, [1]);
         assert.equal(Object.keys(backup.progress).length, 5, "Both tabs kept every FSRS record");
         assert.equal(backup.drafts[selection[0].slice(2)], "Уточнённый ответ");
@@ -118,12 +150,126 @@ async function verifyImport(browser, backup) {
         await openBackup(page);
         await importProgress(page, {...backup, format:"dotnet-courses-fsrs-v1", completedLessons:undefined}, "Копия импортирована.");
         assert.doesNotMatch(await lessonStatus(page).textContent(), /Квиз урока №1 пройден/);
-        await importProgress(page, backup, "Копия импортирована.");
+        await importProgress(page, {...backup, format:"dotnet-courses-fsrs-v2", practice:undefined}, "Копия импортирована.");
         assert.match(await lessonStatus(page).textContent(), /Квиз урока №1 пройден/);
+        assert.equal(await page.evaluate(key => localStorage.getItem(key), draftEditor), null,
+            "Legacy copies have no lesson data");
+
+        const otherLesson = lessonKey("compiler-draft", course, 2);
+        await page.evaluate(keys => {
+            for (const key of keys) localStorage.setItem(key,"// Существующий код");
+        }, [draftEditor, otherLesson, otherCourse]);
+
+        await importProgress(page, {...backup, practice:{...practice, editorDrafts:{999:"// Источник неизвестного урока"}}},
+            "Ошибка импорта: Некорректные данные", false);
+        await chooseBackup(page, backup);
+        const preview = importPreview(page);
+        await preview.waitFor();
+        assert.match(await preview.textContent(), /Файлы Program.cs · добавить 0, заменить 1/);
+        assert.match(await preview.textContent(), /Черновики заданий · добавить 1, заменить 0/);
+        await preview.getByText("Какие записи изменятся").click();
+        assert.match(await preview.locator("#quiz-import-records").textContent(), /Файлы Program.cs\. Заменятся урок №1/);
+        await preview.getByRole("button", {name:"Отмена", exact:true}).click();
+        assert.equal(await page.evaluate(key => localStorage.getItem(key), draftEditor), "// Существующий код");
+
+        await chooseBackup(page, backup);
+        await preview.waitFor();
+        await page.evaluate(key => {
+            const setItem = Storage.prototype.setItem;
+            Storage.prototype.setItem = function (entry, value) {
+                if (entry === key) throw new DOMException("Fixture storage failure", "QuotaExceededError");
+                return setItem.call(this, entry, value);
+            };
+            window.restoreSetItem = () => { Storage.prototype.setItem = setItem; };
+        }, verified);
+        await applyImport(page);
+        await page.locator("#quiz-backup-feedback").filter({hasText:"Прежние данные сохранены"}).waitFor();
+        assert.deepEqual(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), [draftEditor, draftTask, verified, completedLesson]),
+            ["// Существующий код", null, null, null], "Rollback restores the previous value and removes additions");
+        await page.evaluate(() => window.restoreSetItem());
+
+        await chooseBackup(page, backup);
+        await preview.waitFor();
+        await page.evaluate(key => localStorage.setItem(key, "// Изменение из соседней вкладки"), draftEditor);
+        await applyImport(page);
+        await preview.waitFor();
+        await preview.getByRole("status").filter({hasText:"Данные в браузере изменились"}).waitFor();
+        assert.equal(await page.evaluate(key => localStorage.getItem(key), draftEditor), "// Изменение из соседней вкладки");
+        await applyImport(page);
+        await page.locator("#quiz-backup-feedback").filter({hasText:"Копия импортирована."}).waitFor();
+        assert.deepEqual(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), Object.keys(lessonState)),
+            Object.values(lessonState), "The backup restores all lesson storage keys");
+        assert.deepEqual(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), [otherLesson, otherCourse]),
+            ["// Существующий код", "// Существующий код"], "The merge preserves unrelated lessons and other courses");
+
         await page.locator("#quiz-show-all").click();
         for (const [id, draft] of Object.entries(backup.drafts)) {
             assert.equal(await question(page, "a-" + id).getByRole("textbox").inputValue(), draft);
         }
+        console.log("Course backup: course isolation, legacy copies, preview, cancel, rollback, concurrent edits and lesson drafts verified");
+    } finally {
+        await context.close();
+    }
+}
+
+async function verifyReviewToday(browser) {
+    const context = await browser.newContext();
+    try {
+        const page = await context.newPage();
+        const other = await context.newPage();
+        const summary = other.locator("[data-course-review-status]");
+        const startReview = other.getByRole("link", {name: "Повторить сегодня"});
+        const count = other.locator("#quiz-count");
+        const zero = "На сегодня повторений нет";
+
+        for (const [courseId, scheduled] of [[course, 6], ["memory", 2]]) {
+            const courseUrl = new URL("courses/" + courseId + "/", site).href;
+            await other.goto(courseUrl);
+            await summary.filter({hasText:zero}).waitFor();
+            assert.equal(await startReview.isVisible(), false, "Fresh course must have no scheduled reviews");
+
+            await openQuiz(page, courseId);
+            const expected = await page.evaluate(async ({courseId, scheduled}) => {
+                const engine = await window.DotnetQuizSRSReady;
+                const bank = JSON.parse(document.getElementById("question-bank").textContent);
+                const now = new Date();
+                const past = new Date(+now - 7 * 86_400_000);
+                const eligible = engine.eligible(bank, now, null);
+                const due = eligible.slice(0, scheduled).map(question => question.id);
+                const later = eligible[scheduled].id;
+                const records = Object.fromEntries(due.map(id => [id, engine.evaluate(null, id, "correct", "Ответ", past)]));
+                records[later] = engine.evaluate(null, later, "easy", "Ответ", now);
+                localStorage.setItem("dotnet-courses:fsrs-7:v1:" + courseId, JSON.stringify(records));
+                return due.map(id => "a-" + id);
+            }, {courseId, scheduled});
+            await summary.filter({hasText:"Вопросов к повторению: " + scheduled}).waitFor();
+            await startReview.click();
+            await count.filter({hasText:"Осталось повторить: " + scheduled}).waitFor();
+            assert.equal(new URL(other.url()).searchParams.get("review"), "today");
+            assert.equal(await other.locator("#quiz-show-all").isVisible(), false);
+            assert.equal(await other.locator("#quiz-lesson-progress").isVisible(), false);
+            await page.goto(courseUrl);
+            const remainingIds = new Set(expected);
+
+            while (remainingIds.size) {
+                const batch = await ids(other);
+                assert.equal(batch.length, Math.min(5, remainingIds.size), "Review uses short batches");
+                for (const id of batch) {
+                    assert.ok(remainingIds.delete(id), "Review excludes new, later and already answered questions");
+                    await submitAnswer(other, id, "Повторение");
+                    const remaining = remainingIds.size;
+                    await count.filter({hasText:remaining ? "Осталось повторить: " + remaining : zero}).waitFor();
+                    await page.locator("[data-course-review-status]")
+                        .filter({hasText:remaining ? "Вопросов к повторению: " + remaining : zero}).waitFor();
+                }
+                if (remainingIds.size) await other.locator("#quiz-next").click();
+            }
+            assert.equal(await other.locator("#quiz-next").isDisabled(), true);
+            await other.reload();
+            await count.filter({hasText:zero}).waitFor();
+            assert.equal(await fields(other).count(), 0);
+        }
+        console.log("Review today: both courses, scheduled cards only, short batches and live remaining count verified");
     } finally {
         await context.close();
     }
@@ -158,6 +304,7 @@ async function verify() {
     try {
         const backup = await verifyLessonQuiz(browser);
         await verifyImport(browser, backup);
+        await verifyReviewToday(browser);
         await verifyEmptyQuiz(browser);
         console.log("Quiz: tab isolation, lesson reload, course filtering, legacy import, progress backup and empty state verified");
     } finally {

@@ -1,22 +1,26 @@
 (() => {
   "use strict";
   const root=document.getElementById("quiz-root");
+  const courseReview=document.querySelector("[data-course-review]");
+  const courseRoot=root??courseReview;
   const source=document.getElementById("question-bank");
-  if(!root || !source) return;
+  if(!courseRoot || !source) return;
   let bank;
   try {bank=JSON.parse(source.textContent);} catch {bank=[];}
   if(!Array.isArray(bank)) bank=[];
-  const course=root.dataset.course;
+  const course=courseRoot.dataset.course;
   const draftKey="dotnet-courses:quiz-drafts:v1:"+course;
   const fsrsKey="dotnet-courses:fsrs-7:v1:"+course;
   const prefix="dotnet-courses:quiz:v2:"+course+":";
   const importKey=prefix+"import";
   const maxQuestions=5;
-  const requested=new URLSearchParams(location.search).getAll("through");
+  const query=new URLSearchParams(location.search);
+  const requested=query.getAll("through");
   const n=requested.length===1 && /^\d+$/.test(requested[0])?Number(requested[0]):null;
-  const publishedLessons=(root.dataset.lessonNumbers||"").split(",").map(Number).filter(number=>number>0);
+  const publishedLessons=(courseRoot.dataset.lessonNumbers||"").split(",").map(Number).filter(number=>number>0);
   const through=publishedLessons.includes(n)?n:null;
   const lessonQuiz=through!==null;
+  const todayQuiz=!lessonQuiz && query.get("review")==="today";
   const selectionKey=prefix+"lesson:"+through;
   const ids=new Set(bank.map(q=>q.id));
   const gradeNames={wrong:"Неверно",partial:"Частично",correct:"Верно",easy:"Легко"};
@@ -25,14 +29,11 @@
   const lessonNotice=document.getElementById("quiz-lesson-progress");
   const lessonStatus=lessonNotice?.querySelector('[role="status"]');
   const feedback=document.getElementById("quiz-feedback");
-  const backupFeedback=document.getElementById("quiz-backup-feedback");
   const allButton=document.getElementById("quiz-show-all");
+  const allControl=document.getElementById("quiz-all-control");
   const nextButton=document.getElementById("quiz-next");
   const nextControl=document.getElementById("quiz-next-control");
   const actions=document.getElementById("quiz-actions");
-  const exportButton=document.getElementById("quiz-export-progress");
-  const importButton=document.getElementById("quiz-import-progress");
-  const importFile=document.getElementById("quiz-import-file");
 
   function read(key) {
     try {
@@ -71,22 +72,22 @@
 
   // Keep writes for unrelated questions independent across tabs. An import
   // replaces the baseline in one write and invalidates overrides by revision.
-  function readOverride(key) {
+  function readOverride(key, data=savedData) {
     const entry=read(key);
-    return entry?.revision===savedData.revision?entry.value:undefined;
+    return entry?.revision===data.revision?entry.value:undefined;
   }
 
   function writeOverride(key,value) {
     return store(key,{revision:savedData.revision,value});
   }
 
-  function draftFor(id) {
-    const draft=unsavedDrafts.get(id)??readOverride(prefix+"draft:"+id)??savedData.drafts[id];
+  function draftFor(id, data=savedData) {
+    const draft=unsavedDrafts.get(id)??readOverride(prefix+"draft:"+id,data)??data.drafts[id];
     return typeof draft==="string"?draft:"";
   }
 
-  function recordFor(id) {
-    return readOverride(prefix+"card:"+id)??savedData.progress[id];
+  function recordFor(id, data=savedData) {
+    return readOverride(prefix+"card:"+id,data)??data.progress[id];
   }
 
   function assessmentFor(id) {
@@ -133,12 +134,36 @@
   function getEligible() {return engine.eligible(bank,currentTime(),through);}
   function countsForLesson() {return lessonQuiz && !showAll && !lessonCompleted;}
 
+  function dueReviews(now,records) {
+    return engine.eligible(bank,now,null).filter(question=>
+      publishedLessons.includes(Number(question.lesson_number)) && records[question.id]?.card &&
+      !answeredThisSession.has(question.id) && engine.due(records[question.id],now));
+  }
+
+  function currentRecords() {return Object.fromEntries(bank.map(q=>[q.id,recordFor(q.id)]));}
+  function cardChanged(key) {return key!==null && (key===fsrsKey || key.startsWith(prefix+"card:"));}
+
+  function updateCourseReview() {
+    const remaining=dueReviews(currentTime(),currentRecords()).length;
+    courseReview.querySelector("[data-course-review-status]").textContent=
+      remaining?"Вопросов к повторению: "+remaining:"На сегодня повторений нет";
+    courseReview.querySelector("[data-course-review-action]").hidden=remaining===0;
+    courseReview.hidden=false;
+  }
+
+  function updateTodayStatus() {
+    const remaining=dueReviews(currentTime(),currentRecords()).length;
+    count.textContent=remaining?"Осталось повторить: "+remaining:"На сегодня повторений нет";
+    nextButton.disabled=remaining===0;
+  }
+
   function choose() {
     extraSelection=false;
     if(showAll)return getEligible();
     const now=currentTime();
-    const records=Object.fromEntries(bank.map(q=>[q.id,recordFor(q.id)]));
-    const scheduled=engine.select(bank,records,now,through,maxQuestions,Math.random,[...answeredThisSession]);
+    const records=currentRecords();
+    const candidates=todayQuiz?dueReviews(now,records):bank;
+    const scheduled=engine.select(candidates,records,now,through,maxQuestions,Math.random,[...answeredThisSession]);
     if(scheduled.length || !countsForLesson())return scheduled;
 
     // Offer a short assessment even when every available card was already reviewed.
@@ -213,15 +238,18 @@
   function render() {
     const eligible=getEligible();
     root.replaceChildren();
-    count.textContent=displayed.length+" из "+eligible.length+" доступных вопросов";
     allButton.textContent=showAll?"Короткая подборка":"Все вопросы";
-    nextButton.disabled=showAll;
+    if(todayQuiz)updateTodayStatus();
+    else {
+      count.textContent=displayed.length+" из "+eligible.length+" доступных вопросов";
+      nextButton.disabled=showAll;
+    }
     actions.hidden=displayed.length===0;
     updateLessonStatus();
     if(!displayed.length) {
       const empty=document.createElement("p");
       empty.className="notice";
-      empty.textContent=eligible.length?
+      empty.textContent=todayQuiz?"Новые вопросы доступны в квизе курса.":eligible.length?
         "На данный момент нет вопросов к повторению. Даты следующих попыток можно посмотреть через «Все вопросы».":
         "Нет вопросов для выбранного урока.";
       root.append(empty);
@@ -328,6 +356,7 @@
             message.textContent="Оценка сохранена локально. Дату рассчитал FSRS-7.";
             controls.querySelectorAll("button").forEach(b=>b.disabled=true);
             if(forLesson)updateLessonStatus();
+            if(todayQuiz)updateTodayStatus();
           } catch (error) {
             message.textContent="Не удалось оценить: "+error.message;
           }
@@ -344,7 +373,7 @@
     return [".NET Courses — квиз: "+label,
       "Проверь мои ответы, объясни ошибки и дай короткую подсказку для каждого вопроса без ответа.",
       "Дата: "+currentTime().toLocaleString("ru-RU"),
-      through?"Уроки №1–"+through:"Весь курс","",
+      through?"Уроки №1–"+through:todayQuiz?"Повторение на сегодня":"Весь курс","",
       ...displayed.map(q=>{
         const answer=draftFor(q.id).trim();
         return q.id+" · Урок "+q.lesson_number+"\nВопрос\n"+q.prompt+
@@ -353,63 +382,17 @@
     ].join("\n");
   }
 
-  function saveProgress() {
-    const progress={...savedData.progress};
-    const drafts={...savedData.drafts};
+  function readQuizData() {
+    const data=loadSavedData();
+    const progress={};
+    const drafts={};
     for(const id of ids) {
-      const record=recordFor(id);
+      const record=recordFor(id,data);
       if(record)progress[id]=record;
-      const draft=draftFor(id);
+      const draft=draftFor(id,data);
       if(draft)drafts[id]=draft;
-      else delete drafts[id];
     }
-    const completedLessons=publishedLessons.filter(lesson=>window.DotnetLearning.progress.get("quiz",course,lesson)===true);
-    const payload={format:"dotnet-courses-fsrs-v2",algorithm:"FSRS-7",
-      course,exportedAt:currentTime().toISOString(),progress,drafts,completedLessons};
-    window.DotnetLearning.download("progress-"+course+".json",JSON.stringify(payload,null,2));
-    backupFeedback.textContent="Копия скачана. В JSON содержатся твои ответы.";
-  }
-
-  async function restore(file) {
-    backupFeedback.textContent="";
-    try {
-      if(!file||file.size>10_000_000) throw Error("Нужен JSON-файл размером не более 10 МБ.");
-      const data=JSON.parse(await file.text());
-      const oldFormat=data?.format==="dotnet-courses-fsrs-v1";
-      if((!oldFormat && data?.format!=="dotnet-courses-fsrs-v2")||data.course!==course||
-         !isObject(data.progress)||!isObject(data.drafts)) {
-        throw Error("Это не файл прогресса данного курса.");
-      }
-      const completedLessons=oldFormat?[]:data.completedLessons;
-      if(!Array.isArray(completedLessons)||completedLessons.some(number=>!publishedLessons.includes(number))) {
-        throw Error("Некорректные отметки о прохождении квизов.");
-      }
-      for(const [id,record] of Object.entries(data.progress)) {
-        if(!ids.has(id)||!record||!record.card||!Array.isArray(record.history)||
-           !Number.isFinite(new Date(record.card.dueAt).getTime())) {
-          throw Error("Некорректная карточка: "+id);
-        }
-      }
-      if(Object.values(data.drafts).some(value=>typeof value!=="string")) {
-        throw Error("Некорректные черновики ответов.");
-      }
-      if(!window.confirm("Заменить черновики и расписание FSRS данными из копии? Отметки о пройденных квизах будут добавлены."))return;
-      const imported={revision:crypto.randomUUID(),progress:data.progress,drafts:data.drafts};
-      if(!store(importKey,imported)) {
-        throw Error("Невозможно сохранить импорт в этом браузере.");
-      }
-      const failedMarks=completedLessons.filter(lesson=>!window.DotnetLearning.progress.mark("quiz",course,lesson));
-      savedData=imported;
-      unsavedDrafts.clear();
-      resetSelection();
-      refresh();
-      backupFeedback.textContent=failedMarks.length?
-        "Черновики и расписание импортированы. Отметки квизов не удалось сохранить.":"Копия импортирована.";
-    } catch(error) {
-      backupFeedback.textContent="Ошибка импорта: "+error.message;
-    } finally {
-      importFile.value="";
-    }
+    return {progress,drafts};
   }
 
   function resetSelection() {
@@ -420,11 +403,33 @@
 
   function init(srs) {
     engine=srs;
+    if(courseReview) {
+      const refreshReview=()=>{
+        savedData=loadSavedData();
+        updateCourseReview();
+      };
+      window.addEventListener("pageshow",refreshReview);
+      window.addEventListener("focus",refreshReview);
+      window.addEventListener("storage",event=>{
+        if(event.key===null || event.key===importKey || cardChanged(event.key))refreshReview();
+      });
+      refreshReview();
+      return;
+    }
     if(lessonNotice)lessonNotice.hidden=!lessonQuiz;
-    context.textContent=through?
+    context.textContent=todayQuiz?"Повторение на сегодня. Ответь на каждый вопрос и поставь самооценку.":through?
       "Уроки №1–"+through+". Ответь на каждый вопрос подборки и поставь самооценку.":
       "Весь курс. Ответь на вопрос и поставь себе оценку, чтобы запланировать повторение.";
     if(nextControl)nextControl.hidden=lessonQuiz;
+    if(todayQuiz) {
+      allControl.hidden=true;
+      nextButton.textContent="Следующая подборка";
+      window.addEventListener("storage",event=>{
+        if(!cardChanged(event.key))return;
+        savedData=loadSavedData();
+        updateTodayStatus();
+      });
+    }
     if(!lessonQuiz)nextButton.addEventListener("click",refresh);
     allButton.addEventListener("click",()=>{showAll=!showAll;refresh();});
     document.getElementById("quiz-copy").addEventListener("click",async()=>{
@@ -439,10 +444,22 @@
       window.DotnetLearning.download("quiz-"+course+".txt",exportAnswers());
       feedback.textContent="Ответы сохранены в .txt.";
     });
-    exportButton.addEventListener("click",saveProgress);
-    importButton.addEventListener("click",()=>importFile.click());
-    importFile.addEventListener("change",()=>restore(importFile.files?.[0]));
+    window.DotnetCourseBackup?.attach({
+      course, ids, publishedLessons, importKey, readQuizData, reviveCard:engine.reviveCard,
+      onImported(quizDataChanged) {
+        if(quizDataChanged) {
+          savedData=loadSavedData();
+          unsavedDrafts.clear();
+          resetSelection();
+        }
+        refresh();
+      }
+    });
     window.addEventListener("storage",event=>{
+      if(event.key==="dotnet-courses:progress:quiz:"+course+":"+through) {
+        refresh();
+        return;
+      }
       if(event.key!==null && event.key!==importKey)return;
       savedData=loadSavedData();
       resetSelection();
@@ -454,9 +471,9 @@
   function start() {
     if(window.DotnetQuizSRSReady&&typeof window.DotnetQuizSRSReady.then==="function") {
       window.DotnetQuizSRSReady.then(init).catch(err=>{
-        root.textContent="Не удалось включить интервальное повторение: "+err.message;
+        if(root)root.textContent="Не удалось включить интервальное повторение: "+err.message;
       });
-    } else {
+    } else if(root) {
       root.textContent="Модуль FSRS-7 не загрузился. Попробуй обновить страницу.";
     }
   }

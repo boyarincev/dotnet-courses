@@ -6,7 +6,7 @@ permalink: /courses/csharp-dotnet-9-11/
 <div class="eyebrow"><a href="{{ '/' | relative_url }}">Все курсы</a> / Курс 01</div>
 <h1>Новое в C# и .NET</h1>
 <p class="lead">C# 13–15 и .NET 9–11. Выбираем полезные нововведения для реальной работы и объединяем связанные темы в небольшие занятия.</p>
-{% include course-lessons.html lessons=site.lessons course="csharp-dotnet-9-11" quiz="/courses/csharp-dotnet-9-11/quiz/" related="/courses/memory/" related_label="Связанный курс: память" %}
+{% include course-lessons.html lessons=site.lessons questions=site.data.questions course="csharp-dotnet-9-11" quiz="/courses/csharp-dotnet-9-11/quiz/" related="/courses/memory/" related_label="Связанный курс: память" %}
 <section class="prose" aria-labelledby="ai-agent-skills">
 <h2 id="ai-agent-skills">Как курс помогает работать с ИИ-агентом</h2>
 <p>ИИ-агент может быстро предложить несколько реализаций. Знание C# и .NET помогает понять, как они работают, выбрать подходящую для проекта и проверить совместимость с его версией языка и платформы.</p>

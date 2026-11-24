@@ -23,6 +23,9 @@
   let applyingInitialCode = false;
   let wasBusy = false;
   let runSucceeded = false;
+  let diagnosticSnapshot = null;
+  let diagnosticLine = null;
+  const diagnosticSelector = "#output .compiler-diagnostic";
   // The iframe URL carries a stable course + lesson identity. Keep authored
   // drafts separate across lessons and courses, without server-side storage.
   const pageParams = new URLSearchParams(location.search);
@@ -63,6 +66,70 @@
   }
   const cmReady = () => typeof window.CodeMirror === "function";
   const currentCode = () => instance ? instance.getValue() : original?.value ?? "";
+
+  function diagnosticRunForCurrentCode() {
+    return diagnosticSnapshot && diagnosticSnapshot.source === currentCode() ? diagnosticSnapshot.run : null;
+  }
+
+  function updateDiagnosticButtons() {
+    const currentRun = diagnosticRunForCurrentCode();
+    for (const button of document.querySelectorAll(diagnosticSelector)) {
+      const active = button.dataset.diagnosticRun === currentRun;
+      if (button.disabled === active) button.disabled = !active;
+    }
+  }
+
+  function clearDiagnosticHighlight() {
+    if (!diagnosticLine) return;
+    instance?.removeLineClass(diagnosticLine, "background", "compiler-diagnostic-line");
+    diagnosticLine = null;
+  }
+
+  function revealTextareaDiagnostic(start, end) {
+    original.focus();
+    original.setSelectionRange(start, end);
+    const precedingLines = original.value.slice(0, start).split("\n");
+    const style = getComputedStyle(original);
+    original.scrollTop = (precedingLines.length - 1) * Number.parseFloat(style.lineHeight) - original.clientHeight / 2;
+
+    const measurement = document.createElement("canvas").getContext("2d");
+    if (!measurement) return;
+    measurement.font = `${style.fontSize} ${style.fontFamily}`;
+    const tabWidth = measurement.measureText(" ").width * (Number.parseFloat(style.tabSize) || 4);
+    let width = 0;
+    for (const [index, text] of precedingLines.at(-1).split("\t").entries()) {
+      if (index) width = (Math.floor(width / tabWidth) + 1) * tabWidth;
+      width += measurement.measureText(text).width;
+    }
+    original.scrollLeft = width - original.clientWidth / 2;
+  }
+
+  function handleDiagnosticClick(event) {
+    const button = event.target.closest("button");
+    if (button?.matches('.compile-btn, button[aria-describedby="clear-instructions"]')) {
+      diagnosticSnapshot = null;
+      clearDiagnosticHighlight();
+      updateDiagnosticButtons();
+      return;
+    }
+    if (!button?.matches(diagnosticSelector) || button.dataset.diagnosticRun !== diagnosticRunForCurrentCode()) return;
+
+    const start = Number(button.dataset.sourceStart);
+    const end = Number(button.dataset.sourceEnd);
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || end > currentCode().length) return;
+    if (!instance) {
+      revealTextareaDiagnostic(start, end);
+      return;
+    }
+
+    const from = instance.posFromIndex(start);
+    const to = instance.posFromIndex(end);
+    clearDiagnosticHighlight();
+    diagnosticLine = instance.addLineClass(from.line, "background", "compiler-diagnostic-line");
+    instance.setSelection(from, to);
+    instance.focus();
+    instance.scrollIntoView(from, 32);
+  }
 
   function reportState(state) {
     if (window.parent === window) return;
@@ -256,6 +323,7 @@
       installRunButton();
       return;
     }
+    clearDiagnosticHighlight();
     initialCode ??= textarea.value;
     original = textarea;
     if (embeddedLesson) {
@@ -291,6 +359,8 @@
       instance.on("change", cm => {
         synchronize(cm);
         saveDraft(cm.getValue());
+        clearDiagnosticHighlight();
+        updateDiagnosticButtons();
       });
       instance.on("inputRead", (cm, change) => {
         if (change.origin !== "+input" || !/^[\w]+$/.test(change.text?.join("") || "")) return;
@@ -300,7 +370,11 @@
       });
       textarea.closest(".editor-container")?.classList.add("enhanced-csharp-editor");
     } else {
-      textarea.addEventListener("input", () => saveDraft(textarea.value));
+      textarea.wrap = "off";
+      textarea.addEventListener("input", () => {
+        saveDraft(textarea.value);
+        updateDiagnosticButtons();
+      });
       if (embeddedLesson) {
         textarea.addEventListener("keydown", event => {
           if (event.ctrlKey && event.key.toLowerCase() === "l") event.stopPropagation();
@@ -329,6 +403,7 @@
   const watcher = new MutationObserver(() => {
     ensure();
     if (embeddedLesson) localizeConsoleState();
+    updateDiagnosticButtons();
     updateRunState();
   });
   const start = () => {
@@ -339,6 +414,7 @@
     }
     ensure();
     if (embeddedLesson) localizeConsoleState();
+    document.addEventListener("click", handleDiagnosticClick, true);
     const app = document.getElementById("app");
     if (app) watcher.observe(app, {
       childList: true,
@@ -389,6 +465,10 @@
     isInitialCode() {
       ensure();
       return !!original && !hasDraft && currentCode() === initialCode;
+    },
+    reportCompilationErrors(source, run) {
+      diagnosticSnapshot = { source, run: String(run) };
+      updateDiagnosticButtons();
     },
     reportSuccessfulRun(source, output) {
       runSucceeded = true;

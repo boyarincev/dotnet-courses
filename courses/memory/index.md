@@ -6,7 +6,7 @@ permalink: /courses/memory/
 <div class="eyebrow"><a href="{{ '/' | relative_url }}">Все курсы</a> / Курс 02</div>
 <h1>Память и аллокации в .NET</h1>
 <p class="lead">Как уменьшать лишние выделения памяти, копирование и удержание данных в реальном C#-коде. Изучаем GC, Span, readonly, буферы, пулы, строки, коллекции и асинхронность.</p>
-{% include course-lessons.html lessons=site.memory_lessons course="memory" quiz="/courses/memory/quiz/" related="/courses/csharp-dotnet-9-11/" related_label="Связанный курс: новинки .NET" %}
+{% include course-lessons.html lessons=site.memory_lessons questions=site.data.memory_questions course="memory" quiz="/courses/memory/quiz/" related="/courses/csharp-dotnet-9-11/" related_label="Связанный курс: новинки .NET" %}
 <section class="prose" aria-labelledby="ai-agent-skills">
 <h2 id="ai-agent-skills">Как курс помогает работать с ИИ-агентом</h2>
 <p>Когда ИИ-агент предлагает оптимизацию, ты сможешь проверить, какие объекты создаёт код, где копируются данные и что удерживает объекты в памяти. Это поможет понять, уменьшает ли предложенная правка выделения памяти и какие издержки остаются.</p>

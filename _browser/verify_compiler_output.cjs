@@ -73,6 +73,33 @@ async function checkFailure(page, expectedStdout, error) {
     assert.equal(await output.locator("input").count(), 0);
 }
 
+const diagnosticProgram = [
+    "using System;",
+    "namespace Lesson;",
+    "#line 400",
+    "public static class Program",
+    "{",
+    "    public static void Main()",
+    "    {",
+    "        // Keep an emoji before the diagnostic to exercise UTF-16 columns.",
+    '        Console.WriteLine("🧪" + MissingMethod());',
+    "    }",
+    "}"
+].join("\n");
+
+async function verifyDiagnosticClick(editor, diagnostic) {
+    const line = diagnosticProgram.split("\n").findIndex(text => text.includes("MissingMethod"));
+    const column = diagnosticProgram.split("\n")[line].indexOf("MissingMethod");
+    assert.match(await diagnostic.textContent(), new RegExp(`Строка ${line + 1}, столбец ${column + 1}\\. CS0103`));
+    await diagnostic.click();
+    const pointed = await editor.evaluate(wrapper => {
+        const cm = wrapper.CodeMirror;
+        return { start: cm.getCursor("from"), text: cm.getSelection(), focused: cm.hasFocus() };
+    });
+    assert.deepEqual(pointed, { start: { line, ch: column, sticky: null }, text: "MissingMethod", focused: true });
+    assert.equal(await editor.locator(".compiler-diagnostic-line").count(), 1);
+}
+
 async function openLessonCompiler(page) {
     await page.locator("#course-compiler").scrollIntoViewIfNeeded();
     const frame = page.frameLocator("#course-compiler");
@@ -415,7 +442,18 @@ async function verifyCodeMirrorFallback(browser) {
         const output = frame.locator("#output");
         assert.equal(await feedback.textContent(), "Запуск завершён. Результат в выводе программы.", await output.textContent());
         assert.deepEqual(await output.locator("pre").allTextContents(), ["Plain editor draft\n"]);
-        console.log("CodeMirror unavailable: checked the plain editor, restored draft and Roslyn result");
+
+        const offset = "\n".repeat(60);
+        await editor.fill(offset + diagnosticProgram);
+        await page.locator("#page-editor-run").click();
+        const diagnostic = output.locator(".compiler-diagnostic").filter({ hasText: "MissingMethod" });
+        await diagnostic.click();
+        assert.deepEqual(await editor.evaluate(textarea => ({
+            start: textarea.selectionStart,
+            selected: textarea.value.slice(textarea.selectionStart, textarea.selectionEnd),
+            scrolled: textarea.scrollTop > 0
+        })), { start: offset.length + diagnosticProgram.indexOf("MissingMethod"), selected: "MissingMethod", scrolled: true });
+        console.log("CodeMirror unavailable: checked the plain editor, restored draft and Roslyn error navigation");
     } finally {
         await page.close();
     }
@@ -521,6 +559,9 @@ async function verifyEmbeddedWorkspace(browser) {
         assert.equal(await workspace.getAttribute("aria-modal"), "true");
         assert.equal(await page.evaluate(() => document.fullscreenElement), null);
 
+        await runWithShortcut(diagnosticProgram);
+        await verifyDiagnosticClick(editorPane, output.locator(".compiler-diagnostic").filter({ hasText: "MissingMethod" }));
+
         await runWithShortcut(inputProgram);
         const input = output.locator("input[type=text]");
         await input.waitFor({ state: "visible" });
@@ -580,16 +621,24 @@ async function verify() {
             await checkFailure(page, "\n✓ Первый Assert <mark>\n✓ Второй Assert\n",
                 "Execution error: InvalidOperationException: ❌ Assert <mark>");
 
-            await start(page, "public class Program { public static void Main() { MissingMethod(); } }");
+            await start(page, diagnosticProgram);
             const diagnostic = await waitForOutput(page, "MissingMethod");
             assert.match(await diagnostic.textContent(), /Compilation failed with Roslyn/);
             assert.doesNotMatch(await diagnostic.textContent(), /Первый Assert|Execution error/);
+            const target = diagnostic.locator(".compiler-diagnostic").filter({ hasText: "MissingMethod" });
+            await verifyDiagnosticClick(page.locator(".CodeMirror"), target);
+            await page.evaluate(code => window.DotnetBrowserEditor.setCode(code), diagnosticProgram + "\n// edited");
+            assert.ok(await target.isDisabled(), "Diagnostics for older source must not move the cursor");
+            assert.equal(await page.locator(".compiler-diagnostic-line").count(), 0);
 
             const runtimeMarker = `runtime: ${runtime}/wasm`;
-            await start(page, 'using System; public class Program { public static void Main() { ' +
+            await start(page, 'using System; using Text = System.String; namespace Lesson; public class Program { public static void Main() { ' +
                 'Console.WriteLine("runtime: " + System.Environment.Version.Major + "/" + ' +
-                '(System.OperatingSystem.IsBrowser() ? "wasm" : "native")); } }');
-            assert.equal(await (await waitForOutput(page, runtimeMarker)).textContent(), runtimeMarker + "\n");
+                '(System.OperatingSystem.IsBrowser() ? "wasm" : "native")); ' +
+                'Console.WriteLine((Text)"<button class=compiler-diagnostic>Строка 1: printed text</button>"); } }');
+            const runtimeOutput = await waitForOutput(page, runtimeMarker);
+            assert.equal(await runtimeOutput.textContent(), runtimeMarker + "\n<button class=compiler-diagnostic>Строка 1: printed text</button>\n");
+            assert.equal(await runtimeOutput.locator(".compiler-diagnostic").count(), 0);
 
             await page.reload({ waitUntil: "domcontentloaded" });
             await page.locator("#editor-run-current").waitFor({ state: "attached" });

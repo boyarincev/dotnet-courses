@@ -405,14 +405,16 @@ async function verifyCodeMirrorFallback(browser) {
         assert.match(await editor.inputValue(), /static \(int PaidCount, decimal Total\) SummarizePaid\(/,
             "The lesson button must open the practice in the plain editor");
 
-        const edited = 'public static class Program { public static void Main() { System.Console.WriteLine("Plain editor draft"); } }';
+        const edited = 'using System; public static class Program { public static void Main() { Console.WriteLine("Plain editor draft"); } }';
         await editor.fill(edited);
         await page.reload({ waitUntil: "domcontentloaded" });
         await openLessonCompiler(page);
         assert.equal(await editor.inputValue(), edited, "The plain editor must restore learner changes");
         await page.locator("#page-editor-run").click();
-        await frame.locator("#output pre").filter({ hasText: "Plain editor draft" }).waitFor();
-        await feedback.filter({ hasText: "Запуск завершён. Результат в выводе программы." }).waitFor();
+        await feedback.filter({ hasText: /Запуск завершён|Ошибка запуска/ }).waitFor();
+        const output = frame.locator("#output");
+        assert.equal(await feedback.textContent(), "Запуск завершён. Результат в выводе программы.", await output.textContent());
+        assert.deepEqual(await output.locator("pre").allTextContents(), ["Plain editor draft\n"]);
         console.log("CodeMirror unavailable: checked the plain editor, restored draft and Roslyn result");
     } finally {
         await page.close();

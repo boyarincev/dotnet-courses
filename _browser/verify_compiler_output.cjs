@@ -449,8 +449,6 @@ async function verifyEmbeddedWorkspace(browser) {
             return editor.right <= consolePane.left + 1 && editor.bottom > consolePane.top;
         }, stacked, { timeout: 5000 });
         await waitForLayout(false);
-        await page.setViewportSize({ width: 390, height: 844 });
-        await waitForLayout(true);
 
         const runWithShortcut = async source => {
             assert.ok(await iframe.evaluate((element, code) => {
@@ -462,11 +460,66 @@ async function verifyEmbeddedWorkspace(browser) {
             await page.keyboard.press("Control+Enter");
         };
         const output = frame.locator("#output");
-        await runWithShortcut('using System; public static class Program { public static void Main() { Console.WriteLine("Keyboard workspace"); } }');
+        const keyboardProgram = 'using System; public static class Program { public static void Main() { Console.WriteLine("Keyboard workspace"); } }';
+        await runWithShortcut(keyboardProgram);
         await output.filter({ hasText: "Keyboard workspace" }).waitFor();
         await feedback.filter({ hasText: "Запуск завершён. Результат в выводе программы." }).waitFor();
         assert.ok(await frame.locator(".CodeMirror textarea").evaluate(editor => editor === document.activeElement),
             "Ctrl+Enter must not move focus away from the editor");
+
+        const workspace = page.locator("#lesson-editor-workspace");
+        const expanded = page.locator("#lesson-editor-workspace.is-expanded");
+        const fullscreen = page.locator("#page-editor-fullscreen");
+        const expandedEditor = frame.locator("html.course-editor-fullscreen");
+        const editorPane = frame.locator(".CodeMirror");
+        const editorCode = () => iframe.evaluate(element => element.contentWindow.DotnetBrowserEditor.getCode());
+        const compilerDocument = await iframe.evaluateHandle(element => element.contentDocument);
+        const regularHeight = (await editorPane.boundingBox()).height;
+        const initialOutput = await output.textContent();
+
+        const checkExpanded = async () => {
+            await expanded.waitFor();
+            await expandedEditor.waitFor({ state: "attached" });
+            assert.ok(await expanded.getByRole("button", { name: "Свернуть полноэкранный редактор", exact: true }).isVisible());
+            assert.ok(await page.locator("#page-editor-run").isVisible(), "Run must remain available in fullscreen");
+            assert.ok(await workspace.evaluate(element => {
+                const bounds = element.getBoundingClientRect();
+                return Math.abs(bounds.left) <= 1 && Math.abs(bounds.top) <= 1 &&
+                    bounds.right >= window.innerWidth - 1 && bounds.bottom >= window.innerHeight - 1;
+            }), "Fullscreen must fill the viewport");
+        };
+        const checkCollapsed = async () => {
+            await expanded.waitFor({ state: "detached" });
+            await expandedEditor.waitFor({ state: "detached" });
+            assert.equal(await fullscreen.textContent(), "На весь экран");
+            assert.ok(await fullscreen.evaluate(button => button === document.activeElement),
+                "Leaving fullscreen must return focus to its button");
+        };
+
+        await fullscreen.click();
+        await checkExpanded();
+        await waitForLayout(false);
+        assert.ok((await editorPane.boundingBox()).height > regularHeight,
+            "Expanding the workspace must give the code pane more room");
+        assert.equal(await editorCode(), keyboardProgram);
+        assert.equal(await output.textContent(), initialOutput);
+        await fullscreen.click();
+        await checkCollapsed();
+        assert.ok(await iframe.evaluate((element, before) => element.contentDocument === before, compilerDocument),
+            "Toggling fullscreen must retain the live compiler document");
+        await compilerDocument.dispose();
+        assert.equal(await editorCode(), keyboardProgram);
+        assert.equal(await output.textContent(), initialOutput);
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await waitForLayout(true);
+        await workspace.evaluate(element => {
+            element.requestFullscreen = () => Promise.reject(new DOMException("Fullscreen denied for test", "NotAllowedError"));
+        });
+        await fullscreen.click();
+        await checkExpanded();
+        assert.equal(await workspace.getAttribute("aria-modal"), "true");
+        assert.equal(await page.evaluate(() => document.fullscreenElement), null);
 
         await runWithShortcut(inputProgram);
         const input = output.locator("input[type=text]");
@@ -487,7 +540,17 @@ async function verifyEmbeddedWorkspace(browser) {
         await output.filter({ hasText: "Получено 42" }).waitFor();
         await output.filter({ hasText: "Execution error: ArgumentException: INPUT_REQUIRED" }).waitFor();
         await feedback.filter({ hasText: "Ошибка запуска. Подробности в выводе программы." }).waitFor();
-        console.log("Embedded editor: checked responsive panes, Ctrl+Enter focus, console navigation and ReadLine");
+        const fullscreenOutput = await output.textContent();
+        await iframe.evaluate(element => element.contentWindow.DotnetBrowserEditor.focus());
+        await page.keyboard.press("Escape");
+        await checkCollapsed();
+        assert.equal(await editorCode(), inputProgram);
+        assert.equal(await output.textContent(), fullscreenOutput);
+
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await feedback.filter({ hasText: "Редактор готов к запуску." }).waitFor();
+        assert.equal(await editorCode(), inputProgram, "Fullscreen edits must survive a page reload");
+        console.log("Embedded editor: checked responsive panes, fullscreen, viewport fallback, draft, Ctrl+Enter and ReadLine");
     } finally {
         await page.close();
     }

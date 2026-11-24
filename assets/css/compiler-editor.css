@@ -318,3 +318,37 @@ html.course-editor-embedded #output .interactive-output input:focus-visible {
     min-height: clamp(10rem, 48vw, 13rem);
   }
 }
+
+html.course-editor-embedded.course-editor-fullscreen {
+  --editor-code-height: 0;
+  overscroll-behavior: contain;
+}
+
+html.course-editor-embedded.course-editor-fullscreen .compiler-container {
+  grid-template-rows: minmax(0, 1fr);
+  height: 100vh;
+}
+
+html.course-editor-embedded.course-editor-fullscreen .output-container {
+  min-height: 0;
+}
+
+html.course-editor-embedded.course-editor-fullscreen .editor-container {
+  display: flex;
+  flex-direction: column;
+}
+
+html.course-editor-embedded.course-editor-fullscreen :is(#code-editor, .CodeMirror) {
+  flex: 1;
+  min-height: 0;
+}
+
+html.course-editor-embedded.course-editor-fullscreen #editor-run-bar {
+  flex: none;
+}
+
+@media (max-width: 700px) {
+  html.course-editor-embedded.course-editor-fullscreen .compiler-container {
+    grid-template-rows: minmax(13rem, 2fr) minmax(9rem, 1fr);
+  }
+}

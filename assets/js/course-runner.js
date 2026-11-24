@@ -497,6 +497,100 @@
     return "https://lab.razor.fyi/#" + slug;
   }
 
+  function addEditorFullscreen() {
+    const workspace = document.getElementById("lesson-editor-workspace");
+    const toggle = document.getElementById("page-editor-fullscreen");
+    if (!workspace || !toggle) return;
+
+    const background = [];
+    let expanded = false;
+    let nativeFullscreen = false;
+    let changing = false;
+    let scrollPosition;
+
+    function setExpanded(value) {
+      if (expanded === value) return;
+      expanded = value;
+      workspace.classList.toggle("is-expanded", expanded);
+      document.documentElement.classList.toggle("lesson-editor-expanded", expanded);
+      connectFrame();
+      workspace.setAttribute("role", expanded ? "dialog" : "region");
+      toggle.textContent = expanded ? "Свернуть" : "На весь экран";
+      toggle.setAttribute("aria-label", expanded ? "Свернуть полноэкранный редактор" : "На весь экран");
+
+      if (expanded) {
+        workspace.setAttribute("aria-modal", "true");
+        // Keep the same iframe in place and take the rest of the lesson out of the tab order.
+        for (let node = workspace; node !== document.body; node = node.parentElement) {
+          for (const sibling of node.parentElement.children) {
+            if (sibling === node || sibling.hasAttribute("inert")) continue;
+            sibling.setAttribute("inert", "");
+            background.push(sibling);
+          }
+        }
+      } else {
+        workspace.removeAttribute("aria-modal");
+        for (const element of background) element.removeAttribute("inert");
+        background.length = 0;
+        window.scrollTo(scrollPosition);
+      }
+      toggle.focus({ preventScroll: true });
+    }
+
+    async function changeFullscreen() {
+      if (changing) return;
+      changing = true;
+      try {
+        if (expanded) {
+          if (document.fullscreenElement === workspace) {
+            try { await document.exitFullscreen(); }
+            catch { if (document.fullscreenElement === workspace) return; }
+          }
+          setExpanded(false);
+          return;
+        }
+
+        scrollPosition = { left: window.scrollX, top: window.scrollY, behavior: "instant" };
+        if (document.fullscreenEnabled && workspace.requestFullscreen) {
+          try { await workspace.requestFullscreen(); }
+          catch { /* Some browsers or hosts only allow expanding within the viewport. */ }
+        }
+        setExpanded(true);
+      } finally {
+        changing = false;
+      }
+    }
+
+    function closeOnEscape(event) {
+      if (!expanded || event.defaultPrevented || event.key !== "Escape") return;
+      if (event.currentTarget.querySelector(".CodeMirror-hints")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      changeFullscreen();
+    }
+
+    function connectFrame() {
+      const editor = frame.contentDocument;
+      editor?.documentElement?.classList.toggle("course-editor-fullscreen", expanded);
+      // CodeMirror also binds Escape, so handle it before its editor keymap.
+      editor?.addEventListener("keydown", closeOnEscape, true);
+    }
+
+    document.addEventListener("fullscreenchange", () => {
+      if (document.fullscreenElement === workspace) {
+        nativeFullscreen = true;
+      } else if (nativeFullscreen) {
+        nativeFullscreen = false;
+        setExpanded(false);
+      }
+    });
+    document.addEventListener("keydown", closeOnEscape);
+    frame.addEventListener("load", connectFrame);
+    connectFrame();
+    toggle.addEventListener("click", changeFullscreen);
+    toggle.hidden = false;
+  }
+
   // Controls live on the lesson page, outside the iframe. They work even if
   // the embedded CodeMirror's own toolbar is hidden by the compiler layout.
   function addEditorToolbar(prepareInitialExample) {
@@ -598,6 +692,7 @@
     const prepareInitialExample = addCodeButtons();
     addTaskButtons();
     addEditorToolbar(prepareInitialExample);
+    addEditorFullscreen();
   };
   // Wait for site.js to install shared progress and export helpers.
   if(document.readyState==="complete")init();

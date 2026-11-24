@@ -33,10 +33,48 @@ h1,h2,h3{line-height:1.2;letter-spacing:-.045em}h1{font-size:clamp(35px,6vw,60px
 .live-editor-toolbar{display:grid;gap:10px;border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:12px 14px;margin:18px 0 10px}
 .live-editor-toolbar .button{margin:0}
 .live-editor-run-actions .practice-feedback{line-height:1.45}
+#page-editor-fullscreen[hidden]{display:none}
 .lesson-browser{container:lesson-browser / inline-size}
 .lesson-compiler{display:block;width:100%;height:610px;border:1px solid var(--border);border-radius:14px;background:var(--surface)}
 @container lesson-browser (max-width:702px){.lesson-compiler{height:700px}}
 @container lesson-browser (max-width:410px){.lesson-compiler{height:650px}}
+
+html.lesson-editor-expanded{overflow:hidden}
+#lesson-editor-workspace.is-expanded{
+  position:fixed;
+  z-index:10;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  padding:max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right))
+    max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));
+  overflow:auto;
+  overscroll-behavior:contain;
+  background:var(--bg);
+}
+#lesson-editor-workspace.is-expanded .live-editor-toolbar{
+  flex:none;
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:space-between;
+  gap:8px 16px;
+  margin:0;
+  padding:8px 12px;
+}
+#lesson-editor-workspace.is-expanded .lesson-compiler{
+  flex:1 0 auto;
+  height:0;
+  min-height:calc(24rem + 2px);
+}
+@media(max-width:600px){
+  #lesson-editor-workspace.is-expanded .live-editor-toolbar{padding:6px 8px}
+  #lesson-editor-workspace.is-expanded .live-editor-toolbar .button{min-height:40px;padding:6px 8px;font-size:13px}
+  #lesson-editor-workspace.is-expanded .practice-actions:not(.live-editor-run-actions){
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
 .draft-status{color:var(--muted);font-size:13px;line-height:1.5;margin:7px 0 15px}
 .lesson-jump-nav{display:flex;flex-wrap:wrap;gap:8px 16px;margin:16px 0 24px}
 .lesson-jump-nav a{text-decoration:underline;text-underline-offset:3px}

@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
 const { inflateRawSync } = require("node:zlib");
 const { chromium } = require("playwright");
-const { discoverLessons } = require("./lesson-sources.cjs");
+const { browserRuntimes, discoverLessons } = require("./lesson-sources.cjs");
 const { prepareLesson } = require("./verify_lessons.cjs");
 
 const site = process.argv[2];
@@ -81,7 +81,7 @@ async function openLessonCompiler(page) {
 }
 
 async function verifyLessonExample(browser, lesson) {
-    const { route, startSnippet } = lesson;
+    const { route, startSnippet, taskId, browserRuntime, practice } = lesson;
     const page = await browser.newPage({ serviceWorkers: "block" });
     try {
         page.setDefaultTimeout(timeout);
@@ -89,11 +89,13 @@ async function verifyLessonExample(browser, lesson) {
         const reminder = page.locator("#previous-quiz-dialog[open]");
         if (await reminder.isVisible()) await reminder.getByRole("button", { name: "Продолжить урок" }).click();
 
-        const example = prepareLesson(lesson).examples.find(item => item.id === startSnippet);
+        const { examples, wrongPractice } = prepareLesson(lesson);
+        const example = examples.find(item => item.id === startSnippet);
         const frame = await openLessonCompiler(page);
+        const iframe = page.locator("#course-compiler");
         const status = page.locator("#page-editor-feedback");
         await status.filter({ hasText: "Редактор готов к запуску." }).waitFor();
-        const code = await page.locator("#course-compiler").evaluate(iframe => iframe.contentWindow.DotnetBrowserEditor.getCode());
+        const code = await iframe.evaluate(element => element.contentWindow.DotnetBrowserEditor.getCode());
         assert.equal(code.trimEnd(), example.code.trimEnd(), `${route}: unexpected starting code in the editor`);
         await page.locator(`button[data-example-id="${startSnippet}"]`).click();
         await status.filter({ hasText: /Запуск завершён|Ошибка запуска/ }).waitFor();
@@ -101,6 +103,17 @@ async function verifyLessonExample(browser, lesson) {
         await output.locator("pre").first().waitFor({ state: "attached" });
         assert.equal(await output.textContent(), example.output, `Output of ${route} (${startSnippet})`);
         console.log(`${route}: ran the starting example and checked its output against the lesson`);
+
+        if (browserRuntime === "11") {
+            await page.getByRole("button", { name: "Открыть заготовку", exact: true }).click();
+            const starter = await iframe.evaluate(element => element.contentWindow.DotnetBrowserEditor.getCode());
+            assert.equal(starter.trimEnd(), practice.trimEnd(), `${taskId}: the editor must open the complete practice`);
+            assert.ok(await iframe.evaluate((element, source) => element.contentWindow.DotnetBrowserEditor.setCode(source), wrongPractice));
+            await page.locator("#page-editor-run").click();
+            await output.filter({ hasText: `❌ ${taskId}:` }).waitFor();
+            assert.ok(await page.locator("#verified-" + taskId).isHidden(), `${taskId}: incorrect practice must remain unverified`);
+            console.log(`${route}: compiled the authored practice and rejected the incorrect solution`);
+        }
     } finally {
         await page.close();
     }
@@ -399,8 +412,80 @@ async function verifyCodeMirrorFallback(browser) {
         assert.equal(await editor.inputValue(), edited, "The plain editor must restore learner changes");
         await page.locator("#page-editor-run").click();
         await frame.locator("#output pre").filter({ hasText: "Plain editor draft" }).waitFor();
-        await feedback.filter({ hasText: "Запуск завершён. Результат в консоли." }).waitFor();
+        await feedback.filter({ hasText: "Запуск завершён. Результат в выводе программы." }).waitFor();
         console.log("CodeMirror unavailable: checked the plain editor, restored draft and Roslyn result");
+    } finally {
+        await page.close();
+    }
+}
+
+async function verifyEmbeddedWorkspace(browser) {
+    const page = await browser.newPage({
+        serviceWorkers: "block", viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce"
+    });
+    try {
+        page.setDefaultTimeout(timeout);
+        await page.goto(new URL("courses/memory/lessons/001-allocations-copies-retention/", site).href,
+            { waitUntil: "domcontentloaded" });
+        const frame = await openLessonCompiler(page);
+        const iframe = page.locator("#course-compiler");
+        const feedback = page.locator("#page-editor-feedback");
+        await feedback.filter({ hasText: "Редактор готов к запуску." }).waitFor();
+        assert.equal(await frame.locator("html.course-editor-embedded").getAttribute("lang"), "ru");
+        assert.ok(await page.locator("#page-editor-run").isVisible(), "Run must remain visible in the lesson toolbar");
+        assert.ok(await frame.locator("#editor-run-current").isHidden(), "The embedded Run must not duplicate the lesson toolbar");
+        assert.ok(await frame.getByRole("heading", { name: "Консоль", exact: true }).isVisible());
+        assert.equal(await frame.locator("#output").getAttribute("aria-label"), "Вывод программы");
+
+        const waitForLayout = stacked => page.waitForFunction(isStacked => {
+            const doc = document.getElementById("course-compiler").contentDocument;
+            const editor = doc.querySelector(".editor-section").getBoundingClientRect();
+            const consolePane = doc.querySelector(".output-section").getBoundingClientRect();
+            if (consolePane.right > doc.documentElement.clientWidth + 1 ||
+                consolePane.bottom > doc.documentElement.clientHeight + 1) return false;
+            if (isStacked) return editor.bottom <= consolePane.top + 1 && Math.abs(editor.left - consolePane.left) <= 1;
+            return editor.right <= consolePane.left + 1 && editor.bottom > consolePane.top;
+        }, stacked, { timeout: 5000 });
+        await waitForLayout(false);
+        await page.setViewportSize({ width: 390, height: 844 });
+        await waitForLayout(true);
+
+        const runWithShortcut = async source => {
+            assert.ok(await iframe.evaluate((element, code) => {
+                const editor = element.contentWindow.DotnetBrowserEditor;
+                if (!editor.setCode(code)) return false;
+                editor.focus();
+                return true;
+            }, source));
+            await page.keyboard.press("Control+Enter");
+        };
+        const output = frame.locator("#output");
+        await runWithShortcut('using System; public static class Program { public static void Main() { Console.WriteLine("Keyboard workspace"); } }');
+        await output.filter({ hasText: "Keyboard workspace" }).waitFor();
+        await feedback.filter({ hasText: "Запуск завершён. Результат в выводе программы." }).waitFor();
+        assert.ok(await frame.locator(".CodeMirror textarea").evaluate(editor => editor === document.activeElement),
+            "Ctrl+Enter must not move focus away from the editor");
+
+        await runWithShortcut(inputProgram);
+        const input = output.locator("input[type=text]");
+        await input.waitFor({ state: "visible" });
+        const jump = page.getByRole("button", { name: "К выводу", exact: true });
+        await jump.focus();
+        await page.keyboard.press("Enter");
+        await page.waitForFunction(() => {
+            const compiler = document.getElementById("course-compiler");
+            return document.activeElement === compiler && compiler.contentDocument.activeElement.id === "output-heading";
+        });
+        for (let i = 0; i < 6 && !await input.evaluate(element => element === document.activeElement); i++) {
+            await page.keyboard.press("Tab");
+        }
+        assert.ok(await input.evaluate(element => element === document.activeElement), "The ReadLine input must be reachable from the console heading");
+        await page.keyboard.insertText("42");
+        await page.keyboard.press("Enter");
+        await output.filter({ hasText: "Получено 42" }).waitFor();
+        await output.filter({ hasText: "Execution error: ArgumentException: INPUT_REQUIRED" }).waitFor();
+        await feedback.filter({ hasText: "Ошибка запуска. Подробности в выводе программы." }).waitFor();
+        console.log("Embedded editor: checked responsive panes, Ctrl+Enter focus, console navigation and ReadLine");
     } finally {
         await page.close();
     }
@@ -409,11 +494,11 @@ async function verifyCodeMirrorFallback(browser) {
 async function verify() {
     const browser = await chromium.launch();
     try {
-        for (const runtime of [9, 10]) {
+        for (const runtime of browserRuntimes) {
             const page = await browser.newPage();
             page.setDefaultTimeout(timeout);
             const url = new URL("browser-compiler-net" + runtime + "/", site);
-            url.searchParams.set("course", runtime === 9 ? "csharp-dotnet-9-11" : "memory");
+            url.searchParams.set("course", runtime === "10" ? "memory" : "csharp-dotnet-9-11");
             url.searchParams.set("lesson", "1");
             if (revision) url.searchParams.set("v", revision);
             await page.goto(url.href, { waitUntil: "domcontentloaded" });
@@ -435,8 +520,11 @@ async function verify() {
             assert.match(await diagnostic.textContent(), /Compilation failed with Roslyn/);
             assert.doesNotMatch(await diagnostic.textContent(), /Первый Assert|Execution error/);
 
-            await start(page, 'public class Program { public static void Main() { Console.WriteLine("success marker"); } }');
-            assert.equal(await (await waitForOutput(page, "success marker")).textContent(), "success marker\n");
+            const runtimeMarker = `runtime: ${runtime}/wasm`;
+            await start(page, 'using System; public class Program { public static void Main() { ' +
+                'Console.WriteLine("runtime: " + System.Environment.Version.Major + "/" + ' +
+                '(System.OperatingSystem.IsBrowser() ? "wasm" : "native")); } }');
+            assert.equal(await (await waitForOutput(page, runtimeMarker)).textContent(), runtimeMarker + "\n");
 
             await page.reload({ waitUntil: "domcontentloaded" });
             await page.locator("#editor-run-current").waitFor({ state: "attached" });
@@ -457,6 +545,7 @@ async function verify() {
         await verifyLessonCompletion(browser, "courses/csharp-dotnet-9-11/", "lessons/001-params-countby/", "TASK-001");
         await verifyLessonCompletion(browser, "courses/memory/", "lessons/001-allocations-copies-retention/", "ALLOC-TASK-001");
         await verifyCodeMirrorFallback(browser);
+        await verifyEmbeddedWorkspace(browser);
     } finally {
         await browser.close();
     }

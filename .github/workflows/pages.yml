@@ -23,7 +23,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      # The two WASM outputs are versioned independently. Editing Markdown, CSS,
+      # The WASM outputs are versioned independently. Editing Markdown, CSS,
       # quiz data or the shared editor JavaScript does not invalidate them.
       - name: Restore C# 13 / .NET 9 WebAssembly compiler
         id: wasm9
@@ -41,8 +41,16 @@ jobs:
             ${{ runner.temp }}/compiler-net10/wwwroot
             ${{ runner.temp }}/compiler-net10/LICENSE.txt
           key: wasm-${{ runner.os }}-net10-v1-${{ env.COMPILER_SOURCE_SHA }}-${{ hashFiles('_browser/prepare_compiler.py') }}
+      - name: Restore C# 15 / .NET 11 WebAssembly compiler
+        id: wasm11
+        uses: actions/cache@v5
+        with:
+          path: |
+            ${{ runner.temp }}/compiler-net11/wwwroot
+            ${{ runner.temp }}/compiler-net11/LICENSE.txt
+          key: wasm-${{ runner.os }}-net11-v1-${{ env.COMPILER_SOURCE_SHA }}-${{ hashFiles('_browser/prepare_compiler.py') }}
       - name: Checkout pinned C# compiler source (only when a cache misses)
-        if: steps.wasm9.outputs.cache-hit != 'true' || steps.wasm10.outputs.cache-hit != 'true'
+        if: steps.wasm9.outputs.cache-hit != 'true' || steps.wasm10.outputs.cache-hit != 'true' || steps.wasm11.outputs.cache-hit != 'true'
         uses: actions/checkout@v5
         with:
           repository: MicrosoftLearning/c-sharp-minor
@@ -59,6 +67,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REBUILD_WASM9: ${{ steps.wasm9.outputs.cache-hit != 'true' }}
           REBUILD_WASM10: ${{ steps.wasm10.outputs.cache-hit != 'true' }}
+          REBUILD_WASM11: ${{ steps.wasm11.outputs.cache-hit != 'true' }}
         run: node _browser/select_lesson_checks.cjs
       - uses: actions/setup-dotnet@v5
         if: steps.lesson_checks.outputs.sdk_versions != ''
@@ -85,26 +94,21 @@ jobs:
         run: |
           node _browser/verify_practice_assertions.cjs
           node _browser/verify_lessons.cjs
-      - name: Prepare C# 13 browser compiler (cache miss)
-        if: steps.wasm9.outputs.cache-hit != 'true'
+      - name: Build browser compilers with a cache miss
+        if: steps.lesson_checks.outputs.rebuild_compilers != ''
+        env:
+          REBUILD_COMPILERS: ${{ steps.lesson_checks.outputs.rebuild_compilers }}
         run: |
-          cp -a _compiler_src _compiler_src_net9
-          python3 _browser/prepare_compiler.py 9 _compiler_src_net9/CSharpCompilerWasm
-      - name: Prepare C# 14 browser compiler (cache miss)
-        if: steps.wasm10.outputs.cache-hit != 'true'
-        run: |
-          cp -a _compiler_src _compiler_src_net10
-          python3 _browser/prepare_compiler.py 10 _compiler_src_net10/CSharpCompilerWasm
-      - name: Build C# 13 browser compiler on .NET 9 (cache miss)
-        if: steps.wasm9.outputs.cache-hit != 'true'
-        run: |
-          dotnet publish _compiler_src_net9/CSharpCompilerWasm/CSharpCompilerWasm.csproj --configuration Release --output "$RUNNER_TEMP/compiler-net9"
-          cp _compiler_src_net9/LICENSE "$RUNNER_TEMP/compiler-net9/LICENSE.txt"
-      - name: Build C# 14 browser compiler on .NET 10 (cache miss)
-        if: steps.wasm10.outputs.cache-hit != 'true'
-        run: |
-          dotnet publish _compiler_src_net10/CSharpCompilerWasm/CSharpCompilerWasm.csproj --configuration Release --output "$RUNNER_TEMP/compiler-net10"
-          cp _compiler_src/LICENSE "$RUNNER_TEMP/compiler-net10/LICENSE.txt"
+          read -r -a runtimes <<< "$REBUILD_COMPILERS"
+          for runtime in "${runtimes[@]}"; do
+            echo "Preparing and publishing .NET $runtime browser compiler"
+            source="_compiler_src_net$runtime"
+            output="$RUNNER_TEMP/compiler-net$runtime"
+            cp -a _compiler_src "$source"
+            python3 _browser/prepare_compiler.py "$runtime" "$source/CSharpCompilerWasm"
+            dotnet publish "$source/CSharpCompilerWasm/CSharpCompilerWasm.csproj" --framework "net$runtime.0" --configuration Release --output "$output"
+            cp "$source/LICENSE" "$output/LICENSE.txt"
+          done
       - name: Restore pinned CodeMirror assets
         id: codemirror
         uses: actions/cache@v5
@@ -122,10 +126,10 @@ jobs:
         with:
           source: ./
           destination: ./_site
-      - name: Include two browser compilers and shared CodeMirror
+      - name: Include browser compilers and shared CodeMirror
         run: |
           sudo chown -R "$(id -u):$(id -g)" _site
-          for runtime in 9 10; do
+          for runtime in 9 10 11; do
             mkdir -p "_site/browser-compiler-net$runtime"
             cp -a "$RUNNER_TEMP/compiler-net$runtime/wwwroot/." "_site/browser-compiler-net$runtime/"
             cp "$RUNNER_TEMP/compiler-net$runtime/LICENSE.txt" "_site/browser-compiler-net$runtime/LICENSE.txt"

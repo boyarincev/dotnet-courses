@@ -1,14 +1,16 @@
 """Build the upstream MIT-licensed C# minor compiler as a reusable browser runtime.
-Pinned source from MicrosoftLearning/c-sharp-minor; build twice (net9 and net10).
-Editor enhancement is shared by both runtimes; no compiler binaries are committed.
+Pinned source from MicrosoftLearning/c-sharp-minor; build for net9, net10, or net11.
+Editor enhancement is shared by all runtimes; no compiler binaries are committed.
 """
 from pathlib import Path
 import re
 import sys
 
+runtimes = {"9": "13", "10": "14", "11": "15"}
 runtime = sys.argv[1] if len(sys.argv) > 1 else ""
-if runtime not in ("9", "10"):
-    raise SystemExit("Usage: prepare_compiler.py 9|10 <source directory>")
+if runtime not in runtimes:
+    raise SystemExit("Usage: prepare_compiler.py 9|10|11 <source directory>")
+language_version = runtimes[runtime]
 root = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("_compiler_src/CSharpCompilerWasm")
 razor = root / "Pages/Compiler.razor"
 html = root / "wwwroot/index.html"
@@ -51,8 +53,10 @@ source = source.replace(
 parse = "CSharpSyntaxTree.ParseText(combinedCode);"
 if source.count(parse) != 1:
     raise RuntimeError("Missing CSharpSyntaxTree.ParseText")
-lang = "CSharp13" if runtime == "9" else "CSharp14"
-source = source.replace(parse, "CSharpSyntaxTree.ParseText(combinedCode, new CSharpParseOptions(LanguageVersion." + lang + "));")
+source = source.replace(
+    parse,
+    f"CSharpSyntaxTree.ParseText(combinedCode, new CSharpParseOptions(LanguageVersion.CSharp{language_version}));",
+)
 
 
 def replace_once(text, old, new):
@@ -233,17 +237,25 @@ source = replace_once(source, ";'>{escaped}</pre>", r";'>\n{escaped}</pre>")
 
 console.write_text(console_source, encoding="utf-8")
 
-if runtime == "10":
-    source = source.replace("Basic.Reference.Assemblies.Net90", "Basic.Reference.Assemblies.Net100")
+if runtime != "9":
+    reference_assemblies = f"Basic.Reference.Assemblies.Net{runtime}0"
+    blazor_version = "10.0.13" if runtime == "10" else "11.0.0"
+    source = source.replace("Basic.Reference.Assemblies.Net90", reference_assemblies)
     project = csproj.read_text(encoding="utf-8")
     versions = {
-        "<TargetFramework>net9.0</TargetFramework>": "<TargetFramework>net10.0</TargetFramework>",
-        'Basic.Reference.Assemblies.Net90" Version="1.8.3"': 'Basic.Reference.Assemblies.Net100" Version="1.8.15"',
-        'Microsoft.AspNetCore.Components.WebAssembly" Version="9.0.10"': 'Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.13"',
-        'Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="9.0.10"': 'Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.13"',
+        "<TargetFramework>net9.0</TargetFramework>": f"<TargetFramework>net{runtime}.0</TargetFramework>",
+        'Basic.Reference.Assemblies.Net90" Version="1.8.3"': f'{reference_assemblies}" Version="1.8.15"',
+        'Microsoft.AspNetCore.Components.WebAssembly" Version="9.0.10"': f'Microsoft.AspNetCore.Components.WebAssembly" Version="{blazor_version}"',
         'Microsoft.CodeAnalysis.Common" Version="4.14.0"': 'Microsoft.CodeAnalysis.Common" Version="5.12.0"',
         'Microsoft.CodeAnalysis.CSharp" Version="4.14.0"': 'Microsoft.CodeAnalysis.CSharp" Version="5.12.0"',
     }
+    if runtime == "10":
+        versions['Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="9.0.10"'] = (
+            'Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.13"'
+        )
+    else:
+        # The .NET 11 DevServer package is deprecated. The published app is served as static files.
+        versions['    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="9.0.10" PrivateAssets="all" />\n'] = ""
     for old, new in versions.items():
         if project.count(old) != 1:
             raise RuntimeError("Cannot upgrade unknown csproj token: " + old)
@@ -268,4 +280,4 @@ if "</head>" not in index or '<script src="_framework/blazor.webassembly.js"></s
 index = index.replace("</head>", in_head + "\n</head>")
 index = index.replace('<script src="_framework/blazor.webassembly.js"></script>', before_framework + '\n<script src="_framework/blazor.webassembly.js"></script>')
 html.write_text(index, encoding="utf-8")
-print("Prepared C# " + ("13" if runtime == "9" else "14") + " / .NET " + runtime + " compiler.")
+print(f"Prepared C# {language_version} / .NET {runtime} compiler.")

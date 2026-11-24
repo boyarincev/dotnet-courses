@@ -8,6 +8,7 @@ const courses = [
     { id: "csharp-dotnet-9-11", collection: "_lessons", taskPrefix: "TASK-" },
     { id: "memory", collection: "_memory_lessons", taskPrefix: "ALLOC-TASK-" },
 ];
+const browserRuntimes = ["9", "10", "11"];
 
 function scalar(frontMatter, key) {
     const value = frontMatter.match(new RegExp(`^${key}:[ \\t]*([^\\n]*)$`, "m"))?.[1].trim();
@@ -30,6 +31,7 @@ function parseLesson(sourcePath, markdown, course) {
     const startSnippet = scalar(frontMatter, "browser_start_snippet");
     const adapter = scalar(frontMatter, "browser_snippets");
     if (adapter) assert.match(adapter, /^browser-snippets(?:-[a-z0-9-]+)?\.js$/, `${sourcePath}: invalid adapter filename`);
+    assert.ok(!browserRuntime || browserRuntimes.includes(browserRuntime), `${sourcePath}: unsupported browser_runtime ${browserRuntime}`);
     assert.ok(browserRuntime || !startSnippet, `${sourcePath}: browser_start_snippet requires browser_runtime`);
 
     const blocks = new Map();
@@ -87,4 +89,4 @@ function discoverLessons() {
     });
 }
 
-module.exports = { courses, discoverLessons, parseLesson };
+module.exports = { browserRuntimes, courses, discoverLessons, parseLesson };

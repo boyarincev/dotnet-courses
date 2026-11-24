@@ -1,7 +1,7 @@
 "use strict";
 const fs = require("node:fs");
 const { execFileSync } = require("node:child_process");
-const { discoverLessons } = require("./lesson-sources.cjs");
+const { browserRuntimes, discoverLessons } = require("./lesson-sources.cjs");
 
 const contentOnlyPaths = new Set([
   "README.md",
@@ -91,11 +91,12 @@ if (require.main === module) {
   selectVerification(discoverLessons(), process.env).then(({ lessons, reason }) => {
     const paths = lessons.map(lesson => lesson.path);
     const sdkVersions = new Set(lessons.map(lesson => lesson.framework.slice(3) + ".x"));
-    if (process.env.REBUILD_WASM9 === "true") sdkVersions.add("9.0.x");
-    if (process.env.REBUILD_WASM10 === "true") sdkVersions.add("10.0.x");
+    const rebuildCompilers = browserRuntimes.filter(runtime => process.env[`REBUILD_WASM${runtime}`] === "true");
+    for (const runtime of rebuildCompilers) sdkVersions.add(`${runtime}.0.x`);
     console.log(reason + ": " + (paths.join(", ") || "no lesson C# checks needed"));
     const sdkOutput = sdkVersions.size ? "sdk_versions<<SDK_VERSIONS\n" + [...sdkVersions].join("\n") + "\nSDK_VERSIONS\n" : "sdk_versions=\n";
-    fs.appendFileSync(process.env.GITHUB_OUTPUT, "lessons=" + JSON.stringify(paths) + "\n" + sdkOutput);
+    fs.appendFileSync(process.env.GITHUB_OUTPUT, "lessons=" + JSON.stringify(paths) + "\n" +
+        "rebuild_compilers=" + rebuildCompilers.join(" ") + "\n" + sdkOutput);
   });
 }
 

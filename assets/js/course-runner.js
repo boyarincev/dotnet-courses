@@ -501,6 +501,7 @@
   // the embedded CodeMirror's own toolbar is hidden by the compiler layout.
   function addEditorToolbar(prepareInitialExample) {
     const run = document.getElementById("page-editor-run");
+    const output = document.getElementById("page-editor-output");
     const copy = document.getElementById("page-editor-copy");
     const download = document.getElementById("page-editor-download");
     const dotnetLab = document.getElementById("page-editor-dotnet-lab");
@@ -529,10 +530,10 @@
           status.textContent = "Выполняется текущий код.";
           break;
         case "complete":
-          status.textContent = "Запуск завершён. Результат в консоли.";
+          status.textContent = "Запуск завершён. Результат в выводе программы.";
           break;
         case "error":
-          status.textContent = "Ошибка запуска. Подробности в консоли.";
+          status.textContent = "Ошибка запуска. Подробности в выводе программы.";
           break;
       }
     });
@@ -549,6 +550,10 @@
       if (api.busy()) { status.textContent = "Компилятор ещё загружается или занят."; return; }
       if (api.run()) status.textContent = "Выполняется текущий код.";
       else status.textContent = "Запуск пока недоступен. Проверь состояние компилятора.";
+    });
+    output?.addEventListener("click", () => {
+      const api = getEditor();
+      if (api && !api.focusOutput?.()) status.textContent = "Вывод программы пока недоступен.";
     });
     copy.addEventListener("click", async () => {
       const api = getEditor();

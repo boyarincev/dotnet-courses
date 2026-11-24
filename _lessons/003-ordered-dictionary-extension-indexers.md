@@ -7,9 +7,9 @@ csharp_feature: 'C# 15 · расширяющие индексаторы'
 dotnet_feature: '.NET 9 · OrderedDictionary.GetAt'
 series: 'Коллекции и LINQ'
 code_framework: net11.0
+browser_runtime: '11'
+browser_start_snippet: full-program
 ---
-
-> **Практика локально.** Для примеров и задания понадобится SDK .NET 11 (версия 11.0.100 или новее). Проект с `net11.0` по умолчанию использует C# 15.
 
 ## Зачем это нужно
 
@@ -31,27 +31,28 @@ var first = entries.GetAt(index: 0); // Первая пара в порядке 
 
 ## Запусти пример
 
-```sh
-dotnet new console -f net11.0 -o ServiceBoard
-cd ServiceBoard
-```
-
-Замени содержимое `Program.cs` программой ниже и выполни `dotnet run`.
+В браузере нажми «Запустить этот пример» под программой.
 
 ```csharp
 using System;
 using System.Collections.Generic;
 
-var entries = new OrderedDictionary<string, int>
+public static class Program
 {
-    { "worker", 2 },
-    { "gateway", 5 },
-    { "metrics", 1 }
-};
+    public static void Main()
+    {
+        var entries = new OrderedDictionary<string, int>
+        {
+            { "worker", 2 },
+            { "gateway", 5 },
+            { "metrics", 1 }
+        };
 
-Console.WriteLine($"Ошибки gateway: {entries["gateway"]}");
-var first = entries[0];
-Console.WriteLine($"Первая строка: {first.Key} = {first.Value}");
+        Console.WriteLine($"Ошибки gateway: {entries["gateway"]}");
+        var first = entries[0];
+        Console.WriteLine($"Первая строка: {first.Key} = {first.Value}");
+    }
+}
 
 public static class ServiceBoardExtensions
 {
@@ -73,13 +74,22 @@ public static class ServiceBoardExtensions
 ```
 {: #output-full-program }
 
+Для локального запуска используй [.NET 11 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/11.0) версии `11.0.100` или новее. Проект с `net11.0` [по умолчанию использует C# 15](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-15).
+
+```sh
+dotnet new console -f net11.0 -o ServiceBoard
+cd ServiceBoard
+```
+
+Замени содержимое `Program.cs` примером и выполни `dotnet run`.
+
 ## Напиши код сам · TASK-003 {#lesson-task}
 
 В задании объявим индексатор, который получает `Index` напрямую. `Index middle = 1` задаёт позицию с начала, а `^1` — позицию с конца. [Спецификация System.Index](https://learn.microsoft.com/dotnet/csharp/language-reference/language-specification/ranges#182-the-index-type)
 
 Реализуй расширяющий индексатор с параметром `Index` для `OrderedDictionary<string, int>`. Он должен вернуть пару «имя сервиса, число ошибок» на указанной позиции. Поддержи позиции с начала и с конца и получай пару через `GetAt`. Сохрани обычный поиск по строковому ключу. При недопустимой позиции, в том числе при `^0` и при `^1` на пустом словаре, ожидается `ArgumentOutOfRangeException`.
 
-Замени `Program.cs` заготовкой, допиши тело индексатора и снова выполни `dotnet run`. После прохождения всех `Assert` терминал выведет «Все проверки пройдены».
+В браузере нажми «Открыть заготовку», допиши тело индексатора и нажми «Запустить текущий код». Для локальной проверки скопируй заготовку в `Program.cs` проекта `ServiceBoard`, внеси правку и выполни `dotnet run`. После прохождения всех `Assert` программа выведет «Все проверки пройдены».
 
 ```csharp
 using System;

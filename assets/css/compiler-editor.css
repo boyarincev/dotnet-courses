@@ -1,0 +1,320 @@
+html.course-editor-embedded {
+  color-scheme: light dark;
+  --editor-background: #f7faf9;
+  --editor-surface: #fff;
+  --editor-ink: #20323a;
+  --editor-muted: #53676d;
+  --editor-border: #dce7e5;
+  --editor-control-border: #738e8c;
+  --editor-accent: #087c70;
+  --editor-accent-surface: #e8f7f2;
+  --editor-console: #f2f7f6;
+  --editor-selection: #ccebe3;
+  --editor-keyword: #6332a0;
+  --editor-number: #794815;
+  --editor-type: #285c99;
+  --editor-string: #116347;
+  --editor-error: #9b292d;
+  --editor-warning: #82530b;
+  --editor-code-height: clamp(24rem, 47vw, 30rem);
+  --editor-font: ui-monospace, Consolas, "Liberation Mono", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  html.course-editor-embedded {
+    --editor-background: #0c151b;
+    --editor-surface: #14232b;
+    --editor-ink: #e6eeef;
+    --editor-muted: #a0b6ba;
+    --editor-border: #2c4047;
+    --editor-control-border: #70878b;
+    --editor-accent: #6bd3bf;
+    --editor-accent-surface: #173c39;
+    --editor-console: #091118;
+    --editor-selection: #284f51;
+    --editor-keyword: #d7b7ff;
+    --editor-number: #f7bd8b;
+    --editor-type: #a6cbff;
+    --editor-string: #9ee7ac;
+    --editor-error: #ffabab;
+    --editor-warning: #f9cc78;
+  }
+}
+
+html.course-editor-embedded body {
+  margin: 0;
+  background: var(--editor-background);
+  color: var(--editor-ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html.course-editor-embedded .page > main {
+  min-width: 0;
+}
+
+html.course-editor-embedded .compiler-container {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 0.75rem;
+  height: auto;
+  max-height: none;
+  padding: 0.75rem;
+  overflow: visible;
+}
+
+html.course-editor-embedded .compiler-container > .header {
+  display: none;
+}
+
+html.course-editor-embedded :is(.editor-section, .output-section) {
+  min-width: 0;
+  border: 1px solid var(--editor-border);
+  border-radius: 0.625rem;
+  background: var(--editor-surface);
+}
+
+html.course-editor-embedded .section-header {
+  min-height: 3rem;
+  padding: 0.5rem 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.375rem 0.625rem;
+  border-radius: 0.625rem 0.625rem 0 0;
+  border-bottom: 1px solid var(--editor-border);
+  background: var(--editor-surface);
+  color: var(--editor-ink);
+}
+
+html.course-editor-embedded .section-header h3 {
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+html.course-editor-embedded .section-header h3:focus {
+  outline: 2px solid var(--editor-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+html.course-editor-embedded .console-controls {
+  min-width: 0;
+  margin-inline-start: auto;
+  gap: 0.375rem 0.625rem;
+  flex-wrap: wrap;
+}
+
+html.course-editor-embedded .console-controls button {
+  min-height: 2rem;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--editor-control-border);
+  border-radius: 0.375rem;
+  background: var(--editor-surface);
+  color: var(--editor-ink);
+  font-size: 0.8125rem;
+}
+
+html.course-editor-embedded .console-controls button:hover {
+  background: var(--editor-accent-surface);
+}
+
+html.course-editor-embedded .toggle-label {
+  font: 500 0.8125rem/1.2 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--editor-ink);
+}
+
+html.course-editor-embedded .toggle-slider {
+  flex-shrink: 0;
+  width: 36px;
+  height: 20px;
+  background: var(--editor-muted);
+}
+
+html.course-editor-embedded .toggle-slider::before {
+  width: 14px;
+  height: 14px;
+}
+
+html.course-editor-embedded .toggle-switch input:checked + .toggle-slider {
+  background: var(--editor-accent);
+}
+
+html.course-editor-embedded .toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(16px);
+}
+
+html.course-editor-embedded .toggle-switch input:focus-visible + .toggle-slider,
+html.course-editor-embedded :is(a, button):focus-visible {
+  outline: 2px solid var(--editor-accent);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+html.course-editor-embedded .skip-link {
+  background: var(--editor-surface);
+  color: var(--editor-ink);
+}
+
+html.course-editor-embedded .editor-container,
+html.course-editor-embedded .output-container {
+  min-width: 0;
+}
+
+html.course-editor-embedded :is(#code-editor, .CodeMirror) {
+  width: 100%;
+  height: var(--editor-code-height);
+  border: 0;
+  background: var(--editor-surface);
+  color: var(--editor-ink);
+  font: 0.875rem/1.5 var(--editor-font);
+}
+
+html.course-editor-embedded #code-editor {
+  vertical-align: top;
+  padding: 0.625rem 0.75rem;
+}
+
+html.course-editor-embedded #code-editor::placeholder {
+  color: var(--editor-muted);
+}
+
+html.course-editor-embedded .CodeMirror-lines {
+  padding-block: 0.625rem;
+}
+
+html.course-editor-embedded .CodeMirror-gutters {
+  border-inline-end: 1px solid var(--editor-border);
+  background: var(--editor-background);
+}
+
+html.course-editor-embedded .CodeMirror-linenumber {
+  color: var(--editor-muted);
+}
+
+html.course-editor-embedded .CodeMirror-cursor {
+  border-color: var(--editor-ink);
+}
+
+html.course-editor-embedded .CodeMirror-selected {
+  background: var(--editor-selection);
+}
+
+html.course-editor-embedded :is(.CodeMirror-focused, #code-editor:focus-visible, #output:focus-visible) {
+  outline: 2px solid var(--editor-accent);
+  outline-offset: -2px;
+}
+
+html.course-editor-embedded .cm-s-default :is(.cm-keyword, .cm-meta, .cm-builtin) {
+  color: var(--editor-keyword);
+}
+
+html.course-editor-embedded .cm-s-default :is(.cm-number, .cm-atom) {
+  color: var(--editor-number);
+}
+
+html.course-editor-embedded .cm-s-default :is(.cm-type, .cm-def, .cm-variable-2, .cm-variable-3, .cm-qualifier) {
+  color: var(--editor-type);
+}
+
+html.course-editor-embedded .cm-s-default :is(.cm-string, .cm-string-2, .CodeMirror-matchingbracket) {
+  color: var(--editor-string);
+}
+
+html.course-editor-embedded .cm-s-default .cm-comment {
+  color: var(--editor-muted);
+}
+
+html.course-editor-embedded .cm-s-default :is(.cm-error, .CodeMirror-nonmatchingbracket) {
+  color: var(--editor-error);
+}
+
+html.course-editor-embedded .CodeMirror-hints {
+  border: 1px solid var(--editor-border);
+  background: var(--editor-surface);
+  color: var(--editor-ink);
+}
+
+html.course-editor-embedded .CodeMirror-hint {
+  color: var(--editor-ink);
+}
+
+html.course-editor-embedded .CodeMirror-hint-active {
+  background: var(--editor-selection);
+}
+
+html.course-editor-embedded #editor-run-bar {
+  margin: 0;
+  padding: 0.375rem 0.75rem;
+  border-top: 1px solid var(--editor-border);
+  color: var(--editor-muted);
+}
+
+html.course-editor-embedded #editor-draft-status {
+  font-size: 0.8125rem;
+}
+
+html.course-editor-embedded .output-container {
+  min-height: 10rem;
+}
+
+html.course-editor-embedded #output {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0 0 0.625rem 0.625rem;
+  background: var(--editor-console);
+  color: var(--editor-ink);
+  font: 0.875rem/1.5 var(--editor-font);
+  overflow-wrap: anywhere;
+}
+
+html.course-editor-embedded #output .info {
+  color: var(--editor-type);
+}
+
+html.course-editor-embedded #output .success {
+  color: var(--editor-string);
+}
+
+html.course-editor-embedded #output .warning {
+  color: var(--editor-warning);
+}
+
+html.course-editor-embedded #output .error {
+  color: var(--editor-error);
+}
+
+/* Console.ReadLine creates the prompt and input with inline upstream colors. */
+html.course-editor-embedded #output .interactive-output > span {
+  color: var(--editor-muted) !important;
+}
+
+html.course-editor-embedded #output .interactive-output input {
+  min-width: 0;
+  min-height: 1.875rem;
+  padding: 0.25rem 0.375rem !important;
+  border: 1px solid var(--editor-control-border) !important;
+  border-radius: 0.25rem;
+  background: var(--editor-surface) !important;
+  color: var(--editor-ink) !important;
+}
+
+html.course-editor-embedded #output .interactive-output input:focus-visible {
+  outline: 2px solid var(--editor-accent) !important;
+  outline-offset: 1px;
+}
+
+@media (max-width: 700px) {
+  html.course-editor-embedded {
+    --editor-code-height: clamp(16rem, 65vw, 20rem);
+  }
+
+  html.course-editor-embedded .compiler-container {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0.5rem;
+    gap: 0.5rem;
+  }
+
+  html.course-editor-embedded .output-container {
+    min-height: clamp(10rem, 48vw, 13rem);
+  }
+}

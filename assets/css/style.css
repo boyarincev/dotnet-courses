@@ -30,9 +30,13 @@ h1,h2,h3{line-height:1.2;letter-spacing:-.045em}h1{font-size:clamp(35px,6vw,60px
 @media(max-width:750px){.course-grid{grid-template-columns:1fr}.course-card{padding:18px 20px}.course-nav{gap:4px 8px}}
 
 /* A visible editor toolbar lives on the lesson page, independent of the iframe. */
-.live-editor-toolbar{border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:12px 14px;margin:18px 0 14px}
-.live-editor-toolbar .button{margin:4px}
-.live-editor-toolbar .practice-feedback{display:block;flex-basis:100%;margin:2px 4px 0}
+.live-editor-toolbar{display:grid;gap:10px;border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:12px 14px;margin:18px 0 10px}
+.live-editor-toolbar .button{margin:0}
+.live-editor-run-actions .practice-feedback{line-height:1.45}
+.lesson-browser{container:lesson-browser / inline-size}
+.lesson-compiler{display:block;width:100%;height:610px;border:1px solid var(--border);border-radius:14px;background:var(--surface)}
+@container lesson-browser (max-width:702px){.lesson-compiler{height:700px}}
+@container lesson-browser (max-width:410px){.lesson-compiler{height:650px}}
 .draft-status{color:var(--muted);font-size:13px;line-height:1.5;margin:7px 0 15px}
 .lesson-jump-nav{display:flex;flex-wrap:wrap;gap:8px 16px;margin:16px 0 24px}
 .lesson-jump-nav a{text-decoration:underline;text-underline-offset:3px}

@@ -28,9 +28,25 @@
   const pageParams = new URLSearchParams(location.search);
   const hasLessonContext = pageParams.has("course") && pageParams.has("lesson");
   const embeddedLesson = hasLessonContext && window.parent !== window;
+  if (embeddedLesson) {
+    document.documentElement.classList.add("course-editor-embedded");
+    document.documentElement.lang = "ru";
+    const scriptUrl = document.currentScript?.src;
+    if (scriptUrl) {
+      const stylesheet = new URL("../css/compiler-editor.css", scriptUrl);
+      const revision = new URL(scriptUrl).searchParams.get("v");
+      if (revision !== null) stylesheet.searchParams.set("v", revision);
+      const link = document.createElement("link");
+      link.id = "course-editor-style";
+      link.rel = "stylesheet";
+      link.href = stylesheet.href;
+      document.head.append(link);
+    }
+  }
   const courseId = pageParams.get("course") || "standalone";
   const lessonId = pageParams.get("lesson") || "0";
   const storageKey = "dotnet-courses:compiler-draft:" + courseId + ":" + lessonId;
+  const downloadLabel = embeddedLesson ? "Скачать Program.cs" : "Скачать .cs";
   let draftNotice = null;
   function showDraft(text) {
     if (draftNotice) draftNotice.textContent = text;
@@ -42,7 +58,7 @@
       localStorage.setItem(storageKey, source);
       showDraft("✓ Код автоматически сохранён в этом браузере.");
     } catch {
-      showDraft("⚠ Не удалось сохранить черновик. Используй «Скачать .cs».");
+      showDraft("⚠ Не удалось сохранить черновик. Используй «" + downloadLabel + "».");
     }
   }
   const cmReady = () => typeof window.CodeMirror === "function";
@@ -72,6 +88,63 @@
     }
   }
 
+  function translateText(selector, text) {
+    const element = document.querySelector(selector);
+    // Keep Blazor's text nodes in place so later renders can still update them.
+    const node = element && [...element.childNodes].find(child =>
+      child.nodeType === Node.TEXT_NODE && child.data.trim());
+    if (node && node.data !== text) node.data = text;
+  }
+
+  function localizeEmbeddedEditor(textarea) {
+    document.title = "Редактор C#";
+    translateText(".compiler-container .subheading", "Редактор для примеров и заданий курса");
+    translateText("#editor-heading", "Редактор C#");
+    translateText('label[for="code-editor"]', "Код C#");
+    translateText("#editor-instructions", "Редактируй полный файл Program.cs. Ctrl+Enter запускает текущий код.");
+    translateText("#output-heading", "Консоль");
+    translateText("#output-instructions", "Здесь появляются вывод программы и ошибки. Переключатель показывает подробности компиляции.");
+    translateText("#clear-instructions", "Очищает вывод программы и сообщения компилятора.");
+    translateText('button[aria-describedby="clear-instructions"]', "Очистить");
+    translateText('label[aria-describedby="system-output-desc"] .toggle-label', "Подробности");
+    const labels = [
+      [".compiler-container", "Компилятор C#"],
+      [".console-controls", "Управление консолью"],
+      ["#output", "Вывод программы"],
+      ['button[aria-describedby="clear-instructions"]', "Очистить консоль"],
+      ['input[aria-describedby="system-output-desc"]', "Подробности компиляции"],
+      ['label[aria-describedby="system-output-desc"]', "Подробности компиляции"]
+    ];
+    for (const [selector, label] of labels) document.querySelector(selector)?.setAttribute("aria-label", label);
+    const details = document.querySelector('label[aria-describedby="system-output-desc"]');
+    details?.setAttribute("title", "Показать или скрыть подробности компиляции");
+    textarea.setAttribute("aria-label", "Код C#");
+    textarea.placeholder = "Введи код C#";
+
+    const skipLink = document.querySelector('.skip-link[href="#code-editor"]');
+    if (skipLink) {
+      translateText('.skip-link[href="#code-editor"]', "К редактору кода");
+      skipLink.onclick = event => {
+        event.preventDefault();
+        window.DotnetBrowserEditor.focus();
+      };
+    }
+  }
+
+  function localizeConsoleState() {
+    const details = document.querySelector('input[aria-describedby="system-output-desc"]');
+    if (details) {
+      translateText("#system-output-desc", details.checked
+        ? "В консоли показаны сообщения компилятора и вывод программы."
+        : "В консоли показаны вывод программы и ошибки.");
+    }
+    const input = document.querySelector("#output .interactive-output input[type=text]");
+    if (input && !input.hasAttribute("aria-label")) {
+      input.setAttribute("aria-label", "Ввод для программы");
+      input.placeholder = "Введи значение и нажми Enter";
+    }
+  }
+
   // A real "run current code" control next to the CodeMirror editor:
   // the example-loader can replace the source, but this button never does.
   function installRunButton() {
@@ -80,12 +153,24 @@
 
     const bar = document.createElement("div");
     bar.id = "editor-run-bar";
-    bar.style.cssText = "display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0 18px;";
     const button = document.createElement("button");
     button.type = "button";
     button.id = "editor-run-current";
     button.textContent = "▶ Запустить мой код";
     button.title = "Запуск текущего кода в редакторе (Ctrl+Enter)";
+    draftNotice = document.createElement("small");
+    draftNotice.id = "editor-draft-status";
+    draftNotice.setAttribute("role", "status");
+    draftNotice.textContent = "Черновик сохраняется автоматически в браузере на этом устройстве.";
+    if (embeddedLesson) {
+      // The lesson supplies the visible controls. Keep the readiness marker.
+      button.hidden = true;
+      bar.append(button, draftNotice);
+      wrapper.insertAdjacentElement("afterend", bar);
+      return;
+    }
+
+    bar.style.cssText = "display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0 18px;";
     button.style.cssText = "cursor:pointer;border:0;border-radius:9px;padding:12px 18px;font-size:14px;font-weight:700;background:#087c70;color:#fff;";
     const status = document.createElement("span");
     status.setAttribute("role", "status");
@@ -116,7 +201,7 @@
     });
     const downloadButton = document.createElement("button");
     downloadButton.type = "button";
-    downloadButton.textContent = "Скачать .cs";
+    downloadButton.textContent = downloadLabel;
     downloadButton.style.cssText = "cursor:pointer;border:1px solid #a4b7bb;border-radius:9px;padding:11px 14px;font-size:13px;background:transparent;color:inherit;";
     downloadButton.addEventListener("click", () => {
       const blob = new Blob([window.DotnetBrowserEditor.getCode()], {type:"text/plain;charset=utf-8"});
@@ -133,11 +218,7 @@
     const shortcut = document.createElement("small");
     shortcut.textContent = "Ctrl+Enter";
     shortcut.style.cssText = "opacity:.7;";
-    draftNotice = document.createElement("small");
-    draftNotice.id = "editor-draft-status";
-    draftNotice.setAttribute("role", "status");
     draftNotice.style.cssText = "display:block;flex-basis:100%;opacity:.8;";
-    draftNotice.textContent = "Черновик сохраняется автоматически в браузере на этом устройстве.";
     bar.append(button, copyButton, downloadButton, shortcut, status, draftNotice);
     wrapper.insertAdjacentElement("afterend", bar);
   }
@@ -169,11 +250,6 @@
       const codeViewToggle = document.getElementById("code-view-desc")?.closest(".toggle-container");
       if (codeViewToggle) codeViewToggle.style.display = "none";
     }
-    // Opening a lesson example must go through the draft-preserving parent controls.
-    if (embeddedLesson) {
-      const sampleButton = document.querySelector('button[aria-describedby="sample-code-desc"]');
-      if (sampleButton) sampleButton.style.display = "none";
-    }
     const textarea = document.getElementById("code-editor");
     if (!textarea) return;
     if (original === textarea && (!instance || instance.getWrapperElement().isConnected)) {
@@ -183,8 +259,12 @@
     initialCode ??= textarea.value;
     original = textarea;
     if (embeddedLesson) {
-      const instructions = document.getElementById("editor-instructions");
-      if (instructions) instructions.textContent = "Редактируй полный файл Program.cs. Ctrl+Enter запускает текущий код.";
+      // The lesson supplies its own draft-preserving example and run controls.
+      for (const selector of [".editor-controls", ".compile-section"]) {
+        const control = document.querySelector(selector);
+        if (control) control.style.display = "none";
+      }
+      localizeEmbeddedEditor(textarea);
     }
     instance = cmReady() ? window.CodeMirror.fromTextArea(textarea, {
       mode: "text/x-csharp",
@@ -201,7 +281,13 @@
       }
     }) : null;
     if (instance) {
-      instance.setSize("100%", 430);
+      if (embeddedLesson) {
+        const input = instance.getInputField();
+        input.setAttribute("aria-label", "Код C#");
+        input.setAttribute("aria-describedby", "editor-instructions");
+      } else {
+        instance.setSize("100%", 430);
+      }
       instance.on("change", cm => {
         synchronize(cm);
         saveDraft(cm.getValue());
@@ -233,7 +319,7 @@
         showDraft("Автосохранение включено. Код останется в этом браузере.");
       }
     } catch {
-      showDraft("⚠ Локальное хранилище недоступно. Для сохранения используй «Скачать .cs».");
+      showDraft("⚠ Локальное хранилище недоступно. Для сохранения используй «" + downloadLabel + "».");
     } finally {
       applyingInitialCode = false;
     }
@@ -242,12 +328,25 @@
 
   const watcher = new MutationObserver(() => {
     ensure();
+    if (embeddedLesson) localizeConsoleState();
     updateRunState();
   });
   const start = () => {
+    if (embeddedLesson) {
+      translateText("#blazor-error-ui", "В редакторе произошла ошибка. ");
+      translateText("#blazor-error-ui .reload", "Перезагрузить редактор");
+      document.querySelector("#blazor-error-ui .dismiss")?.setAttribute("aria-label", "Закрыть сообщение об ошибке");
+    }
     ensure();
+    if (embeddedLesson) localizeConsoleState();
     const app = document.getElementById("app");
-    if (app) watcher.observe(app, {childList:true,subtree:true,attributes:true,attributeFilter:["disabled"]});
+    if (app) watcher.observe(app, {
+      childList: true,
+      subtree: true,
+      characterData: embeddedLesson,
+      attributes: true,
+      attributeFilter: ["disabled"]
+    });
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start,{once:true});
   else start();
@@ -279,6 +378,13 @@
       ensure();
       if (instance) instance.focus();
       else document.getElementById("code-editor")?.focus();
+    },
+    focusOutput() {
+      const heading = document.getElementById("output-heading");
+      if (!heading) return false;
+      heading.tabIndex = -1;
+      heading.focus();
+      return document.activeElement === heading;
     },
     isInitialCode() {
       ensure();

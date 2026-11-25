@@ -16,6 +16,27 @@
     const b=document.createElement("button");b.type="button";b.className="copy-code";b.textContent="Копировать";div.appendChild(b);
     b.addEventListener("click",async()=>{try{await copy(pre.textContent.replace(/\n$/,""));b.textContent="Готово ✓";}catch{b.textContent="Выдели код вручную";}setTimeout(()=>b.textContent="Копировать",2300);});
   });
+
+  const disclosureNav = document.querySelector("[data-disclosure-nav]");
+  if (disclosureNav) {
+    function openSection(hash) {
+      const summary = document.getElementById(hash.slice(1));
+      if (!summary?.matches(".page-disclosure > summary") || summary.parentElement.open) return;
+      summary.parentElement.open = true;
+      return summary;
+    }
+
+    disclosureNav.addEventListener("click", event => {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      const link = event.target.closest('a[href^="#"]');
+      if (link) openSection(link.hash);
+    });
+    window.addEventListener("hashchange", () => {
+      openSection(location.hash)?.scrollIntoView({block: "start"});
+    });
+    openSection(location.hash);
+  }
+
   const progressPrefix = "dotnet-courses:progress:";
   const progressKey = (kind, course, lesson) => progressPrefix + kind + ":" + course + ":" + lesson;
   const progress = {
@@ -42,6 +63,7 @@
 
   const lessonStatus = document.getElementById("lesson-completion-status");
   const lessonQuizLink = document.querySelector("[data-lesson-quiz-link]");
+  const lessonInstructions = document.querySelector("[data-lesson-practice-instructions]");
   const lessonBadges = document.querySelectorAll("[data-lesson-completion-badge]");
   const courseStart = document.querySelector("[data-course-start]");
 
@@ -52,6 +74,7 @@
         : completed ? "Урок пройден." : "Урок ещё не пройден.";
       if (lessonStatus.textContent !== message) lessonStatus.textContent = message;
       if (lessonQuizLink) lessonQuizLink.hidden = completed !== true;
+      if (lessonInstructions) lessonInstructions.hidden = completed !== false;
     }
 
     lessonBadges.forEach(badge => {

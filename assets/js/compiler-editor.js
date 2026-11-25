@@ -131,18 +131,30 @@
     instance.scrollIntoView(from, 32);
   }
 
-  function reportState(state) {
+  function reportState(state, feedback) {
+    if (embeddedLesson && feedback !== undefined) {
+      const status = document.getElementById("editor-run-feedback");
+      if (status) {
+        status.dataset.state = state;
+        status.textContent = feedback;
+      }
+    }
     if (window.parent === window) return;
     window.parent.postMessage({ type: "dotnet-courses:compiler-state", state }, location.origin);
   }
 
   function updateRunState() {
     const busy = document.querySelector(".compile-btn")?.disabled === true;
+    if (embeddedLesson) document.getElementById("editor-run-current")?.setAttribute("aria-disabled", String(busy));
     if (busy && !wasBusy) {
       runSucceeded = false;
-      reportState("running");
+      reportState("running", "Выполняется текущий код.");
     }
-    if (!busy && wasBusy && !runSucceeded) reportState("error");
+    if (!busy && wasBusy && !runSucceeded) {
+      reportState("error", diagnosticSnapshot
+        ? "Ошибка компиляции. Подробности в консоли."
+        : "Ошибка выполнения. Подробности в консоли.");
+    }
     wasBusy = busy;
   }
 
@@ -212,6 +224,22 @@
     }
   }
 
+  function installFullscreenButton() {
+    const heading = document.getElementById("editor-heading");
+    if (!heading || document.getElementById("editor-fullscreen")) return;
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.id = "editor-fullscreen";
+    toggle.title = document.documentElement.classList.contains("course-editor-fullscreen")
+      ? "Свернуть полноэкранный редактор" : "На весь экран";
+    toggle.setAttribute("aria-label", toggle.title);
+    toggle.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+      <path class="editor-expand-icon" d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>
+      <path class="editor-collapse-icon" d="M3 8h5V3m13 5h-5V3M8 21v-5H3m13 5v-5h5"/>
+    </svg>`;
+    heading.insertAdjacentElement("afterend", toggle);
+  }
+
   // A real "run current code" control next to the CodeMirror editor:
   // the example-loader can replace the source, but this button never does.
   function installRunButton() {
@@ -230,9 +258,23 @@
     draftNotice.setAttribute("role", "status");
     draftNotice.textContent = "Черновик сохраняется автоматически в браузере на этом устройстве.";
     if (embeddedLesson) {
-      // The lesson supplies the visible controls. Keep the readiness marker.
-      button.hidden = true;
-      bar.append(button, draftNotice);
+      const actions = document.createElement("div");
+      actions.className = "editor-run-actions";
+      button.textContent = "Запустить текущий код";
+      button.addEventListener("click", () => {
+        button.focus({preventScroll: true});
+        window.DotnetBrowserEditor.run();
+      });
+      const dotnetLab = document.createElement("button");
+      dotnetLab.type = "button";
+      dotnetLab.id = "editor-dotnet-lab";
+      dotnetLab.textContent = "Открыть в .NET Lab";
+      dotnetLab.title = "Открыть текущий код в новой вкладке";
+      actions.append(button, dotnetLab);
+      const feedback = document.createElement("p");
+      feedback.id = "editor-run-feedback";
+      feedback.setAttribute("role", "status");
+      bar.append(actions, feedback, draftNotice);
       wrapper.insertAdjacentElement("afterend", bar);
       return;
     }
@@ -319,6 +361,7 @@
     }
     const textarea = document.getElementById("code-editor");
     if (!textarea) return;
+    if (embeddedLesson) installFullscreenButton();
     if (original === textarea && (!instance || instance.getWrapperElement().isConnected)) {
       installRunButton();
       return;
@@ -327,7 +370,7 @@
     initialCode ??= textarea.value;
     original = textarea;
     if (embeddedLesson) {
-      // The lesson supplies its own draft-preserving example and run controls.
+      // Hide the upstream sample and compile controls in the lesson editor.
       for (const selector of [".editor-controls", ".compile-section"]) {
         const control = document.querySelector(selector);
         if (control) control.style.display = "none";
@@ -344,8 +387,8 @@
       lineWrapping: false,
       extraKeys: {
         "Ctrl-Space": cm => cm.showHint?.({hint,completeSingle:false}),
-        "Ctrl-Enter": cm => {synchronize(cm); document.querySelector(".compile-btn")?.click();},
-        "Cmd-Enter": cm => {synchronize(cm); document.querySelector(".compile-btn")?.click();}
+        "Ctrl-Enter": () => window.DotnetBrowserEditor.run(),
+        "Cmd-Enter": () => window.DotnetBrowserEditor.run()
       }
     }) : null;
     if (instance) {
@@ -377,6 +420,12 @@
       });
       if (embeddedLesson) {
         textarea.addEventListener("keydown", event => {
+          if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+            // The upstream textarea also handles Ctrl+Enter through Blazor.
+            event.preventDefault();
+            event.stopPropagation();
+            if (!event.repeat && !event.isComposing) window.DotnetBrowserEditor.run();
+          }
           if (event.ctrlKey && event.key.toLowerCase() === "l") event.stopPropagation();
         });
       }
@@ -455,13 +504,6 @@
       if (instance) instance.focus();
       else document.getElementById("code-editor")?.focus();
     },
-    focusOutput() {
-      const heading = document.getElementById("output-heading");
-      if (!heading) return false;
-      heading.tabIndex = -1;
-      heading.focus();
-      return document.activeElement === heading;
-    },
     isInitialCode() {
       ensure();
       return !!original && !hasDraft && currentCode() === initialCode;
@@ -472,15 +514,15 @@
     },
     reportSuccessfulRun(source, output) {
       runSucceeded = true;
-      reportState("complete");
+      reportState("complete", "");
       if (window.parent === window) return;
       window.parent.postMessage({ type: "dotnet-courses:practice-run-success", source, output }, location.origin);
     },
     run() {
       ensure();
-      if (instance) synchronize(instance);
       const button = document.querySelector(".compile-btn");
       if (!button || button.disabled) return false;
+      if (instance) synchronize(instance);
       button.click();
       return true;
     },

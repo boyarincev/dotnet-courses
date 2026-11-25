@@ -31,25 +31,19 @@ layout: default
 {% if page.browser_runtime %}
 <section class="lesson-browser" id="browser-runner">
   <h2>Практика: настоящий C# в браузере</h2>
-  <p>Урок отмечается пройденным, когда решение проходит все исходные проверки Assert во встроенном редакторе. Меняй реализацию задания, оставляя код проверок как в уроке. Отметка сохраняется в этом браузере.</p>
   <p><strong>C# {% if page.browser_runtime == '9' %}13{% elsif page.browser_runtime == '10' %}14{% elsif page.browser_runtime == '11' %}15{% else %}неизвестная версия{% endif %} / .NET {{ page.browser_runtime }}</strong> · Roslyn + WebAssembly. Базовая подсветка и подсказки CodeMirror.</p>
   <div id="lesson-editor-workspace" role="region" aria-label="Редактор C# и консоль">
-    <div class="live-editor-toolbar" role="group" aria-label="Действия редактора C#">
-      <div class="practice-actions live-editor-run-actions">
-        <button type="button" class="button primary" id="page-editor-run" title="Ctrl+Enter из редактора">Запустить текущий код</button>
-        <button type="button" class="button" id="page-editor-output">К выводу</button>
-        <button type="button" class="button" id="page-editor-fullscreen" aria-controls="lesson-editor-workspace" hidden>На весь экран</button>
-        <span class="practice-feedback" id="page-editor-feedback" role="status">Загружается редактор C#…</span>
-        <span id="lesson-completion-status" class="lesson-completion-status" data-course="{{ course_id }}" data-lesson="{{ page.lesson_number }}" role="status"></span>
-        <a class="button primary" data-lesson-quiz-link href="{{ quiz_url | relative_url }}?through={{ page.lesson_number }}" hidden>Пройти квиз урока</a>
-      </div>
-      <div class="practice-actions">
-        <button type="button" class="button" id="page-editor-copy">Копировать весь код</button>
-        <button type="button" class="button" id="page-editor-download">Скачать Program.cs</button>
-        <button type="button" class="button" id="page-editor-dotnet-lab">Открыть в .NET Lab</button>
-      </div>
+    <div class="lesson-practice-status">
+      <span id="lesson-completion-status" class="lesson-completion-status" data-course="{{ course_id }}" data-lesson="{{ page.lesson_number }}" role="status">Урок ещё не пройден.</span>
+      <span class="lesson-practice-instructions" data-lesson-practice-instructions>Реши задание и запусти код. Для зачёта должны пройти все исходные проверки Assert.</span>
+      <a class="button primary" data-lesson-quiz-link href="{{ quiz_url | relative_url }}?through={{ page.lesson_number }}" hidden>Пройти квиз урока</a>
     </div>
     <iframe id="course-compiler" class="lesson-compiler" data-lesson="{{ page.lesson_number }}" data-course="{{ course_id }}" data-start-snippet="{{ page.browser_start_snippet | escape }}"{% if page.browser_snippets %} data-snippet-adapter="{{ page.browser_snippets | escape }}"{% endif %} title="C#-редактор и компилятор Roslyn для .NET {{ page.browser_runtime }}" src="{{ '/browser-compiler-net' | append: page.browser_runtime | append: '/' | relative_url }}?course={{ course_id }}&amp;lesson={{ page.lesson_number }}&amp;v={{ site.data.build.revision | default: 'dev' }}" loading="eager" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+  </div>
+  <div class="practice-actions editor-export-actions" role="group" aria-label="Экспорт кода C#">
+    <button type="button" class="button" id="page-editor-copy">Копировать весь код</button>
+    <button type="button" class="button" id="page-editor-download">Скачать Program.cs</button>
+    <span class="practice-feedback" id="page-editor-export-feedback" role="status"></span>
   </div>
   <p class="muted">Изменения кода в редакторе автоматически сохраняются в локальном хранилище этого браузера для конкретного урока. После обновления страницы черновик восстанавливается, пока ты не очистишь данные сайта. Кнопка «Открыть в .NET Lab» открывает текущий код во внешнем редакторе в новой вкладке. Для резервной копии используй «Скачать Program.cs». Рабочие секреты в браузер не вставляй.</p>
 </section>

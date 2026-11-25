@@ -32,22 +32,21 @@ h1,h2,h3{line-height:1.2;letter-spacing:-.045em}h1{font-size:clamp(35px,6vw,60px
 
 .course-overview .features{margin-bottom:16px}
 .page-disclosure{margin:10px 0;padding:0;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
-.page-disclosure>summary{padding:12px 16px;border-radius:inherit}
+.page-disclosure>summary{padding:12px 16px;border-radius:inherit;scroll-margin-top:16px}
 .page-disclosure>summary:hover{background:var(--light)}
 .page-disclosure>summary>h2{display:inline;margin:0;padding:0;border:0;font:inherit;font-weight:700;letter-spacing:normal}
 .page-disclosure-body{padding:0 16px 16px;scroll-margin-top:16px}
 .page-disclosure-body>:first-child{margin-top:0}
 .page-disclosure-body>:last-child{margin-bottom:0}
 
-/* A visible editor toolbar lives on the lesson page, independent of the iframe. */
-.live-editor-toolbar{display:grid;gap:10px;border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:12px 14px;margin:18px 0 10px}
-.live-editor-toolbar .button{margin:0}
-.live-editor-run-actions .practice-feedback{line-height:1.45}
-#page-editor-fullscreen[hidden]{display:none}
+.lesson-practice-status{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:8px 14px;margin:16px 0 8px;line-height:1.45}
+.lesson-practice-status .button,.editor-export-actions .button{margin:0}
+.lesson-practice-instructions{color:var(--muted);font-size:14px}
+.editor-export-actions{margin-top:10px}
 .lesson-browser{container:lesson-browser / inline-size}
-.lesson-compiler{display:block;width:100%;height:610px;border:1px solid var(--code-border);border-radius:14px;background:var(--surface)}
-@container lesson-browser (max-width:702px){.lesson-compiler{height:700px}}
-@container lesson-browser (max-width:410px){.lesson-compiler{height:650px}}
+.lesson-compiler{display:block;width:100%;height:680px;border:1px solid var(--code-border);border-radius:14px;background:var(--surface)}
+@container lesson-browser (max-width:702px){.lesson-compiler{height:780px}}
+@container lesson-browser (max-width:410px){.lesson-compiler{height:740px}}
 
 html.lesson-editor-expanded{overflow:hidden}
 #lesson-editor-workspace.is-expanded{
@@ -63,27 +62,14 @@ html.lesson-editor-expanded{overflow:hidden}
   overscroll-behavior:contain;
   background:var(--bg);
 }
-#lesson-editor-workspace.is-expanded .live-editor-toolbar{
+#lesson-editor-workspace.is-expanded .lesson-practice-status{
   flex:none;
-  display:flex;
-  flex-wrap:wrap;
-  justify-content:space-between;
-  gap:8px 16px;
   margin:0;
-  padding:8px 12px;
 }
 #lesson-editor-workspace.is-expanded .lesson-compiler{
   flex:1 0 auto;
   height:0;
   min-height:calc(24rem + 2px);
-}
-@media(max-width:600px){
-  #lesson-editor-workspace.is-expanded .live-editor-toolbar{padding:6px 8px}
-  #lesson-editor-workspace.is-expanded .live-editor-toolbar .button{min-height:40px;padding:6px 8px;font-size:13px}
-  #lesson-editor-workspace.is-expanded .practice-actions:not(.live-editor-run-actions){
-    display:grid;
-    grid-template-columns:repeat(2,minmax(0,1fr));
-  }
 }
 .draft-status{color:var(--muted);font-size:13px;line-height:1.5;margin:7px 0 15px}
 .lesson-jump-nav{display:flex;flex-wrap:wrap;gap:8px 16px;margin:16px 0 24px}
@@ -111,5 +97,6 @@ html.lesson-editor-expanded{overflow:hidden}
 @media(max-width:650px){.quiz-toolbar{align-items:flex-start;flex-direction:column}.question{padding:15px}}
 
 /* Lesson completion */
-.lesson-completion-status{color:var(--primary);font-weight:700}
+.lesson-completion-status{font-weight:700}
+.lesson-practice-status:has([data-lesson-quiz-link]:not([hidden])) .lesson-completion-status{color:var(--primary)}
 .lesson-card .lesson-completion-badge{margin-inline-start:8px;background:var(--light);color:var(--primary);border-radius:99px;padding:3px 8px;font-size:12px;font-weight:700;white-space:nowrap}

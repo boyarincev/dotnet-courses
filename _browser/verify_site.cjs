@@ -71,7 +71,17 @@ async function verifyLesson(page, lesson, quiz) {
 
     const task = lesson.taskId;
     assert.equal(await page.locator(`#solution-${task}`).count(), 1, `Missing starter for ${task}`);
-    assert.equal(await page.locator("#page-editor-run").count(), 1, `Missing Run button for ${task}`);
+    assert.equal(await page.locator("#lesson-completion-status").count(), 1, `Missing lesson status for ${task}`);
+    assert.equal(await page.locator("#page-editor-run, #page-editor-output, #page-editor-fullscreen, #page-editor-dotnet-lab").count(), 0,
+        `${task}: the lesson must leave editor controls in the compiler frame`);
+    for (const selector of ["#page-editor-copy", "#page-editor-download", "#page-editor-export-feedback"]) {
+        const control = page.locator(selector);
+        assert.equal(await control.count(), 1, `Missing ${selector} for ${task}`);
+        assert.ok(await control.evaluate(element => {
+            const workspace = document.getElementById("lesson-editor-workspace");
+            return !workspace.contains(element) && Boolean(workspace.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING);
+        }), `${task}: ${selector} must follow the fullscreen workspace`);
+    }
 
     const exampleIds = await page.locator(".snippet-actions button[data-example-id]")
         .evaluateAll(buttons => buttons.map(button => button.dataset.exampleId));
@@ -120,6 +130,35 @@ async function verifyCourse(page, course) {
     for (const lesson of courseLessons) await verifyLesson(page, lesson, quiz);
 }
 
+async function verifyGuideNavigation(page) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const expectSection = id => page.waitForFunction(id => {
+        const section = document.getElementById(id)?.closest("details");
+        if (!section?.open || location.hash !== "#" + id) return false;
+        const { top, bottom } = section.querySelector("summary").getBoundingClientRect();
+        return top >= 0 && bottom <= innerHeight;
+    }, id);
+
+    await page.goto(new URL("about/#course-progress", site).href);
+    await expectSection("course-progress");
+
+    await page.goto(new URL("about/", site).href);
+    const toc = page.locator("[data-disclosure-nav]");
+    const practiceLink = toc.locator('a[href="#practice"]');
+    await practiceLink.click();
+    await expectSection("practice");
+    await page.locator("#practice").press("Enter");
+    await practiceLink.press("Enter");
+    await expectSection("practice");
+
+    await page.locator("#practice").press("Enter");
+    await toc.locator('a[href="#daily-review"]').click();
+    await expectSection("daily-review");
+    await page.goBack();
+    await expectSection("practice");
+}
+
 async function verify() {
     const browser = await chromium.launch();
     try {
@@ -129,7 +168,8 @@ async function verify() {
         await visit(page, site);
         for (const path of ["about/", "copyright/"]) await visit(page, new URL(path, site));
         for (const course of courses) await verifyCourse(page, course);
-        console.log("Built site: checked internal links, quiz banks and the contract for every lesson");
+        await verifyGuideNavigation(page);
+        console.log("Built site: checked internal links, guide navigation, quiz banks and the contract for every lesson");
     } finally {
         await browser.close();
     }

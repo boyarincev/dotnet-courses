@@ -129,6 +129,11 @@
     if (messageEl) messageEl.textContent = message;
   }
 
+  function showRunFeedback(message) {
+    const status = frame.contentDocument?.getElementById("editor-run-feedback");
+    if (status) status.textContent = message;
+  }
+
   function readPracticeDraft() {
     try {
       return localStorage.getItem(practiceDraftKey);
@@ -190,12 +195,14 @@
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const scrollOptions = {behavior: reduceMotion ? "instant" : "smooth", block: "start"};
     if (!run) {
-      const runButton = document.getElementById("page-editor-run");
-      const toolbar = runButton?.closest(".live-editor-toolbar");
-      if (runButton) runButton.focus({preventScroll: true});
-      else api.focus?.();
-      (toolbar ?? frame).scrollIntoView(scrollOptions);
-      show(button, "Код задания открыт в редакторе. Для проверки нажми «Запустить текущий код».");
+      const heading = frame.contentDocument?.getElementById("editor-heading");
+      if (heading) {
+        heading.tabIndex = -1;
+        heading.focus({preventScroll: true});
+      }
+      frame.contentWindow.scrollTo({top: 0, behavior: "instant"});
+      frame.scrollIntoView(scrollOptions);
+      show(button, "Код задания открыт. Кнопка запуска находится под кодом.");
       return true;
     }
     frame.scrollIntoView(scrollOptions);
@@ -261,7 +268,6 @@
   function addTaskButtons() {
     const completion = document.getElementById("lesson-completion-status");
     const quizLink = document.querySelector("[data-lesson-quiz-link]");
-    const runButton = document.getElementById("page-editor-run");
     if (!completion) return;
     const starter = createPracticeArea();
     if (!starter) return;
@@ -399,7 +405,7 @@
       if (!isSuccessfulPracticeRun(templateElement.textContent, result.source, result.output, taskId)) {
         if (typeof result.source === "string" && result.source.includes("// BEGIN " + taskId) &&
             window.DotnetLearning.progress.get("lesson", course, lesson) !== true) {
-          completion.textContent = "Отметка не поставлена. Запусти своё решение с исходными проверками урока.";
+          showRunFeedback("Отметка не поставлена. Запусти своё решение с исходными проверками урока.");
         }
         return;
       }
@@ -413,17 +419,16 @@
       }
       const quizWasHidden = quizLink?.hidden;
       if (!window.DotnetLearning.progress.mark("lesson", course, lesson)) {
-        completion.textContent = "Проверки пройдены, но отметку сохранить не удалось.";
+        showRunFeedback("Проверки пройдены, но отметку сохранить не удалось.");
         return;
       }
       if (!quizWasHidden || quizLink.hidden) return;
 
-      const focused = document.activeElement;
-      const editingCode = focused === frame && frame.contentDocument?.activeElement?.matches(editorInputSelector);
-      if (focused !== runButton && !editingCode) return;
+      if (document.activeElement !== frame ||
+          !frame.contentDocument?.activeElement?.matches(editorInputSelector + ", #editor-run-current")) return;
       const {top, bottom} = quizLink.getBoundingClientRect();
       if (top < 0 || bottom > window.innerHeight) {
-        quizLink.closest(".live-editor-run-actions")?.scrollIntoView({block: "nearest"});
+        quizLink.closest(".lesson-practice-status")?.scrollIntoView({block: "nearest"});
       }
     });
   }
@@ -518,9 +523,7 @@
 
   function addEditorFullscreen() {
     const workspace = document.getElementById("lesson-editor-workspace");
-    const toggle = document.getElementById("page-editor-fullscreen");
-    const run = document.getElementById("page-editor-run");
-    if (!workspace || !toggle) return;
+    if (!workspace) return;
 
     const background = [];
     let expanded = false;
@@ -533,10 +536,8 @@
       expanded = value;
       workspace.classList.toggle("is-expanded", expanded);
       document.documentElement.classList.toggle("lesson-editor-expanded", expanded);
-      connectFrame();
+      const toggle = connectFrame();
       workspace.setAttribute("role", expanded ? "dialog" : "region");
-      toggle.textContent = expanded ? "Свернуть" : "На весь экран";
-      toggle.setAttribute("aria-label", expanded ? "Свернуть полноэкранный редактор" : "На весь экран");
 
       if (expanded) {
         workspace.setAttribute("aria-modal", "true");
@@ -554,7 +555,7 @@
         background.length = 0;
         window.scrollTo(scrollPosition);
       }
-      toggle.focus({ preventScroll: true });
+      toggle?.focus({preventScroll: true});
     }
 
     async function changeFullscreen() {
@@ -585,19 +586,32 @@
       if (event.key !== "Escape" || event.defaultPrevented || event.isComposing || event.repeat) return;
       // Let CodeMirror dismiss its suggestions before moving focus.
       if (event.currentTarget.querySelector(".CodeMirror-hints")) return;
-      const fromCode = run && event.currentTarget !== document &&
-        event.target.matches?.(editorInputSelector);
-      if (!fromCode && !expanded) return;
+      const run = event.target.matches?.(editorInputSelector)
+        ? event.currentTarget.getElementById("editor-run-current") : null;
+      if (!run && !expanded) return;
       event.preventDefault();
       event.stopPropagation();
-      if (fromCode) run.focus();
+      if (run) run.focus();
       else changeFullscreen();
+    }
+
+    function toggleOnClick(event) {
+      if (event.target.closest("#editor-fullscreen")) changeFullscreen();
     }
 
     function connectFrame() {
       const editor = frame.contentDocument;
-      editor?.documentElement?.classList.toggle("course-editor-fullscreen", expanded);
-      editor?.addEventListener("keydown", handleEscape, true);
+      if (!editor) return;
+      editor.documentElement?.classList.toggle("course-editor-fullscreen", expanded);
+      editor.addEventListener("keydown", handleEscape, true);
+      editor.addEventListener("click", toggleOnClick);
+      const toggle = editor.getElementById("editor-fullscreen");
+      if (toggle) {
+        const label = expanded ? "Свернуть полноэкранный редактор" : "На весь экран";
+        toggle.setAttribute("aria-label", label);
+        toggle.title = label;
+      }
+      return toggle;
     }
 
     document.addEventListener("fullscreenchange", () => {
@@ -611,49 +625,29 @@
     document.addEventListener("keydown", handleEscape);
     frame.addEventListener("load", connectFrame);
     connectFrame();
-    toggle.addEventListener("click", changeFullscreen);
-    toggle.hidden = false;
   }
 
-  // Controls live on the lesson page, outside the iframe. They work even if
-  // the embedded CodeMirror's own toolbar is hidden by the compiler layout.
-  function addEditorToolbar(prepareInitialExample) {
-    const run = document.getElementById("page-editor-run");
-    const output = document.getElementById("page-editor-output");
+  function addEditorActions(prepareInitialExample) {
     const copy = document.getElementById("page-editor-copy");
     const download = document.getElementById("page-editor-download");
-    const dotnetLab = document.getElementById("page-editor-dotnet-lab");
-    const status = document.getElementById("page-editor-feedback");
-    if (!run || !copy || !download || !status) return;
-    let initialized = false;
+    const status = document.getElementById("page-editor-export-feedback");
+    if (!copy || !download || !status) return;
+    let initializedEditor;
     function editorReady() {
+      const editor = frame.contentDocument;
+      editor?.addEventListener("click", openLab);
       const api = bridge();
-      if (initialized || !api) return;
-      initialized = true;
+      if (initializedEditor === editor || !api) return;
+      initializedEditor = editor;
       try {
         if (prepareInitialExample && api.setInitialCode) api.setInitialCode(prepareInitialExample());
-        status.textContent = "Редактор готов к запуску.";
       } catch (error) {
-        status.textContent = "Не удалось открыть стартовый пример. " + error.message;
+        showRunFeedback("Не удалось открыть стартовый пример. " + error.message);
       }
     }
     window.addEventListener("message", event => {
-      if (event.origin !== location.origin || event.source !== frame.contentWindow ||
-          event.data?.type !== "dotnet-courses:compiler-state") return;
-      switch (event.data.state) {
-        case "ready":
-          editorReady();
-          break;
-        case "running":
-          status.textContent = "Выполняется текущий код.";
-          break;
-        case "complete":
-          status.textContent = "Запуск завершён. Результат в выводе программы.";
-          break;
-        case "error":
-          status.textContent = "Ошибка запуска. Подробности в выводе программы.";
-          break;
-      }
+      if (event.origin === location.origin && event.source === frame.contentWindow &&
+          event.data?.type === "dotnet-courses:compiler-state" && event.data.state === "ready") editorReady();
     });
     frame.addEventListener("load", editorReady);
     editorReady();
@@ -662,17 +656,6 @@
       if (!api) status.textContent = "Редактор ещё загружается. Попробуй после появления кода.";
       return api;
     };
-    run.addEventListener("click", () => {
-      const api = getEditor();
-      if (!api) return;
-      if (api.busy()) { status.textContent = "Компилятор ещё загружается или занят."; return; }
-      if (api.run()) status.textContent = "Выполняется текущий код.";
-      else status.textContent = "Запуск пока недоступен. Проверь состояние компилятора.";
-    });
-    output?.addEventListener("click", () => {
-      const api = getEditor();
-      if (api && !api.focusOutput?.()) status.textContent = "Вывод программы пока недоступен.";
-    });
     copy.addEventListener("click", async () => {
       const api = getEditor();
       if (!api) return;
@@ -689,14 +672,18 @@
       window.DotnetLearning.download("Program.cs", api.getCode());
       status.textContent = "Текущий код сохранён в Program.cs.";
     });
-    dotnetLab?.addEventListener("click", async () => {
-      const api = getEditor();
+    async function openLab(event) {
+      if (!event.target.closest("#editor-dotnet-lab")) return;
+      const api = bridge();
       if (!api) return;
+      const feedback = event.currentTarget.getElementById("editor-run-feedback");
+      const blocked = "Браузер заблокировал новую вкладку .NET Lab.";
+      const failed = "Не удалось открыть .NET Lab. Код можно перенести кнопкой «Копировать весь код».";
       const source = api.getCode();
       // Open during the click, before async compression loses user activation.
       const tab = window.open("about:blank", "_blank");
       if (!tab) {
-        status.textContent = "Браузер заблокировал новую вкладку .NET Lab.";
+        showRunFeedback(blocked);
         return;
       }
       try {
@@ -704,18 +691,18 @@
         const url = await dotnetLabUrl(source);
         if (tab.closed) return;
         tab.location.replace(url);
-        status.textContent = "Текущий код открыт в новой вкладке .NET Lab.";
+        if (feedback && (feedback.textContent === blocked || feedback.textContent === failed)) feedback.textContent = "";
       } catch {
         tab.close();
-        status.textContent = "Не удалось открыть .NET Lab. Код можно перенести кнопкой «Копировать весь код».";
+        showRunFeedback(failed);
       }
-    });
+    }
   }
 
   const init = () => {
     const prepareInitialExample = addCodeButtons();
     addTaskButtons();
-    addEditorToolbar(prepareInitialExample);
+    addEditorActions(prepareInitialExample);
     addEditorFullscreen();
   };
   // Wait for site.js to install shared progress and export helpers.

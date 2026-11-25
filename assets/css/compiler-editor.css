@@ -95,6 +95,35 @@ html.course-editor-embedded .section-header h3:focus {
   border-radius: 2px;
 }
 
+html.course-editor-embedded #editor-fullscreen {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin-inline-start: auto;
+  padding: 0;
+  border: 1px solid var(--editor-control-border);
+  border-radius: 0.5rem;
+  background: var(--editor-surface);
+  color: var(--editor-ink);
+  cursor: pointer;
+}
+
+html.course-editor-embedded #editor-fullscreen:hover {
+  background: var(--editor-accent-surface);
+}
+
+html.course-editor-embedded #editor-fullscreen svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+html.course-editor-embedded:not(.course-editor-fullscreen) .editor-collapse-icon,
+html.course-editor-embedded.course-editor-fullscreen .editor-expand-icon {
+  display: none;
+}
+
 html.course-editor-embedded .console-controls {
   min-width: 0;
   margin-inline-start: auto;
@@ -242,12 +271,68 @@ html.course-editor-embedded .CodeMirror-hint-active {
 
 html.course-editor-embedded #editor-run-bar {
   margin: 0;
-  padding: 0.375rem 0.75rem;
+  padding: 0.5rem 0.75rem;
   border-top: 1px solid var(--editor-border);
   color: var(--editor-muted);
 }
 
+html.course-editor-embedded .editor-run-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+}
+
+html.course-editor-embedded .editor-run-actions button {
+  min-height: 44px;
+  max-width: 100%;
+  font: 600 0.875rem/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
+html.course-editor-embedded #editor-run-current {
+  padding: 0.5rem 0.875rem;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  background: #087c70;
+  color: #fff;
+}
+
+html.course-editor-embedded #editor-run-current:not([aria-disabled="true"]):hover {
+  background: #09695f;
+}
+
+html.course-editor-embedded #editor-run-current[aria-disabled="true"] {
+  background: var(--editor-accent-surface);
+  color: var(--editor-muted);
+  cursor: wait;
+}
+
+html.course-editor-embedded #editor-dotnet-lab {
+  padding: 0 0.25rem;
+  border: 0;
+  background: transparent;
+  color: var(--editor-accent);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+html.course-editor-embedded #editor-run-feedback {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+html.course-editor-embedded #editor-run-feedback:not(:empty) {
+  margin-block-start: 0.25rem;
+}
+
+html.course-editor-embedded #editor-run-feedback[data-state="error"] {
+  color: var(--editor-error);
+}
+
 html.course-editor-embedded #editor-draft-status {
+  display: block;
+  margin-block-start: 0.25rem;
   font-size: 0.8125rem;
 }
 
@@ -340,6 +425,18 @@ html.course-editor-embedded #output .interactive-output input:focus-visible {
     gap: 0.5rem;
   }
 
+  html.course-editor-embedded .editor-run-actions {
+    column-gap: 0.5rem;
+  }
+
+  html.course-editor-embedded #editor-run-current {
+    padding-inline: 0.75rem;
+  }
+
+  html.course-editor-embedded #editor-dotnet-lab {
+    padding-inline: 0;
+  }
+
   html.course-editor-embedded .output-container {
     min-height: clamp(10rem, 48vw, 13rem);
   }
@@ -375,6 +472,6 @@ html.course-editor-embedded.course-editor-fullscreen #editor-run-bar {
 
 @media (max-width: 700px) {
   html.course-editor-embedded.course-editor-fullscreen .compiler-container {
-    grid-template-rows: minmax(13rem, 2fr) minmax(9rem, 1fr);
+    grid-template-rows: minmax(17rem, 2fr) minmax(9rem, 1fr);
   }
 }

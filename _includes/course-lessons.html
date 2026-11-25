@@ -7,9 +7,9 @@
   <a class="button" href="{{ include.quiz | relative_url }}">Банк вопросов</a>
   <a class="button" href="{{ include.related | relative_url }}">{{ include.related_label }}</a>
 </div>
+{{ include.overview }}
 {% include course-review.html course=include.course quiz=include.quiz lessons=sorted_lessons %}
 {% include course-quiz-assets.html questions=include.questions %}
-{% include course-backup.html lessons=sorted_lessons %}
 <h2 id="course-lessons">Уроки · {{ sorted_lessons.size }}</h2>
 <div class="lessons">
 {% for lesson in sorted_lessons %}

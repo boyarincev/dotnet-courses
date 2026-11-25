@@ -29,6 +29,15 @@ h1,h2,h3{line-height:1.2;letter-spacing:-.045em}h1{font-size:clamp(35px,6vw,60px
 .eyebrow a{color:var(--primary);text-decoration:underline;text-underline-offset:3px}
 @media(max-width:750px){.course-grid{grid-template-columns:1fr}.course-card{padding:18px 20px}.course-nav{gap:4px 8px}}
 
+.course-overview .features{margin-bottom:16px}
+.page-disclosure{margin:10px 0;padding:0;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.page-disclosure>summary{padding:12px 16px;border-radius:inherit}
+.page-disclosure>summary:hover{background:var(--light)}
+.page-disclosure>summary>h2{display:inline;margin:0;padding:0;border:0;font:inherit;font-weight:700;letter-spacing:normal}
+.page-disclosure-body{padding:0 16px 16px;scroll-margin-top:16px}
+.page-disclosure-body>:first-child{margin-top:0}
+.page-disclosure-body>:last-child{margin-bottom:0}
+
 /* A visible editor toolbar lives on the lesson page, independent of the iframe. */
 .live-editor-toolbar{display:grid;gap:10px;border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:12px 14px;margin:18px 0 10px}
 .live-editor-toolbar .button{margin:0}

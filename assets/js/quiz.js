@@ -49,11 +49,12 @@
     });
 
     if (document.getElementById("course-backup")) {
+      const courseBank = bank.filter(question => lessonNumbers.includes(Number(question.lesson_number)));
       window.DotnetCourseBackup.attach({
         course,
-        ids: new Set(bank.map(question => question.id)),
+        ids: new Set(courseBank.map(question => question.id)),
         publishedLessons: lessonNumbers,
-        readHistory: () => recordsFor(bank),
+        readHistory: () => recordsFor(courseBank),
         prepareHistoryWrite: records => storage.prepareHistoryWrite(records),
         validateHistoryRecord: (record, id) => engine.validateRecord(record, id),
         onImported() {

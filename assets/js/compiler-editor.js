@@ -168,7 +168,7 @@
     translateText(".compiler-container .subheading", "Редактор для примеров и заданий курса");
     translateText("#editor-heading", "Редактор C#");
     translateText('label[for="code-editor"]', "Код C#");
-    translateText("#editor-instructions", "Редактируй полный файл Program.cs. Ctrl+Enter запускает текущий код.");
+    translateText("#editor-instructions", "Редактируй полный файл Program.cs. Ctrl+Enter запускает код. Esc переводит фокус на кнопку запуска.");
     translateText("#output-heading", "Консоль");
     translateText("#output-instructions", "Здесь появляются вывод программы и ошибки. Переключатель показывает подробности компиляции.");
     translateText("#clear-instructions", "Очищает вывод программы и сообщения компилятора.");
@@ -428,11 +428,11 @@
   else start();
 
   window.DotnetBrowserEditor = {
-    setCode(code) {
+    setCode(code, {focus = true} = {}) {
       ensure();
       if (!original?.isConnected) return false;
       replaceCode(String(code));
-      (instance ?? original).focus();
+      if (focus) (instance ?? original).focus();
       return true;
     },
     setInitialCode(code) {

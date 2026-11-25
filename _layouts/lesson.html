@@ -32,8 +32,6 @@ layout: default
 <section class="lesson-browser" id="browser-runner">
   <h2>Практика: настоящий C# в браузере</h2>
   <p>Урок отмечается пройденным, когда решение проходит все исходные проверки Assert во встроенном редакторе. Меняй реализацию задания, оставляя код проверок как в уроке. Отметка сохраняется в этом браузере.</p>
-  <p id="lesson-completion-status" class="lesson-completion-status" data-course="{{ course_id }}" data-lesson="{{ page.lesson_number }}" role="status"></p>
-  <a class="button primary" data-lesson-quiz-link href="{{ quiz_url | relative_url }}?through={{ page.lesson_number }}" hidden>Пройти квиз урока</a>
   <p><strong>C# {% if page.browser_runtime == '9' %}13{% elsif page.browser_runtime == '10' %}14{% elsif page.browser_runtime == '11' %}15{% else %}неизвестная версия{% endif %} / .NET {{ page.browser_runtime }}</strong> · Roslyn + WebAssembly. Базовая подсветка и подсказки CodeMirror.</p>
   <div id="lesson-editor-workspace" role="region" aria-label="Редактор C# и консоль">
     <div class="live-editor-toolbar" role="group" aria-label="Действия редактора C#">
@@ -42,6 +40,8 @@ layout: default
         <button type="button" class="button" id="page-editor-output">К выводу</button>
         <button type="button" class="button" id="page-editor-fullscreen" aria-controls="lesson-editor-workspace" hidden>На весь экран</button>
         <span class="practice-feedback" id="page-editor-feedback" role="status">Загружается редактор C#…</span>
+        <span id="lesson-completion-status" class="lesson-completion-status" data-course="{{ course_id }}" data-lesson="{{ page.lesson_number }}" role="status"></span>
+        <a class="button primary" data-lesson-quiz-link href="{{ quiz_url | relative_url }}?through={{ page.lesson_number }}" hidden>Пройти квиз урока</a>
       </div>
       <div class="practice-actions">
         <button type="button" class="button" id="page-editor-copy">Копировать весь код</button>

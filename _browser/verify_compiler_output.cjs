@@ -219,8 +219,8 @@ async function verifyDotnetLabLink(browser) {
 }
 
 
-async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
-    const context = await browser.newContext({ serviceWorkers: "block" });
+async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId, viewport) {
+    const context = await browser.newContext({ serviceWorkers: "block", reducedMotion: "reduce", viewport });
     try {
         const page = await context.newPage();
         page.setDefaultTimeout(timeout);
@@ -286,8 +286,15 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
         const wrongProgram = program.replace("=> 42", "=> 41");
         const unrelatedProgram = 'Console.WriteLine("Modified example");';
 
+        const inViewport = locator => locator.evaluate(element => {
+            const { top, bottom } = element.getBoundingClientRect();
+            return top >= 0 && bottom <= window.innerHeight;
+        });
         await openStarter.click();
         const openedStarter = await compiler.evaluate(() => window.DotnetBrowserEditor.getCode());
+        assert.ok(await inViewport(runCurrent), "Opening the starter must bring the Run button into view");
+        assert.ok(await runCurrent.evaluate(button => document.activeElement === button),
+            "Opening the starter must focus the Run button without scrolling into the iframe");
         assert.match(openedStarter, /throw new NotImplementedException\(\)/, "Opening the starter installs the unfinished method");
         assert.ok(!(await compiler.evaluate(() => window.DotnetBrowserEditor.busy())), "Opening the starter must not start the compiler");
         assert.ok(await verifiedField.isHidden(), "Opening the starter must not count as practice completion");
@@ -334,6 +341,7 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
         page.once("dialog", dialog => dialog.accept());
         await openDraft.click();
         const recovered = await compiler.evaluate(() => window.DotnetBrowserEditor.getCode());
+        assert.ok(await inViewport(runCurrent), "Opening a draft must bring the Run button into view");
         assert.match(recovered, /using Number = System\.Int32;/);
         assert.match(recovered, /static Number Solve\(\) => 41;/, "Pending practice must survive a demo and reload");
         assert.ok(await verifiedField.isHidden(), "A restored draft must not appear as a verified solution");
@@ -380,9 +388,25 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
         assert.notEqual(await status.textContent(), "Урок пройден.");
 
         assert.ok(await compiler.evaluate(code => window.DotnetBrowserEditor.setCode(code), program));
-        await runCurrent.click();
+        const runWithShortcut = viewport?.width <= 600;
+        if (runWithShortcut) {
+            await page.locator("#course-compiler").evaluate(frame => frame.scrollIntoView({ block: "start" }));
+            assert.ok(await runCurrent.evaluate(button => button.getBoundingClientRect().bottom <= 0),
+                "The Run button must be off-screen before testing acceptance via Ctrl+Enter");
+            await page.keyboard.press("Control+Enter");
+        } else {
+            await runCurrent.click();
+        }
         await page.waitForFunction(() => document.getElementById("lesson-completion-status").textContent === "Урок пройден.");
         await lessonQuiz.waitFor();
+        assert.ok(await lessonQuiz.evaluate(link => link.parentElement.contains(document.getElementById("page-editor-feedback"))),
+            "The lesson quiz link must appear next to the run result");
+        assert.ok(await inViewport(lessonQuiz), "The quiz link must be in view after practice passes");
+        assert.ok(await inViewport(page.locator("#page-editor-feedback")), "The run result must also be in view");
+        if (runWithShortcut) {
+            assert.ok(await compiler.evaluate(() => document.activeElement.matches(".CodeMirror textarea")),
+                "Showing the quiz link must leave keyboard focus in the code field");
+        }
         await page.waitForFunction(async () => {
             const status = document.getElementById("lesson-completion-status");
             const engine = await window.DotnetQuizSRSReady;
@@ -441,13 +465,17 @@ async function verifyCodeMirrorFallback(browser) {
         await page.getByRole("button", { name: "Открыть заготовку", exact: true }).click();
         assert.match(await editor.inputValue(), /static \(int PaidCount, decimal Total\) SummarizePaid\(/,
             "The lesson button must open the practice in the plain editor");
+        const run = page.locator("#page-editor-run");
+        await editor.press("Escape");
+        assert.ok(await run.evaluate(button => button === document.activeElement),
+            "Escape from the plain editor must focus the lesson Run button");
 
         const edited = 'using System; public static class Program { public static void Main() { Console.WriteLine("Plain editor draft"); } }';
         await editor.fill(edited);
         await page.reload({ waitUntil: "domcontentloaded" });
         await openLessonCompiler(page);
         assert.equal(await editor.inputValue(), edited, "The plain editor must restore learner changes");
-        await page.locator("#page-editor-run").click();
+        await run.click();
         await feedback.filter({ hasText: /Запуск завершён|Ошибка запуска/ }).waitFor();
         const output = frame.locator("#output");
         assert.equal(await feedback.textContent(), "Запуск завершён. Результат в выводе программы.", await output.textContent());
@@ -455,7 +483,7 @@ async function verifyCodeMirrorFallback(browser) {
 
         const offset = "\n".repeat(60);
         await editor.fill(offset + diagnosticProgram);
-        await page.locator("#page-editor-run").click();
+        await run.click();
         const diagnostic = output.locator(".compiler-diagnostic").filter({ hasText: "MissingMethod" });
         await diagnostic.click();
         assert.deepEqual(await editor.evaluate(textarea => ({
@@ -463,7 +491,7 @@ async function verifyCodeMirrorFallback(browser) {
             selected: textarea.value.slice(textarea.selectionStart, textarea.selectionEnd),
             scrolled: textarea.scrollTop > 0
         })), { start: offset.length + diagnosticProgram.indexOf("MissingMethod"), selected: "MissingMethod", scrolled: true });
-        console.log("CodeMirror unavailable: checked the plain editor, restored draft and Roslyn error navigation");
+        console.log("CodeMirror unavailable: checked the plain editor, Escape, restored draft and Roslyn error navigation");
     } finally {
         await page.close();
     }
@@ -480,9 +508,11 @@ async function verifyEmbeddedWorkspace(browser) {
         const frame = await openLessonCompiler(page);
         const iframe = page.locator("#course-compiler");
         const feedback = page.locator("#page-editor-feedback");
+        const run = page.locator("#page-editor-run");
+        const runHasFocus = () => run.evaluate(button => button === document.activeElement);
         await feedback.filter({ hasText: "Редактор готов к запуску." }).waitFor();
         assert.equal(await frame.locator("html.course-editor-embedded").getAttribute("lang"), "ru");
-        assert.ok(await page.locator("#page-editor-run").isVisible(), "Run must remain visible in the lesson toolbar");
+        assert.ok(await run.isVisible(), "Run must remain visible in the lesson toolbar");
         assert.ok(await frame.locator("#editor-run-current").isHidden(), "The embedded Run must not duplicate the lesson toolbar");
         assert.ok(await frame.getByRole("heading", { name: "Консоль", exact: true }).isVisible());
         assert.equal(await frame.locator("#output").getAttribute("aria-label"), "Вывод программы");
@@ -512,14 +542,28 @@ async function verifyEmbeddedWorkspace(browser) {
         await runWithShortcut(keyboardProgram);
         await output.filter({ hasText: "Keyboard workspace" }).waitFor();
         await feedback.filter({ hasText: "Запуск завершён. Результат в выводе программы." }).waitFor();
-        assert.ok(await frame.locator(".CodeMirror textarea").evaluate(editor => editor === document.activeElement),
+        const editorPane = frame.locator(".CodeMirror");
+        const codeField = editorPane.locator("textarea");
+        const codeHasFocus = () => codeField.evaluate(editor => editor === document.activeElement);
+        assert.ok(await codeHasFocus(),
             "Ctrl+Enter must not move focus away from the editor");
+        await editorPane.evaluate(wrapper => {
+            const cm = wrapper.CodeMirror;
+            cm.setCursor(cm.posFromIndex(cm.getValue().indexOf("Console") + 3));
+        });
+        await page.keyboard.press("Control+Space");
+        const suggestions = frame.locator(".CodeMirror-hints");
+        await suggestions.waitFor();
+        await page.keyboard.press("Escape");
+        await suggestions.waitFor({ state: "detached" });
+        assert.ok(await codeHasFocus(), "Escape must close suggestions before moving focus");
+        await page.keyboard.press("Escape");
+        assert.ok(await runHasFocus(), "Escape from CodeMirror must focus the lesson Run button");
 
         const workspace = page.locator("#lesson-editor-workspace");
         const expanded = page.locator("#lesson-editor-workspace.is-expanded");
         const fullscreen = page.locator("#page-editor-fullscreen");
         const expandedEditor = frame.locator("html.course-editor-fullscreen");
-        const editorPane = frame.locator(".CodeMirror");
         const editorCode = () => iframe.evaluate(element => element.contentWindow.DotnetBrowserEditor.getCode());
         const compilerDocument = await iframe.evaluateHandle(element => element.contentDocument);
         const regularHeight = (await editorPane.boundingBox()).height;
@@ -529,7 +573,7 @@ async function verifyEmbeddedWorkspace(browser) {
             await expanded.waitFor();
             await expandedEditor.waitFor({ state: "attached" });
             assert.ok(await expanded.getByRole("button", { name: "Свернуть полноэкранный редактор", exact: true }).isVisible());
-            assert.ok(await page.locator("#page-editor-run").isVisible(), "Run must remain available in fullscreen");
+            assert.ok(await run.isVisible(), "Run must remain available in fullscreen");
             assert.ok(await workspace.evaluate(element => {
                 const bounds = element.getBoundingClientRect();
                 return Math.abs(bounds.left) <= 1 && Math.abs(bounds.top) <= 1 &&
@@ -547,11 +591,16 @@ async function verifyEmbeddedWorkspace(browser) {
         await fullscreen.click();
         await checkExpanded();
         await waitForLayout(false);
+        const nativeFullscreen = await workspace.evaluate(element => document.fullscreenElement === element);
         assert.ok((await editorPane.boundingBox()).height > regularHeight,
             "Expanding the workspace must give the code pane more room");
         assert.equal(await editorCode(), keyboardProgram);
         assert.equal(await output.textContent(), initialOutput);
-        await fullscreen.click();
+        await codeField.focus();
+        await page.keyboard.press("Escape");
+        assert.ok(await runHasFocus(), "Escape must focus Run while the editor is fullscreen");
+        await checkExpanded();
+        await page.keyboard.press("Escape");
         await checkCollapsed();
         assert.ok(await iframe.evaluate((element, before) => element.contentDocument === before, compilerDocument),
             "Toggling fullscreen must retain the live compiler document");
@@ -592,7 +641,10 @@ async function verifyEmbeddedWorkspace(browser) {
         await output.filter({ hasText: "Execution error: ArgumentException: INPUT_REQUIRED" }).waitFor();
         await feedback.filter({ hasText: "Ошибка запуска. Подробности в выводе программы." }).waitFor();
         const fullscreenOutput = await output.textContent();
-        await iframe.evaluate(element => element.contentWindow.DotnetBrowserEditor.focus());
+        await codeField.focus();
+        await page.keyboard.press("Escape");
+        assert.ok(await runHasFocus(), "Escape must focus Run in the viewport fallback");
+        await checkExpanded();
         await page.keyboard.press("Escape");
         await checkCollapsed();
         assert.equal(await editorCode(), inputProgram);
@@ -601,7 +653,8 @@ async function verifyEmbeddedWorkspace(browser) {
         await page.reload({ waitUntil: "domcontentloaded" });
         await feedback.filter({ hasText: "Редактор готов к запуску." }).waitFor();
         assert.equal(await editorCode(), inputProgram, "Fullscreen edits must survive a page reload");
-        console.log("Embedded editor: checked responsive panes, fullscreen, viewport fallback, draft, Ctrl+Enter and ReadLine");
+        console.log("Embedded editor: checked responsive panes, " + (nativeFullscreen ? "native fullscreen, " : "") +
+            "viewport fallback, draft, Ctrl+Enter, Escape, autocomplete and ReadLine");
     } finally {
         await page.close();
     }
@@ -667,7 +720,7 @@ async function verify() {
         }
         await verifyDotnetLabLink(browser);
         await verifyLessonCompletion(browser, "courses/csharp-dotnet-9-11/", "lessons/001-params-countby/", "TASK-001");
-        await verifyLessonCompletion(browser, "courses/memory/", "lessons/001-allocations-copies-retention/", "ALLOC-TASK-001");
+        await verifyLessonCompletion(browser, "courses/memory/", "lessons/001-allocations-copies-retention/", "ALLOC-TASK-001", { width: 390, height: 844 });
         await verifyCodeMirrorFallback(browser);
         await verifyEmbeddedWorkspace(browser);
     } finally {

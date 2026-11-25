@@ -89,6 +89,7 @@
   if (typeof document === "undefined") return;
   const frame = document.getElementById("course-compiler");
   if (!frame) return;
+  const editorInputSelector = "#code-editor, .CodeMirror textarea";
   const lesson = Number(frame.dataset.lesson);
   const course = frame.dataset.course;
   const taskId = (course === "memory" ? "ALLOC-TASK-" : "TASK-") + String(lesson).padStart(3, "0");
@@ -180,19 +181,24 @@
           return;
         }
       }
-      if (!api.setCode(code)) {
+      if (!api.setCode(code, {focus: run})) {
         show(button, "Редактор ещё не готов к загрузке.");
         return;
       }
       lastLoadedCode = code;
     }
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    frame.scrollIntoView({behavior: reduceMotion ? "instant" : "smooth", block: "start"});
+    const scrollOptions = {behavior: reduceMotion ? "instant" : "smooth", block: "start"};
     if (!run) {
-      api.focus?.();
+      const runButton = document.getElementById("page-editor-run");
+      const toolbar = runButton?.closest(".live-editor-toolbar");
+      if (runButton) runButton.focus({preventScroll: true});
+      else api.focus?.();
+      (toolbar ?? frame).scrollIntoView(scrollOptions);
       show(button, "Код задания открыт в редакторе. Для проверки нажми «Запустить текущий код».");
       return true;
     }
+    frame.scrollIntoView(scrollOptions);
     show(button, savedPractice ? "Черновик задания сохранён. Результат примера появится в консоли." : "Результат появится в консоли редактора.");
     if (code === current) {
       if (!api.run()) show(button, "Запуск не начался. Проверь кнопку запуска.");
@@ -254,6 +260,8 @@
 
   function addTaskButtons() {
     const completion = document.getElementById("lesson-completion-status");
+    const quizLink = document.querySelector("[data-lesson-quiz-link]");
+    const runButton = document.getElementById("page-editor-run");
     if (!completion) return;
     const starter = createPracticeArea();
     if (!starter) return;
@@ -403,8 +411,19 @@
       } catch {
         showVerified(verified, "Чтобы сохранить решение, скачай .cs.");
       }
+      const quizWasHidden = quizLink?.hidden;
       if (!window.DotnetLearning.progress.mark("lesson", course, lesson)) {
         completion.textContent = "Проверки пройдены, но отметку сохранить не удалось.";
+        return;
+      }
+      if (!quizWasHidden || quizLink.hidden) return;
+
+      const focused = document.activeElement;
+      const editingCode = focused === frame && frame.contentDocument?.activeElement?.matches(editorInputSelector);
+      if (focused !== runButton && !editingCode) return;
+      const {top, bottom} = quizLink.getBoundingClientRect();
+      if (top < 0 || bottom > window.innerHeight) {
+        quizLink.closest(".live-editor-run-actions")?.scrollIntoView({block: "nearest"});
       }
     });
   }
@@ -500,6 +519,7 @@
   function addEditorFullscreen() {
     const workspace = document.getElementById("lesson-editor-workspace");
     const toggle = document.getElementById("page-editor-fullscreen");
+    const run = document.getElementById("page-editor-run");
     if (!workspace || !toggle) return;
 
     const background = [];
@@ -561,19 +581,23 @@
       }
     }
 
-    function closeOnEscape(event) {
-      if (!expanded || event.defaultPrevented || event.key !== "Escape") return;
+    function handleEscape(event) {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing || event.repeat) return;
+      // Let CodeMirror dismiss its suggestions before moving focus.
       if (event.currentTarget.querySelector(".CodeMirror-hints")) return;
+      const fromCode = run && event.currentTarget !== document &&
+        event.target.matches?.(editorInputSelector);
+      if (!fromCode && !expanded) return;
       event.preventDefault();
       event.stopPropagation();
-      changeFullscreen();
+      if (fromCode) run.focus();
+      else changeFullscreen();
     }
 
     function connectFrame() {
       const editor = frame.contentDocument;
       editor?.documentElement?.classList.toggle("course-editor-fullscreen", expanded);
-      // CodeMirror also binds Escape, so handle it before its editor keymap.
-      editor?.addEventListener("keydown", closeOnEscape, true);
+      editor?.addEventListener("keydown", handleEscape, true);
     }
 
     document.addEventListener("fullscreenchange", () => {
@@ -584,7 +608,7 @@
         setExpanded(false);
       }
     });
-    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("keydown", handleEscape);
     frame.addEventListener("load", connectFrame);
     connectFrame();
     toggle.addEventListener("click", changeFullscreen);

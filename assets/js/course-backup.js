@@ -46,6 +46,7 @@
     const feedback = control.querySelector("#quiz-backup-feedback");
     const practiceLessons = (control.dataset.practiceLessons || "").split(",").map(Number)
       .filter(lesson => publishedLessons.includes(lesson));
+    const practiceNumbers = new Set(practiceLessons);
     const practiceIds = new Set(practiceLessons.map(String));
     const storageKey = (kind, lesson) => "dotnet-courses:" + kind + ":" + course + ":" + lesson;
 
@@ -68,26 +69,40 @@
           !isObject(data.progress)) {
         throw Error("Это не файл прогресса данного курса.");
       }
-      for (const [id, record] of Object.entries(data.progress)) {
+      let skipped = 0;
+      function keepKnown(catalog, id) {
+        if (catalog.has(id)) return true;
+        skipped++;
+        return false;
+      }
+
+      const history = Object.entries(data.progress);
+      for (const [id, record] of history) {
         try {
-          if (ids.has(id) && validateHistoryRecord(record, id)) continue;
+          if (id && validateHistoryRecord(record, id)) continue;
         } catch { /* Reject records that the history reader cannot use. */ }
         throw Error("Некорректная карточка FSRS.");
       }
-      const practice = data.practice;
-      if (!isObject(practice)) throw Error("Некорректные данные практики.");
+      const progress = Object.fromEntries(history.filter(([id]) => keepKnown(ids, id)));
+
+      if (!isObject(data.practice)) throw Error("Некорректные данные практики.");
+      const practice = {};
       for (const [field, label] of kinds) {
-        const values = practice[field];
-        if (!isObject(values) || Object.entries(values).some(([lesson, value]) =>
-            !practiceIds.has(lesson) || typeof value !== "string")) {
+        const values = data.practice[field];
+        if (!isObject(values)) throw Error("Некорректные данные в категории «" + label.toLowerCase() + "».");
+        const entries = Object.entries(values);
+        if (entries.some(([lesson, value]) => !/^[1-9]\d*$/.test(lesson) ||
+            !Number.isSafeInteger(Number(lesson)) || typeof value !== "string")) {
           throw Error("Некорректные данные в категории «" + label.toLowerCase() + "».");
         }
+        practice[field] = Object.fromEntries(entries.filter(([lesson]) => keepKnown(practiceIds, lesson)));
       }
-      if (!Array.isArray(practice.completedLessons) ||
-          practice.completedLessons.some(lesson => !practiceLessons.includes(lesson))) {
+      const completed = data.practice.completedLessons;
+      if (!Array.isArray(completed) || completed.some(lesson => !Number.isSafeInteger(lesson) || lesson <= 0)) {
         throw Error("Некорректные отметки о выполнении практики.");
       }
-      return {progress: data.progress, practice};
+      practice.completedLessons = [...new Set(completed)].filter(lesson => keepKnown(practiceNumbers, lesson));
+      return {progress, practice, skipped};
     }
 
     function importData({progress, practice}) {
@@ -159,11 +174,13 @@
       importButton.disabled = true;
       deleteButton.disabled = true;
       let historyChanged;
+      let skipped;
       try {
         if (file.size > 10_000_000) throw Error("Нужен JSON-файл размером не более 10 МБ.");
         const data = validate(JSON.parse(await file.text()));
         if (!window.confirm("Импортировать резервную копию? Записи для вопросов и уроков из файла заменят соответствующие данные в браузере.")) return;
         historyChanged = importData(data);
+        skipped = data.skipped;
       } catch (error) {
         feedback.textContent = "Не удалось импортировать копию. " + error.message;
         return;
@@ -171,7 +188,8 @@
         importButton.disabled = false;
         deleteButton.disabled = false;
       }
-      feedback.textContent = "Копия импортирована.";
+      feedback.textContent = "Копия импортирована." +
+        (skipped ? " Пропущено записей вне актуальной программы — " + skipped + "." : "");
       onImported(historyChanged);
     });
     deleteButton.addEventListener("click", () => {

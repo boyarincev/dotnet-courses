@@ -30,6 +30,7 @@ async function openQuiz(page, course, query = "") {
 }
 
 async function getBank(page) {
+    await page.waitForFunction(() => Boolean(window.DotnetQuizSRSReady));
     return page.evaluate(async () => {
         const engine = await window.DotnetQuizSRSReady;
         const bank = JSON.parse(document.getElementById("question-bank").textContent);
@@ -98,14 +99,14 @@ async function download(page, selector) {
     return readFile(await (await nextDownload).path(), "utf8");
 }
 
-async function publishTestQuestion(page, pages, data) {
+async function publishTestQuestions(page, pages, ...additions) {
     const paths = new Set(pages.map(url => new URL(url).pathname));
     await page.route(url => paths.has(url.pathname), async route => {
         const upstream = await route.fetch();
         const original = await upstream.text();
         const document = original.replace(
             /(<script[^>]+id="question-bank"[^>]*>)([\s\S]*?)(<\/script>)/,
-            (_, opening, payload, closing) => opening + JSON.stringify([...JSON.parse(payload), data]) + closing);
+            (_, opening, payload, closing) => opening + JSON.stringify([...JSON.parse(payload), ...additions]) + closing);
         assert.notEqual(document, original, "The lesson fixture must add a question");
         const headers = upstream.headers();
         delete headers["content-length"];
@@ -208,7 +209,7 @@ async function verifyLessonQuiz(browser, course, lesson) {
         const added = { ...expected[0], id: "BROWSER-SMOKE-NEW", prompt: "Вопрос, добавленный после прохождения" };
         const previousRecord = await readRecord(page, course, next);
         const acceptanceLesson = otherLesson ?? { number: lesson, url: lessonUrl };
-        await publishTestQuestion(page, [lessonUrl, acceptanceLesson.url, quizUrl(course)], added);
+        await publishTestQuestions(page, [lessonUrl, acceptanceLesson.url, quizUrl(course)], added);
         await page.goto(lessonUrl);
         await reviewStatus(page).waitFor();
         assert.equal(await readRecord(page, course, added.id) ?? null, null,
@@ -509,7 +510,33 @@ async function verifyBackup(browser, backup) {
         await openBackup(page, mainCourse);
         await chooseBackup(page, { ...backup, format: "dotnet-courses-course-v1" });
         await feedback.filter({ hasText: "Это не файл прогресса данного курса." }).waitFor();
+
+        const addedLesson = await page.locator(".lesson-card").evaluateAll(lessons => lessons
+            .map(link => ({ number: Number(link.querySelector("[data-lesson-completion-badge]").dataset.lesson), url: link.href }))
+            .find(lesson => lesson.number > 2));
+        assert.ok(addedLesson, "The current catalog contains a lesson added after the copy");
+        const deletedQuestionId = "BROWSER-SMOKE-RETIRED";
+        const deletedLesson = 100001;
+        const { laterQuestions, deletedCard } = await page.evaluate(async ({ number, deletedId }) => {
+            const engine = await window.DotnetQuizSRSReady;
+            const bank = JSON.parse(document.getElementById("question-bank").textContent);
+            const first = engine.evaluate(null, deletedId, "correct", "Ответ из старой копии", new Date());
+            return {
+                laterQuestions: bank.filter(question => Number(question.lesson_number) === number),
+                deletedCard: engine.evaluate(first, deletedId, "correct", "Следующий ответ", new Date(),
+                    { allowEarlyHistory: true }),
+            };
+        }, { number: addedLesson.number, deletedId: deletedQuestionId });
+        assert.ok(laterQuestions.length, "The added lesson has questions");
+        const addedQuestion = { ...laterQuestions[0], id: "BROWSER-SMOKE-BACKUP-NEW", prompt: "Вопрос из нового урока" };
+        const orphanedQuestion = { ...laterQuestions[0], id: deletedQuestionId, lesson_number: deletedLesson };
+        await publishTestQuestions(page, [courseUrl(mainCourse), quizUrl(mainCourse), addedLesson.url],
+            addedQuestion, orphanedQuestion);
+        await openBackup(page, mainCourse);
+
         const sourceDraft = practiceKey("compiler-draft", mainCourse, 2);
+        const sourceMethod = practiceKey("practice-draft", mainCourse, 2);
+        const sourceSolution = practiceKey("practice-verified", mainCourse, 2);
         const unrelatedDraft = practiceKey("compiler-draft", mainCourse, 1);
         const foreignDraft = practiceKey("compiler-draft", memoryCourse, 1);
         const readDrafts = () => page.evaluate(keys => keys.map(key => localStorage.getItem(key)),
@@ -518,7 +545,26 @@ async function verifyBackup(browser, backup) {
         await page.evaluate(({ keys, values }) => {
             keys.forEach((key, index) => localStorage.setItem(key, values[index]));
         }, { keys: [sourceDraft, unrelatedDraft, foreignDraft], values: oldValues });
-        const imported = { ...backup, practice: { ...backup.practice, editorDrafts: { 2: "Новый код" } } };
+        const laterIds = new Set(laterQuestions.map(question => question.id));
+        const imported = {
+            ...backup,
+            progress: {
+                ...Object.fromEntries(Object.entries(backup.progress).filter(([id]) => !laterIds.has(id))),
+                [deletedQuestionId]: deletedCard,
+            },
+            practice: {
+                completedLessons: [2, deletedLesson],
+                editorDrafts: { 2: "Новый код", [deletedLesson]: "Код удалённого урока" },
+                taskDrafts: { 2: "Сохранённый метод", [deletedLesson]: "Метод удалённого урока" },
+                verifiedSolutions: { 2: "Сохранённое решение", [deletedLesson]: "Решение удалённого урока" },
+            },
+        };
+        await chooseBackup(page, {
+            ...imported,
+            practice: { ...imported.practice, editorDrafts: { [deletedLesson]: 42 } },
+        });
+        await feedback.filter({ hasText: "Некорректные данные" }).waitFor();
+        assert.deepEqual(await readDrafts(), oldValues, "Even a retired record must have the expected field type");
         const importCourse = () => chooseBackup(page, imported);
         await confirmAction(page, importCourse, false);
         assert.deepEqual(await readDrafts(), oldValues, "Cancelling import retains the original browser data");
@@ -530,16 +576,37 @@ async function verifyBackup(browser, backup) {
         assert.equal(await page.evaluate(course => window.DotnetLearning.progress.get("lesson", course, 2), mainCourse), false);
         await page.evaluate(() => window.restoreTestSetItem());
         await confirmAction(page, importCourse, true);
-        await feedback.filter({ hasText: "Копия импортирована." }).waitFor();
+        await feedback.filter({ hasText: "Копия импортирована. Пропущено записей вне актуальной программы — 5." }).waitFor();
         assert.deepEqual(await readDrafts(), ["Новый код", ...oldValues.slice(1)], "Import preserves unrelated data");
+        assert.deepEqual(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), [sourceMethod, sourceSolution]),
+            ["Сохранённый метод", "Сохранённое решение"]);
         assert.ok(await page.evaluate(course => window.DotnetLearning.progress.get("lesson", course, 2), mainCourse));
-        const id = Object.keys(backup.progress)[0];
-        assert.deepEqual(await readRecord(page, mainCourse, id), backup.progress[id]);
+        const id = Object.keys(imported.progress).find(questionId => questionId !== deletedQuestionId);
+        assert.ok(id);
+        assert.deepEqual(await readRecord(page, mainCourse, id), imported.progress[id]);
+        assert.equal(await readRecord(page, mainCourse, deletedQuestionId) ?? null, null);
+        const practiceKinds = ["compiler-draft", "practice-draft", "practice-verified", "progress:lesson"];
+        const absentPractice = [deletedLesson, addedLesson.number].flatMap(number =>
+            practiceKinds.map(kind => practiceKey(kind, mainCourse, number)));
+        assert.deepEqual(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), absentPractice),
+            absentPractice.map(() => null), "Import skips retired practice and does not mark a new lesson");
         assert.deepEqual(await readRecord(page, mainCourse, existingId), existingRecord,
             "Import preserves history for an unrelated question");
         await openQuiz(page, mainCourse, "?through=2");
         await quizResult(page).waitFor();
         assert.equal(await questions(page).count(), 0, "Imported graded answers restore the lesson outcome");
+
+        await openQuiz(page, mainCourse, "?filter=" + addedLesson.number);
+        await question(page, addedQuestion.id).waitFor();
+        assert.equal(await readRecord(page, mainCourse, addedQuestion.id) ?? null, null,
+            "A new question is available without an invented card");
+        await page.goto(addedLesson.url);
+        await reviewStatus(page).waitFor();
+        await markPractice(page, mainCourse, addedLesson.number);
+        const newCard = await readRecord(page, mainCourse, addedQuestion.id);
+        assert.deepEqual(newCard.history, []);
+        assert.equal(newCard.card.dueAt, new Date(+now + 8 * hour).toISOString(),
+            "Completing the new lesson seeds its cards on the usual schedule");
 
         await openBackup(page, mainCourse);
         const badge = page.locator('[data-lesson-completion-badge][data-lesson="2"]');

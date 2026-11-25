@@ -157,10 +157,27 @@ jobs:
           test -s _site/sw.js
           node --check _site/sw.js
           grep -q "$GITHUB_SHA" _site/sw.js
-      - name: Verify built pages, quizzes and WASM compilers in Chromium
+      - name: Install Playwright and Chromium
         run: |
           npm install --prefix "$RUNNER_TEMP/browser-tests" --no-save --no-package-lock --no-audit --no-fund playwright@1.62.1
           "$RUNNER_TEMP/browser-tests/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Verify built pages, quizzes and WASM compilers in Chromium
+        shell: bash
+        run: |
+          run_browser_check() {
+            local script="$1" log diagnostic
+            shift
+            log="$RUNNER_TEMP/${script##*/}.log"
+            if node "$script" "$@" 2>&1 | tee "$log"; then
+              return 0
+            fi
+            diagnostic=$(tail -n 24 "$log")
+            diagnostic=${diagnostic//%/%25}
+            diagnostic=${diagnostic//$'\r'/%0D}
+            diagnostic=${diagnostic//$'\n'/%0A}
+            printf '::error title=%s::%s\n' "${script##*/}" "$diagnostic"
+            return 1
+          }
           mkdir -p "$RUNNER_TEMP/browser-site"
           ln -s "$GITHUB_WORKSPACE/_site" "$RUNNER_TEMP/browser-site/dotnet-courses"
           python3 -m http.server 4173 --bind 127.0.0.1 --directory "$RUNNER_TEMP/browser-site" &
@@ -168,9 +185,9 @@ jobs:
           curl -fsS --retry 5 --retry-connrefused http://127.0.0.1:4173/dotnet-courses/ >/dev/null
           export NODE_PATH="$RUNNER_TEMP/browser-tests/node_modules"
           site_url=http://127.0.0.1:4173/dotnet-courses/
-          node _browser/verify_site.cjs "$site_url" _site "$GITHUB_SHA"
-          node _browser/verify_quiz.cjs "$site_url"
-          node _browser/verify_compiler_output.cjs "$site_url" "$GITHUB_SHA"
+          run_browser_check _browser/verify_site.cjs "$site_url" _site "$GITHUB_SHA"
+          run_browser_check _browser/verify_quiz.cjs "$site_url"
+          run_browser_check _browser/verify_compiler_output.cjs "$site_url" "$GITHUB_SHA"
       - uses: actions/upload-pages-artifact@v5
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
   deploy:

@@ -1,9 +1,9 @@
 ---
 lesson_number: 2
 lesson_date: '21 ноября 2026'
-title: 'Агрегация HTTP-запросов: AggregateBy и null-conditional assignment'
-summary: 'Агрегируем HTTP-метрики по маршрутам и создаём отчёт только при наличии получателя.'
-csharp_feature: 'C# 14 · null-conditional assignment'
+title: 'Как собрать сводку по HTTP-запросам'
+summary: 'Считаем число запросов и их суммарную длительность по маршрутам. Формируем отчёт, если задан получатель.'
+csharp_feature: 'C# 14 · условное присваивание через ?.'
 dotnet_feature: '.NET 9 · AggregateBy'
 series: 'Коллекции и LINQ'
 code_framework: net10.0

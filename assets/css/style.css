@@ -80,6 +80,7 @@ html.lesson-editor-expanded{overflow:hidden}
 .lesson-jump-nav a{text-decoration:underline;text-underline-offset:3px}
 
 /* Quiz and course review */
+.question h2{overflow-wrap:anywhere}
 .quiz-toolbar{margin-top:14px}
 #quiz-filter-control{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0;max-width:100%}
 #quiz-filter{max-width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit}

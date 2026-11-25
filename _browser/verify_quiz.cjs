@@ -346,6 +346,10 @@ async function verifyQuestionBank(browser) {
         assert.deepEqual((await questionIds(page)).sort(), bank.map(row => row.id).sort());
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390,
             "The quiz wraps without horizontal scrolling on mobile");
+        await page.setViewportSize({ width: 320, height: 844 });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320,
+            "Long code identifiers in question prompts wrap on a narrow screen");
+        await page.setViewportSize({ width: 390, height: 844 });
 
         await page.goto(courseUrl(mainCourse));
         await markPractice(page, mainCourse, 1, 3);

@@ -34,6 +34,8 @@ async function openQuiz(page, course, query = "") {
     await page.goto(quizUrl(course, query));
     await page.waitForFunction(() => Boolean(document.getElementById("quiz-count")?.textContent ||
         document.querySelector("#quiz-root > .notice")));
+    await page.getByText("Правильность ответа определяешь ты.", { exact: false }).waitFor();
+    assert.equal(await page.locator("#quiz-self-assessment + #quiz-root").count(), 1);
 }
 
 async function getBank(page) {
@@ -72,7 +74,7 @@ async function currentQuestion(page) {
     return row.getAttribute("data-question-id");
 }
 
-async function assertEmptyAnswer(row) {
+async function assertEmptyAnswer(page, row) {
     const input = row.getByRole("textbox");
     assert.equal(await input.inputValue(), "");
     await input.fill(" \n ");
@@ -81,6 +83,10 @@ async function assertEmptyAnswer(row) {
     assert.ok(await buttons.evaluateAll(elements => elements.every(button => button.disabled)),
         "Whitespace cannot enable any grade");
     await row.getByText("Сначала введи ответ", { exact: true }).waitFor();
+    const explanation = page.locator("#quiz-self-assessment");
+    await explanation.waitFor();
+    await input.fill("Ответ для проверки интерфейса");
+    await explanation.waitFor();
     await input.fill("");
 }
 
@@ -159,10 +165,11 @@ async function verifyLessonQuiz(browser, course, lesson) {
         assert.equal(await page.getByRole("button", { name: "Начать заново" }).count(), 0);
 
         const first = await currentQuestion(page);
-        await assertEmptyAnswer(question(page, first));
+        await assertEmptyAnswer(page, question(page, first));
         await skip(page).click();
         const next = await currentQuestion(page);
         assert.notEqual(next, first, "Skipping puts the question behind the remaining queue");
+        await page.locator("#quiz-self-assessment").waitFor();
         await quizCount(page).filter({ hasText: "Отвечено 0 из " + expected.length }).waitFor();
         const seeded = await readRecord(page, course, first);
         assert.deepEqual(seeded.history, []);
@@ -299,7 +306,7 @@ async function verifyReviewToday(browser, course) {
         const eligible = [fixture.due, fixture.dueNow];
         assert.ok(eligible.includes(initial));
         const oldRecord = await readRecord(page, course, initial);
-        await assertEmptyAnswer(question(page, initial));
+        await assertEmptyAnswer(page, question(page, initial));
         await question(page, initial).locator(".question-answer-history summary").click();
         await question(page, initial).getByText("Предыдущий ответ").waitFor();
         await skip(page).click();
@@ -394,7 +401,7 @@ async function verifyQuestionBank(browser) {
         await row.waitFor();
         assert.deepEqual((await questionIds(page)).sort(), ofLessonTwo.map(item => item.id).sort());
         assert.match(await row.locator("[data-question-due]").textContent(), /Новый вопрос/);
-        await assertEmptyAnswer(row);
+        await assertEmptyAnswer(page, row);
 
         const failureKey = "dotnet-courses:quiz:v2:" + mainCourse + ":card:" + first;
         await failStorageWrite(page, failureKey);

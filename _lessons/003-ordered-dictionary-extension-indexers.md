@@ -20,6 +20,10 @@ browser_start_snippet: full-program
 `OrderedDictionary<TKey, TValue>` хранит пары в определённом порядке: `Add` добавляет пару в конец, а `Insert` помещает её на указанную позицию. Через `entries["gateway"]` получаем значение по ключу. `GetAt(int index)` принимает позицию с нуля и возвращает `KeyValuePair<TKey, TValue>`, из которой можно прочитать и ключ, и значение. Позиции относятся к текущему порядку коллекции. [Документация OrderedDictionary](https://learn.microsoft.com/dotnet/api/system.collections.generic.ordereddictionary-2?view=net-9.0), [документация GetAt](https://learn.microsoft.com/dotnet/api/system.collections.generic.ordereddictionary-2.getat?view=net-9.0)
 
 ```csharp
+public KeyValuePair<TKey, TValue> GetAt(int index);
+```
+
+```csharp
 var first = entries.GetAt(index: 0); // Первая пара в порядке словаря.
 ```
 
@@ -27,7 +31,7 @@ var first = entries.GetAt(index: 0); // Первая пара в порядке 
 
 Если в команде часто обращаются к упорядоченному словарю по позиции, можно добавить запись `entries[0]`. Для этого в отдельном статическом классе объявляем блок `extension`. Его параметр `entries` — экземпляр словаря слева от квадратных скобок. Член `this[int position]` принимает значение в скобках. Компилятор сначала ищет подходящий индексатор на самом типе, поэтому `entries["gateway"]` по-прежнему ищет по ключу. У словаря с ключами `int` выражение `entries[0]` также означало бы поиск по ключу. Если важна явная запись, используй `entries.GetAt(index: 0)`. [Расширяющие индексаторы в C# 15](https://learn.microsoft.com/dotnet/csharp/whats-new/csharp-15#extension-indexers)
 
-Для доступа относительно конца C# использует `System.Index`. В выражении `^1` единица означает «одна позиция от конца», то есть последний элемент. `^0` обозначает позицию сразу после последнего элемента. `Index.GetOffset(length)` переводит индекс в позицию с начала: при длине 3 индекс `^1` даёт 2. Метод вычисляет позицию, а её допустимость для словаря проверяет `GetAt`. [Индексы с конца](https://learn.microsoft.com/dotnet/csharp/tutorials/ranges-indexes), [Index.GetOffset](https://learn.microsoft.com/dotnet/api/system.index.getoffset?view=net-9.0)
+Для доступа относительно конца C# использует `System.Index`. В выражении `^1` единица означает «одна позиция от конца», то есть последний элемент. `^0` обозначает позицию сразу после последнего элемента. `Index.GetOffset(length)` переводит индекс в позицию с начала: при длине 3 индекс `^1` даёт 2. Метод вычисляет позицию, а её допустимость для словаря проверяет `GetAt`. [Индексы с конца](https://learn.microsoft.com/dotnet/csharp/tutorials/ranges-indexes), [Сигнатура Index.GetOffset(int length)](https://learn.microsoft.com/dotnet/api/system.index.getoffset?view=net-9.0)
 
 ## Запусти пример
 

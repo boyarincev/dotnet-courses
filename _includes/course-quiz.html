@@ -14,6 +14,7 @@
   <strong id="quiz-count" role="status"></strong>
   <a id="quiz-bank-link" href="{{ page.url | relative_url }}" hidden>Банк вопросов</a>
 </div>
+<p class="notice" id="quiz-self-assessment"><strong>Самооценка.</strong> Правильность ответа определяешь ты. Кнопки сохраняют ответ и выбранную тобой оценку.</p>
 <section id="quiz-root" aria-label="Вопросы" data-course="{{ include.course_id }}" data-lesson-numbers="{{ include.lessons | map: 'lesson_number' | join: ',' }}"></section>
 <section id="quiz-result" class="notice" hidden>
   <h2 tabindex="-1">Ответы сохранены</h2>
@@ -40,7 +41,7 @@
     <label>Твой ответ</label>
     <textarea rows="4" autocomplete="off"></textarea>
     <p class="muted quiz-rating-hint">Сначала введи ответ</p>
-    <div class="quiz-rating-actions" role="group" aria-label="Самооценка">
+    <div class="quiz-rating-actions" role="group" aria-label="Самооценка" aria-describedby="quiz-self-assessment">
       <button type="button" class="button" data-rating="wrong" disabled>Неверно</button>
       <button type="button" class="button" data-rating="partial" disabled>Частично</button>
       <button type="button" class="button" data-rating="correct" disabled>Верно</button>

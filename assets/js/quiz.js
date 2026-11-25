@@ -239,7 +239,7 @@
           } else {
             showStatus(updated);
             renderHistory(history, updated.history);
-            message.textContent = "Ответ сохранён.";
+            message.textContent = "Ответ и самооценка сохранены.";
           }
         });
       }

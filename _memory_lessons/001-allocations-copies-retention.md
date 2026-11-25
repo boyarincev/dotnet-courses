@@ -11,7 +11,7 @@ code_framework: net10.0
 browser_runtime: '10'
 browser_start_snippet: allocations-copies-retention
 ---
-> **30 минут максимум.** Объяснение и пример — 8 минут, самостоятельная задача — 12 минут, проверка и повторение — около 10 минут. Пока не нужно оптимизировать весь код.
+> **30 минут максимум.** Объяснение и пример — 8 минут, самостоятельная задача — 12 минут, проверка и повторение — около 10 минут.
 
 ## Зачем это нужно
 
@@ -22,8 +22,6 @@ browser_start_snippet: allocations-copies-retention
 - **Удержание** — данные остаются достижимыми через ссылки и поэтому продолжают занимать память. Пример: сохранённый надолго `List<Order>`.
 
 Выделение и копирование могут встретиться вместе. Строка `byte[] destination = new byte[source.Length];` создаёт массив. Следующая строка, `source.AsSpan().CopyTo(destination);`, записывает в него байты из исходного массива.
-
-Место хранения структуры зависит от того, где она используется. В массиве структур [каждый элемент — переменная массива](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/arrays#171-general), которая [хранит само значение структуры](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/structs#1682-value-semantics).
 
 ## Запускаемый пример
 
@@ -121,7 +119,7 @@ After copy change: 1499.90
 
 `new List<Order>()` [создаёт объект списка со ссылкой на общий пустой массив `Order[]`](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/List.cs#L29-L40). Первый `Add` [выделяет массив для элементов](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.list-1.add?view=net-10.0#remarks).
 
-**Копирование.** Индексатор `paid[0]` [читает первый элемент внутреннего массива списка и возвращает `Order` по значению](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/List.cs#L143-L153).
+**Копирование.** Внутренний массив списка хранит [сами значения `Order` в элементах](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/structs#1682-value-semantics). Индексатор `paid[0]` [читает первый элемент внутреннего массива списка и возвращает `Order` по значению](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/List.cs#L143-L153).
 
 `Order snapshot = paid[0]` сохраняет копию структуры в локальной переменной. После `snapshot.Amount = 0m` сумма в копии равна `0m`. В элементе массива она остаётся `1499.90m`. При копировании `Id` копируется ссылка, поэтому [оба поля указывают на одну и ту же строку](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/value-types).
 
@@ -149,7 +147,7 @@ snapshot.Id ------------------------------------------+
 
 **Задача на 12 минут.** Реализуй `SummarizePaid`: на входе — строки формата `ID;status;amount`. Верни количество записей со статусом `paid` и сумму их полей `amount` **без создания списка заказов**.
 
-Сравнивай статус с `paid` с учётом регистра, как при [сравнении строк оператором `==`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/equality-operators#string-equality). Пропускай строки с неверным числом полей или суммой, которую `decimal.TryParse` не смог разобрать. Используй [`NumberStyles.Number`](https://learn.microsoft.com/en-us/dotnet/api/system.globalization.numberstyles?view=net-10.0#fields) и `CultureInfo.InvariantCulture`, как в примере. Для разбиения строки можно использовать `Split`. Не сохраняй промежуточные записи в коллекции.
+Сравнивай статус с `paid` с учётом регистра, как при [сравнении строк оператором `==`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/equality-operators#string-equality). Пропускай строки с неверным числом полей или суммой, которую [`decimal.TryParse` с числовым форматом и культурой](<https://learn.microsoft.com/en-us/dotnet/api/system.decimal.tryparse?view=net-10.0#system-decimal-tryparse(system-string-system-globalization-numberstyles-system-iformatprovider-system-decimal@>) не смог разобрать. Используй [`NumberStyles.Number`](https://learn.microsoft.com/en-us/dotnet/api/system.globalization.numberstyles?view=net-10.0#fields) и `CultureInfo.InvariantCulture`, как в примере. Для разбиения строки можно использовать [`Split(char separator, StringSplitOptions options)`](<https://learn.microsoft.com/en-us/dotnet/api/system.string.split?view=net-10.0#system-string-split(system-char-system-stringsplitoptions>). Не сохраняй промежуточные записи в коллекции.
 
 **Проверка:**
 

@@ -48,7 +48,7 @@ Console.WriteLine(Sum(10, 20, 30)); // 60. Три числа образуют о
 ~~~
 {: #output-params-span }
 
-Для вызова `Sum(10, 20, 30)` с `ReadOnlySpan<int>` компилятор из .NET 9 SDK [сохраняет константы в данных сборки](https://github.com/dotnet/roslyn/blob/f3348c2a2be16ec6525cb3df7be12952c3e2de9d/src/Compilers/CSharp/Portable/CodeGen/EmitArrayInitializer.cs#L606-L623). На .NET 9 x64 `ReadOnlySpan<int>` [ссылается на эти данные](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Private.CoreLib/src/System/Runtime/CompilerServices/RuntimeHelpers.cs#L148-L149), поэтому вызов обходится без выделения массива для аргументов. Элементы удобно обработать сразу в `foreach`. Сам параметр [нельзя захватить в лямбде](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/ref-struct).
+Для вызова `Sum(10, 20, 30)` с `ReadOnlySpan<int>` компилятор из .NET 9 SDK [сохраняет константы в данных сборки](https://github.com/dotnet/roslyn/blob/f3348c2a2be16ec6525cb3df7be12952c3e2de9d/src/Compilers/CSharp/Portable/CodeGen/EmitArrayInitializer.cs#L606-L623). На .NET 9 x64 `ReadOnlySpan<int>` [ссылается на эти данные](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Private.CoreLib/src/System/Runtime/CompilerServices/RuntimeHelpers.cs#L148-L149), поэтому вызов обходится без выделения массива для аргументов. Элементы удобно обработать сразу в `foreach`.
 
 Заголовок можно передать отдельным аргументом, а метки собрать в `IEnumerable<string>`.
 
@@ -87,7 +87,20 @@ get: 1
 ~~~
 {: #output-groupby-count }
 
-Если нужны **только счётчики**, [`CountBy` в .NET 9](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-9/libraries#linq) вычисляет их без промежуточных групп строк.
+Если нужны **только счётчики**, [`CountBy` в .NET 9](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-9/libraries#linq) вычисляет их без промежуточных групп строк. В .NET 9 у метода следующая сигнатура. [Сигнатура в исходнике .NET 9](https://github.com/dotnet/runtime/blob/v9.0.0/src/libraries/System.Linq/src/System/Linq/CountBy.cs#L11-L14)
+
+```csharp
+public static IEnumerable<KeyValuePair<TKey, int>> CountBy<TSource, TKey>(
+    this IEnumerable<TSource> source,
+    Func<TSource, TKey> keySelector,
+    IEqualityComparer<TKey>? keyComparer = null)
+    where TKey : notnull;
+```
+
+- `source` — элементы для подсчёта. В вызове метода расширения последовательность `methods` стоит перед точкой.
+- `keySelector` — функция, которая получает один элемент и возвращает ключ. Здесь `method => method` берёт саму метку.
+- `keyComparer` — необязательный компаратор ключей. Если его опустить, применяется `EqualityComparer<TKey>.Default`.
+
 ```csharp
 var counts = methods.CountBy(
     // Используем само имя HTTP-метода как ключ подсчёта.
@@ -185,17 +198,15 @@ Sum = 60
 {: #output-full-program }
 
 ## 4. Напиши код сам · TASK-001 {#lesson-task}
-**Условие.** Реализуй `GetTopMethods`. Метод принимает последовательность меток из той же выгрузки и возвращает до трёх пар `(Method, Count)`. `Count` — число вхождений метки с учётом правила сравнения.
+**Условие.** Метод `GetTopMethods` принимает последовательность строковых меток HTTP-методов из выгрузки. Верни до трёх самых частых методов. Каждая пара `(Method, Count)` содержит метку и число её появлений. Считай `GET` и `get` одной меткой.
 
-- Подсчитай вхождения через `CountBy` с `StringComparer.OrdinalIgnoreCase`.
-- Отсортируй по убыванию `Count`. При равных частотах отсортируй `Method` по возрастанию с тем же `StringComparer.OrdinalIgnoreCase`.
-- Верни первые три пары или все пары, если их меньше трёх. Для пустого входа верни пустую последовательность. Регистр букв в возвращаемых именах произвольный.
-
-**Выражения коллекций из C# 12.** В [выражении коллекции](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/collection-expressions) `[a, b]` элементы перечислены в квадратных скобках. В `string[] methods = ["GET", "POST"];` тип слева указывает, что нужен массив строк. В вызове `GetTopMethods(["GET", "POST"])` целевой тип выражения задаёт параметр `IEnumerable<string>`.
+- Начни с самых частых методов. При равной частоте упорядочи метки по возрастанию без учёта регистра.
+- Если разных методов меньше трёх, верни все. Для пустого входа верни пустую последовательность. Регистр меток в результате произвольный.
+- Посчитай частоты через `CountBy`. Сравнивай метки с помощью `StringComparer.OrdinalIgnoreCase` при подсчёте и сортировке.
 
 Для `["get", "POST", "GET", "put", "post", "DELETE", "delete", "GET"]` ожидаются `GET: 3`, `DELETE: 2`, `POST: 2` в этом порядке. Здесь имена записаны прописными буквами для наглядности.
 
-<details><summary>Необязательная подсказка</summary><p>После CountBy подумай о двух ключах сортировки и Take(3).</p></details>
+<details><summary>Необязательная подсказка</summary><p>После <code>CountBy</code> используй <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.orderbydescending?view=net-9.0#system-linq-enumerable-orderbydescending-2(system-collections-generic-ienumerable((-0))-system-func((-0-1)))"><code>OrderByDescending</code></a> для основной сортировки, <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.thenby?view=net-9.0#system-linq-enumerable-thenby-2(system-linq-iorderedenumerable((-0))-system-func((-0-1))-system-collections-generic-icomparer((-1)))"><code>ThenBy</code></a> с компаратором для равных частот и <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.take?view=net-9.0#system-linq-enumerable-take-1(system-collections-generic-ienumerable((-0))-system-int32)"><code>Take(int count)</code></a> для ограничения числа пар.</p></details>
 
 ~~~csharp
 using System;
@@ -208,11 +219,13 @@ public static class Program
     static IEnumerable<(string Method, int Count)> GetTopMethods(
         IEnumerable<string> methods)
     {
-        // Вход — последовательность меток HTTP-методов из выгрузки.
-        // Используй CountBy с StringComparer.OrdinalIgnoreCase для подсчёта вхождений.
-        // Верни до трёх пар (Method, Count) по убыванию Count.
-        // При равных Count сортируй Method по возрастанию с StringComparer.OrdinalIgnoreCase.
-        // Регистр имён произвольный. Пустой вход даёт пустой результат.
+        // Из последовательности строковых меток верни до трёх самых частых HTTP-методов.
+        // Для каждого верни пару (Method, Count) с меткой и числом её появлений.
+        // GET и get считай одной меткой. Регистр в результате произвольный.
+        // Начни с самых частых методов. При равной частоте упорядочи метки
+        // по возрастанию без учёта регистра. Если разных методов меньше трёх, верни все.
+        // Для пустого входа верни пустой результат.
+        // Частоты посчитай через CountBy. Метки сравнивай через StringComparer.OrdinalIgnoreCase.
 
         throw new NotImplementedException();
     }

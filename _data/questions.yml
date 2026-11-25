@@ -26,7 +26,7 @@
   tag: C# 13 · params
   type: сравнение
   available_from: '2026-11-20'
-  prompt: "Когда ты выбрал бы params ReadOnlySpan<T> вместо params T[] и какое у этого ограничения?"
+  prompt: "Метод Sum один раз проходит по аргументам. Какой вариант ты выберешь для частых вызовов Sum(10, 20, 30) на .NET 9: params int[] или params ReadOnlySpan<int>? Объясни, когда разница в выделении массива имеет значение."
 - id: N9-CB-01
   lesson_number: 1
   topic: NET9-COUNTBY
@@ -91,20 +91,17 @@
   type: сравнение
   available_from: '2026-11-21'
   prompt: 'Чем audit?.Text = value отличается от text ??= value?'
-- id: CS14-NCA-03
-  lesson_number: 2
-  topic: CS14-NULL-ASSIGN
-  tag: 'C# 14 · null-conditional assignment'
-  type: исправление
-  available_from: '2026-11-21'
-  prompt: 'Почему audit?.Counter++ не компилируется? Покажи допустимую альтернативу.'
 - id: CS14-NCA-04
   lesson_number: 2
   topic: CS14-NULL-ASSIGN
   tag: 'C# 14 · null-conditional assignment'
   type: объяснение
   available_from: '2026-11-21'
-  prompt: 'Является ли audit?.Counter += 1 атомарной операцией? Почему?'
+  prompt: >-
+    Два потока одновременно выполняют audit?.Counter += 1 для одного объекта
+    с обычным свойством int Counter. Каждая операция читает значение и записывает
+    результат прибавления. Гарантирует ли ?. увеличение счётчика на два?
+    Объясни.
 - id: CS14-NCA-05
   lesson_number: 2
   topic: CS14-NULL-ASSIGN
@@ -117,6 +114,16 @@
     Можно наблюдать за вызовами метода, который строит отчёт.
     Подбери вход и способ проверки, которые различат версии, даже если
     они вернут одинаковую сводку. Что должна показать проверка?
+- id: CS14-NCA-06
+  lesson_number: 2
+  topic: CS14-NULL-ASSIGN
+  tag: 'C# 14 · null-conditional assignment'
+  type: исправление
+  available_from: '2026-11-25'
+  prompt: >-
+    Строка audit?.Text += BuildSummary() дописывает новый текст к старому.
+    Как изменить запись, чтобы новый отчёт заменил прежний, а при audit == null
+    вызов BuildSummary() пропускался?
 - id: N9-AB-01
   lesson_number: 2
   topic: NET9-AGGREGATEBY

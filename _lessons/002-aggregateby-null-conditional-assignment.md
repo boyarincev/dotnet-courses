@@ -19,6 +19,20 @@ browser_start_snippet: full-program
 
 `CountBy(keySelector)` возвращает пары «ключ, количество элементов». Если выбрать маршрут в качестве ключа, два запроса к `/orders` и один к `/health` дадут пары `(/orders, 2)` и `(/health, 1)`. `AggregateBy` накапливает **произвольное состояние для каждого ключа**. В этой сводке сравниваем маршруты без учёта регистра и накапливаем для каждого счётчик и сумму длительностей.
 
+В примере используем перегрузку с фиксированным начальным значением `seed`. [Сигнатура в исходнике .NET 9](https://github.com/dotnet/runtime/blob/v9.0.0/src/libraries/System.Linq/src/System/Linq/AggregateBy.cs#L11-L16)
+
+```csharp
+public static IEnumerable<KeyValuePair<TKey, TAccumulate>> AggregateBy<TSource, TKey, TAccumulate>(
+    this IEnumerable<TSource> source,
+    Func<TSource, TKey> keySelector,
+    TAccumulate seed,
+    Func<TAccumulate, TSource, TAccumulate> func,
+    IEqualityComparer<TKey>? keyComparer = null)
+    where TKey : notnull;
+```
+
+В вызове ниже `source` — это `calls` перед точкой, а `TAccumulate` — тип пары из счётчика и суммы.
+
 ```csharp
 var stats = calls.AggregateBy(
     // Ключ группы — маршрут запроса.
@@ -42,7 +56,7 @@ var stats = calls.AggregateBy(
 ~~~
 {: #output-aggregateby }
 
-Если опустить `keyComparer`, применяется [сравнение по умолчанию для типа ключа](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/Dictionary.cs#L58-L82). Когда начальное значение зависит от ключа, используй [перегрузку с `seedSelector`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.aggregateby?view=net-9.0#overloads). Функция типа `Func<TKey, TAccumulate>` вычисляет начальное значение [при первой встрече ключа в очередном перечислении](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/src/System/Linq/AggregateBy.cs#L103-L131).
+Если опустить `keyComparer`, применяется [сравнение по умолчанию для типа ключа](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/Dictionary.cs#L58-L82). Когда начальное значение зависит от ключа, используй [перегрузку с `seedSelector`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.aggregateby?view=net-9.0#overloads).
 
 Метод возвращает **`IEnumerable<KeyValuePair<TKey, TAccumulate>>`**. Как и в [`CountBy`](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/src/System/Linq/CountBy.cs#L22-L42), вычисление отложено. При перечислении `AggregateBy` [полностью читает вход до выдачи первой пары](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/src/System/Linq/AggregateBy.cs#L71-L99), а при повторном перечислении заново читает источник. Реализация .NET 9 для непустого входа [создаёт словарь с одним накопленным значением на ключ](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/src/System/Linq/AggregateBy.cs#L85-L99).
 
@@ -85,9 +99,7 @@ Audit: ready
 ~~~
 {: #output-conditional-assignment }
 
-При `audit == null` **[правая часть не вычисляется](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/proposals/csharp-14.0/null-conditional-assignment#specification)**. В этом примере вызов `BuildSummary()` и построение строки отчёта пропускаются.
-
-Условный доступ поддерживает составное присваивание, например `audit?.Text += " (проверено)"`, и присваивание элементу массива, например `array?[0] = value`. Инкремент `++` и декремент `--` с условным доступом недопустимы ([правила условного присваивания](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/member-access-operators#null-conditional-operators--and-)). Для нескольких действий подходит один блок `if`.
+При `audit == null` **[правая часть не вычисляется](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14#null-conditional-assignment)**. В этом примере вызов `BuildSummary()` и построение строки отчёта пропускаются.
 
 **Обновить текст или создать объект отчёта?** Рассмотрим два отдельных варианта для переменной `audit` типа `Audit?`.
 
@@ -203,7 +215,7 @@ Audit: /health=1/5; /orders=4/220
 
 При ревью метода отдельно проверь, когда вычисляется строка отчёта. При `audit == null` построение строки должно пропускаться, даже если сводка возвращается правильно.
 
-<details><summary>Необязательная подсказка</summary><p>После AggregateBy используй OrderByDescending по сумме байтов и Take(2). Сначала материализуй результат, затем формируй строку только внутри условного присваивания.</p></details>
+<details><summary>Необязательная подсказка</summary><p>После <code>AggregateBy</code> используй <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.orderbydescending?view=net-10.0#system-linq-enumerable-orderbydescending-2(system-collections-generic-ienumerable((-0))-system-func((-0-1)))"><code>OrderByDescending</code></a> по сумме байтов и <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.take?view=net-10.0#system-linq-enumerable-take-1(system-collections-generic-ienumerable((-0))-system-int32)"><code>Take(int count)</code></a>, чтобы оставить до двух клиентов. Сначала сохрани результат через <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.toarray?view=net-10.0"><code>ToArray</code></a>, затем формируй строку только внутри условного присваивания.</p></details>
 
 ~~~csharp
 using System;

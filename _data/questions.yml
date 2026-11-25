@@ -209,3 +209,66 @@
     В словарь добавлены пары ("worker", 2) и ("gateway", 5) в этом порядке.
     Затем вызывается entries.Insert(0, "metrics", 1). Какую пару вернёт
     GetAt(1) и почему?
+
+- id: CS15-CH-01
+  lesson_number: 4
+  topic: CS15-CLOSED-HIERARCHIES
+  tag: 'C# 15 · закрытые иерархии'
+  type: понимание
+  available_from: '2026-11-25'
+  prompt: >-
+    Базовый тип Check объявлен как closed record class с прямыми наследниками
+    Healthy и Issue. Что произойдёт, если другая сборка объявит третий тип
+    с прямым наследованием от Check?
+- id: CS15-CH-02
+  lesson_number: 4
+  topic: CS15-CLOSED-HIERARCHIES
+  tag: 'C# 15 · закрытые иерархии'
+  type: анализ кода
+  available_from: '2026-11-25'
+  prompt: >-
+    В switch по Check? есть ветки Healthy и Issue. Какой вход эти ветки
+    не покрывают? Зачем нужна отдельная ветка для него в примере с LeftJoin?
+- id: CS15-CH-03
+  lesson_number: 4
+  topic: CS15-CLOSED-HIERARCHIES
+  tag: 'C# 15 · закрытые иерархии'
+  type: сравнение
+  available_from: '2026-11-25'
+  prompt: >-
+    В исходной сборке к closed-иерархии добавили прямого наследника.
+    Сравни два switch-выражения, которые пока знают только старые типы.
+    Одно заканчивается веткой _, у другого её нет. Как каждое отреагирует
+    при компиляции на новый тип?
+- id: N10-LJ-01
+  lesson_number: 4
+  topic: NET10-LEFTJOIN
+  tag: '.NET 10 · Enumerable.LeftJoin'
+  type: прогноз результата
+  available_from: '2026-11-25'
+  prompt: >-
+    Каталог содержит api и worker в этом порядке. Справа есть две проверки
+    api и ни одной для worker. Сколько раз LeftJoin вызовет селектор
+    результата при полном перечислении? Какие левые имена и правые
+    элементы он получит?
+- id: N10-LJ-02
+  lesson_number: 4
+  topic: NET10-LEFTJOIN
+  tag: '.NET 10 · Enumerable.LeftJoin'
+  type: проектирование проверки
+  available_from: '2026-11-25'
+  prompt: >-
+    Ошибочный BuildRows использует Join и выдаёт строки только для
+    совпавших сводок. Придумай короткий случай, в котором есть и найденная
+    сводка, и клиент без пары. Запиши ожидаемые типы строк и значения полей.
+    Какие строки выдаст ошибочный метод?
+- id: N10-LJ-03
+  lesson_number: 4
+  topic: NET10-LEFTJOIN
+  tag: '.NET 10 · Enumerable.LeftJoin'
+  type: проектирование проверки
+  available_from: '2026-11-25'
+  prompt: >-
+    Ошибочный BuildRows оставляет только первую сводку каждого клиента.
+    Придумай вход, на котором это меняет отчёт. Укажи ожидаемые строки
+    и их порядок.

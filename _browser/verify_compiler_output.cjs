@@ -289,9 +289,16 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId, v
         }, template);
         await installTemplate();
         const status = page.locator("#lesson-completion-status");
+        const headerBadge = page.locator(".eyebrow [data-lesson-completion-badge]");
         const lessonQuiz = page.locator("[data-lesson-quiz-link]");
         const instructions = page.locator("[data-lesson-practice-instructions]");
+        const assertBadge = async (badge, completed) => {
+            assert.ok(await badge.isVisible(), "The lesson badge must be shown in both states");
+            assert.equal(await badge.textContent(), completed ? "Пройден" : "Не пройден");
+            assert.equal((await badge.getAttribute("data-completed")) !== null, completed);
+        };
         assert.equal(await status.textContent(), "Урок ещё не пройден.");
+        await assertBadge(headerBadge, false);
         assert.ok(await instructions.isVisible());
         assert.equal(await lessonQuiz.isVisible(), false);
         const solution = "static Number Solve() => 42;\n    static void AfterChecks() {}";
@@ -407,6 +414,7 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId, v
         await start(compiler, program.replace("AfterChecks() {}", 'AfterChecks() { throw new Exception("after checks"); }'));
         await checkFailure(compiler, "Все проверки пройдены\n", "Execution error: Exception: after checks");
         assert.notEqual(await status.textContent(), "Урок пройден.");
+        await assertBadge(headerBadge, false);
 
         assert.ok(await compiler.evaluate(code => window.DotnetBrowserEditor.setCode(code), program));
         const runWithShortcut = viewport?.width <= 600;
@@ -419,6 +427,7 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId, v
             await runCurrent.click();
         }
         await page.waitForFunction(() => document.getElementById("lesson-completion-status").textContent === "Урок пройден.");
+        await assertBadge(headerBadge, true);
         await lessonQuiz.waitFor();
         assert.ok(await lessonQuiz.evaluate(link => link.parentElement.contains(document.getElementById("lesson-completion-status"))),
             "The lesson quiz link must appear next to the lesson status");
@@ -446,6 +455,7 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId, v
         await start(compiler, wrongProgram);
         await waitForOutput(compiler, "synthetic Assert failed");
         assert.equal(await verifiedField.inputValue(), verified, "A later failing run must preserve the verified method");
+        await assertBadge(headerBadge, true);
 
         await page.locator("#page-editor-copy").click();
         await page.waitForFunction(source => navigator.clipboard.readText().then(text => text === source), wrongProgram);
@@ -457,15 +467,17 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId, v
 
         await page.reload({waitUntil: "domcontentloaded"});
         await verifiedField.waitFor({state: "visible"});
+        await assertBadge(headerBadge, true);
         assert.equal(await taskField.inputValue(), starter, "The canonical starter must survive reload");
         assert.equal(await verifiedField.inputValue(), verified, "The last verified method must survive reload");
+        const lessonNumber = await headerBadge.getAttribute("data-lesson");
         await page.goto(new URL(coursePath, site).href, { waitUntil: "domcontentloaded" });
-        const badge = page.locator('[data-lesson-completion-badge][data-lesson="1"]');
-        await badge.waitFor({ state: "visible" });
-        assert.equal(await badge.textContent(), "Пройден");
+        const badges = page.locator(".lesson-card [data-lesson-completion-badge]");
+        await assertBadge(badges.and(page.locator(`[data-lesson="${lessonNumber}"]`)), true);
         const courseStart = page.locator("[data-course-start]");
-        const nextBadge = page.locator("[data-lesson-completion-badge][hidden]").first();
+        const nextBadge = badges.and(page.locator(":not([data-completed])")).first();
         if (await nextBadge.count()) {
+            await assertBadge(nextBadge, false);
             assert.equal(await courseStart.textContent(), "Продолжить с урока " + await nextBadge.getAttribute("data-lesson"));
             assert.equal(await courseStart.getAttribute("href"), await nextBadge.evaluate(node => node.closest("a").getAttribute("href")));
         } else {
@@ -540,6 +552,7 @@ async function verifyEmbeddedWorkspace(browser) {
         const iframe = page.locator("#course-compiler");
         const feedback = frame.locator("#editor-run-feedback");
         const run = frame.locator("#editor-run-current");
+        const editorPane = frame.locator(".CodeMirror");
         const runHasFocus = () => run.evaluate(button => button === document.activeElement);
         assert.equal(await frame.locator("html.course-editor-embedded").getAttribute("lang"), "ru");
         assert.ok(await run.isVisible(), "Run must be visible in the embedded editor");
@@ -573,8 +586,10 @@ async function verifyEmbeddedWorkspace(browser) {
                 return toggle.top < heading.bottom && toggle.bottom > heading.top;
             }), "The fullscreen control belongs on the editor heading row");
         };
-        await waitForLayout(false);
+        await waitForLayout(true);
         await verifyControlsLayout();
+        assert.ok((await editorPane.boundingBox()).height > 480,
+            "The normal desktop code viewport must be taller than 480 px");
 
         const runWithShortcut = async source => {
             assert.ok(await iframe.evaluate((element, code) => {
@@ -591,7 +606,6 @@ async function verifyEmbeddedWorkspace(browser) {
         await output.filter({ hasText: "Keyboard workspace" }).waitFor();
         await frame.locator(readyRunSelector).waitFor();
         assert.equal(await feedback.textContent(), "", "Success is announced in the console");
-        const editorPane = frame.locator(".CodeMirror");
         const codeField = editorPane.locator("textarea");
         const codeHasFocus = () => codeField.evaluate(editor => editor === document.activeElement);
         assert.ok(await codeHasFocus(),
@@ -615,7 +629,6 @@ async function verifyEmbeddedWorkspace(browser) {
         const expandedEditor = frame.locator("html.course-editor-fullscreen");
         const editorCode = () => iframe.evaluate(element => element.contentWindow.DotnetBrowserEditor.getCode());
         const compilerDocument = await iframe.evaluateHandle(element => element.contentDocument);
-        const regularHeight = (await editorPane.boundingBox()).height;
         const initialOutput = await output.textContent();
 
         const checkExpanded = async () => {
@@ -645,8 +658,8 @@ async function verifyEmbeddedWorkspace(browser) {
         await checkExpanded();
         await waitForLayout(false);
         const nativeFullscreen = await workspace.evaluate(element => document.fullscreenElement === element);
-        assert.ok((await editorPane.boundingBox()).height > regularHeight,
-            "Expanding the workspace must give the code pane more room");
+        assert.ok((await editorPane.boundingBox()).height > 480,
+            "The editor must retain a tall code viewport with the fullscreen console to its right");
         assert.equal(await editorCode(), keyboardProgram);
         assert.equal(await output.textContent(), initialOutput);
         const nativeProgram = keyboardProgram.replace("Keyboard workspace", "Native fullscreen");
@@ -661,6 +674,7 @@ async function verifyEmbeddedWorkspace(browser) {
         await checkExpanded();
         await page.keyboard.press("Escape");
         await checkCollapsed();
+        await waitForLayout(true);
         assert.ok(await iframe.evaluate((element, before) => element.contentDocument === before, compilerDocument),
             "Toggling fullscreen must retain the live compiler document");
         await compilerDocument.dispose();
@@ -670,11 +684,14 @@ async function verifyEmbeddedWorkspace(browser) {
         await page.setViewportSize({ width: 390, height: 844 });
         await waitForLayout(true);
         await verifyControlsLayout();
+        assert.ok((await editorPane.boundingBox()).height > 256,
+            "The normal mobile code viewport must be taller than 256 px");
         await workspace.evaluate(element => {
             element.requestFullscreen = () => Promise.reject(new DOMException("Fullscreen denied for test", "NotAllowedError"));
         });
         await fullscreen.click();
         await checkExpanded();
+        await waitForLayout(true);
         assert.equal(await workspace.getAttribute("aria-modal"), "true");
         assert.equal(await page.evaluate(() => document.fullscreenElement), null);
 
@@ -703,13 +720,14 @@ async function verifyEmbeddedWorkspace(browser) {
         await checkExpanded();
         await page.keyboard.press("Escape");
         await checkCollapsed();
+        await waitForLayout(true);
         assert.equal(await editorCode(), inputProgram);
         assert.equal(await output.textContent(), fullscreenOutput);
 
         await page.reload({ waitUntil: "domcontentloaded" });
         await openLessonCompiler(page);
         assert.equal(await editorCode(), inputProgram, "Fullscreen edits must survive a page reload");
-        console.log("Embedded editor: checked responsive panes, " + (nativeFullscreen ? "native fullscreen, " : "") +
+        console.log("Embedded editor: checked larger normal editor with console below, " + (nativeFullscreen ? "native fullscreen, " : "") +
             "viewport fallback, draft, Ctrl+Enter, Escape, autocomplete and ReadLine");
     } finally {
         await page.close();

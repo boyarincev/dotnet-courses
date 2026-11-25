@@ -14,7 +14,10 @@ layout: default
   {% assign course_lessons = site.memory_lessons %}
   {% assign course_questions = site.data.memory_questions %}
 {% endif %}
-<div class="eyebrow"><a href="{{ course_url | relative_url }}">{{ course_title }}</a> · Урок {{ page.lesson_number }} · {{ page.lesson_date }}</div>
+<div class="eyebrow">
+  <a href="{{ course_url | relative_url }}">{{ course_title }}</a> · Урок {{ page.lesson_number }} · {{ page.lesson_date }}
+  {% include lesson-completion-badge.html course=course_id lesson=page.lesson_number %}
+</div>
 <h1>{{ page.title | escape }}</h1>
 {% include course-review.html course=course_id quiz=quiz_url lessons=course_lessons %}
 {% include course-quiz-assets.html questions=course_questions %}

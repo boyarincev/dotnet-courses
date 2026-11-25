@@ -22,6 +22,13 @@ const courseReview = page => page.locator("[data-course-review]");
 const reviewStatus = page => courseReview(page).locator("[data-course-review-status]");
 const reviewLink = page => courseReview(page).getByRole("link", { name: "Повторить сегодня" });
 const practiceKey = (kind, course, lesson = 1) => "dotnet-courses:" + kind + ":" + course + ":" + lesson;
+const lessonBadge = (page, lesson) => page.locator('.lesson-card [data-lesson-completion-badge][data-lesson="' + lesson + '"]');
+
+async function assertBadge(badge, completed) {
+    assert.ok(await badge.isVisible(), "The lesson badge must be shown in both states");
+    assert.equal(await badge.textContent(), completed ? "Пройден" : "Не пройден");
+    assert.equal((await badge.getAttribute("data-completed")) !== null, completed);
+}
 
 async function openQuiz(page, course, query = "") {
     await page.goto(quizUrl(course, query));
@@ -125,6 +132,7 @@ async function verifyLessonQuiz(browser, course, lesson) {
             number: Number(link.querySelector("[data-lesson-completion-badge]").dataset.lesson),
             url: link.href,
         })));
+        for (const item of courseLessons) await assertBadge(lessonBadge(page, item.number), false);
         const otherLesson = courseLessons.find(item => item.number > lesson)
             ?? courseLessons.find(item => item.number !== lesson);
         if (course === mainCourse) assert.ok(otherLesson, "Cover acceptance of a different lesson");
@@ -354,6 +362,14 @@ async function verifyQuestionBank(browser) {
 
         await page.goto(courseUrl(mainCourse));
         await markPractice(page, mainCourse, 1, 3);
+        await assertBadge(lessonBadge(page, 1), true);
+        const gap = lessonBadge(page, 2);
+        await assertBadge(gap, false);
+        await assertBadge(lessonBadge(page, 3), true);
+        const resume = page.locator("[data-course-start]");
+        assert.equal(await resume.textContent(), "Продолжить с урока 2");
+        assert.equal(await resume.getAttribute("href"), await gap.evaluate(badge => badge.closest("a").getAttribute("href")),
+            "Resume must lead to the first incomplete lesson even after passing a later one");
         await openQuiz(page, mainCourse);
         await filter.waitFor();
         assert.equal(await filter.inputValue(), "completed");
@@ -533,6 +549,8 @@ async function verifyBackup(browser, backup) {
         await publishTestQuestions(page, [courseUrl(mainCourse), quizUrl(mainCourse), addedLesson.url],
             addedQuestion, orphanedQuestion);
         await openBackup(page, mainCourse);
+        const badge = lessonBadge(page, 2);
+        await assertBadge(badge, false);
 
         const sourceDraft = practiceKey("compiler-draft", mainCourse, 2);
         const sourceMethod = practiceKey("practice-draft", mainCourse, 2);
@@ -574,6 +592,7 @@ async function verifyBackup(browser, backup) {
         await feedback.filter({ hasText: "Прежние данные сохранены." }).waitFor();
         assert.deepEqual(await readDrafts(), oldValues, "Failed import rolls back practice changes");
         assert.equal(await page.evaluate(course => window.DotnetLearning.progress.get("lesson", course, 2), mainCourse), false);
+        await assertBadge(badge, false);
         await page.evaluate(() => window.restoreTestSetItem());
         await confirmAction(page, importCourse, true);
         await feedback.filter({ hasText: "Копия импортирована. Пропущено записей вне актуальной программы — 5." }).waitFor();
@@ -581,6 +600,8 @@ async function verifyBackup(browser, backup) {
         assert.deepEqual(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), [sourceMethod, sourceSolution]),
             ["Сохранённый метод", "Сохранённое решение"]);
         assert.ok(await page.evaluate(course => window.DotnetLearning.progress.get("lesson", course, 2), mainCourse));
+        await assertBadge(badge, true);
+        await assertBadge(lessonBadge(page, addedLesson.number), false);
         const id = Object.keys(imported.progress).find(questionId => questionId !== deletedQuestionId);
         assert.ok(id);
         assert.deepEqual(await readRecord(page, mainCourse, id), imported.progress[id]);
@@ -609,8 +630,7 @@ async function verifyBackup(browser, backup) {
             "Completing the new lesson seeds its cards on the usual schedule");
 
         await openBackup(page, mainCourse);
-        const badge = page.locator('[data-lesson-completion-badge][data-lesson="2"]');
-        await badge.waitFor();
+        await assertBadge(badge, true);
         await reviewLink(page).waitFor();
         const deleteCourse = () => page.locator("#course-delete-progress").click();
         const legacyKeys = [mainCourse, memoryCourse].map(course => "dotnet-courses:fsrs-7:v1:" + course);
@@ -618,12 +638,13 @@ async function verifyBackup(browser, backup) {
         await confirmAction(page, deleteCourse, false);
         assert.deepEqual(await readDrafts(), ["Новый код", "Другой урок", "Другой курс"]);
         assert.deepEqual(await readRecord(page, mainCourse, id), backup.progress[id]);
-        assert.equal(await badge.isVisible(), true);
+        await assertBadge(badge, true);
         assert.equal(await reviewLink(page).isVisible(), true);
 
         await confirmAction(page, deleteCourse, true);
         await feedback.filter({ hasText: "Прогресс курса удалён." }).waitFor();
-        await badge.waitFor({ state: "hidden" });
+        await assertBadge(badge, false);
+        await assertBadge(lessonBadge(page, addedLesson.number), false);
         await reviewLink(page).waitFor({ state: "hidden" });
         assert.deepEqual(await readDrafts(), [null, null, "Другой курс"]);
         assert.equal(await readRecord(page, mainCourse, id) ?? null, null);

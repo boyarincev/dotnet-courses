@@ -15,7 +15,7 @@
 {% for lesson in sorted_lessons %}
   <a class="lesson-card" href="{{ lesson.url | relative_url }}">
     <small>Урок {{ lesson.lesson_number }} · {{ lesson.lesson_date }} · {{ lesson.series }}</small>
-    <span class="lesson-completion-badge" data-lesson-completion-badge data-course="{{ include.course }}" data-lesson="{{ lesson.lesson_number }}" hidden>Пройден</span>
+    {% include lesson-completion-badge.html course=include.course lesson=lesson.lesson_number %}
     <h3>{{ lesson.title | escape }}</h3>
     <p>{{ lesson.summary | escape }}</p>
     <span>{{ lesson.topic_id }}{% if lesson.topic_id and lesson.dotnet_feature %} · {% endif %}{{ lesson.csharp_feature }}{% if lesson.csharp_feature and lesson.dotnet_feature %} · {% endif %}{{ lesson.dotnet_feature }}</span>

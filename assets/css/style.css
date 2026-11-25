@@ -44,9 +44,8 @@ h1,h2,h3{line-height:1.2;letter-spacing:-.045em}h1{font-size:clamp(35px,6vw,60px
 .lesson-practice-instructions{color:var(--muted);font-size:14px}
 .editor-export-actions{margin-top:10px}
 .lesson-browser{container:lesson-browser / inline-size}
-.lesson-compiler{display:block;width:100%;height:680px;border:1px solid var(--code-border);border-radius:14px;background:var(--surface)}
-@container lesson-browser (max-width:702px){.lesson-compiler{height:780px}}
-@container lesson-browser (max-width:410px){.lesson-compiler{height:740px}}
+.lesson-compiler{display:block;width:100%;height:clamp(57rem,calc(100vh + 9rem),64rem);border:1px solid var(--code-border);border-radius:14px;background:var(--surface)}
+@container lesson-browser (max-width:702px){.lesson-compiler{height:clamp(53rem,calc(100vh + 4rem),57rem)}}
 
 html.lesson-editor-expanded{overflow:hidden}
 #lesson-editor-workspace.is-expanded{
@@ -71,6 +70,7 @@ html.lesson-editor-expanded{overflow:hidden}
   height:0;
   min-height:calc(24rem + 2px);
 }
+@media(max-width:718px){#lesson-editor-workspace.is-expanded .lesson-compiler{min-height:calc(34rem + 2px)}}
 .draft-status{color:var(--muted);font-size:13px;line-height:1.5;margin:7px 0 15px}
 .lesson-jump-nav{display:flex;flex-wrap:wrap;gap:8px 16px;margin:16px 0 24px}
 .lesson-jump-nav a{text-decoration:underline;text-underline-offset:3px}
@@ -99,4 +99,5 @@ html.lesson-editor-expanded{overflow:hidden}
 /* Lesson completion */
 .lesson-completion-status{font-weight:700}
 .lesson-practice-status:has([data-lesson-quiz-link]:not([hidden])) .lesson-completion-status{color:var(--primary)}
-.lesson-card .lesson-completion-badge{margin-inline-start:8px;background:var(--light);color:var(--primary);border-radius:99px;padding:3px 8px;font-size:12px;font-weight:700;white-space:nowrap}
+.lesson-completion-badge{display:inline-block;margin-inline-start:8px;border:1px solid var(--border);border-radius:99px;padding:2px 8px;background:var(--bg);color:var(--muted);font-size:12px;font-weight:700;line-height:1.4;letter-spacing:normal;text-transform:none;white-space:nowrap}
+.lesson-completion-badge[data-completed]{border-color:transparent;background:var(--light);color:var(--primary)}

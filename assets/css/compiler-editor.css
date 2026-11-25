@@ -16,7 +16,6 @@ html.course-editor-embedded {
   --editor-string: #116347;
   --editor-error: #9b292d;
   --editor-warning: #82530b;
-  --editor-code-height: clamp(24rem, 47vw, 30rem);
   --editor-font: ui-monospace, Consolas, "Liberation Mono", monospace;
 }
 
@@ -54,9 +53,10 @@ html.course-editor-embedded .page > main {
 
 html.course-editor-embedded .compiler-container {
   display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 0.75rem;
-  height: auto;
+  height: 100vh;
   max-height: none;
   padding: 0.75rem;
   overflow: visible;
@@ -74,6 +74,7 @@ html.course-editor-embedded :is(.editor-section, .output-section) {
 }
 
 html.course-editor-embedded .section-header {
+  flex: none;
   min-height: 3rem;
   padding: 0.5rem 0.75rem;
   flex-wrap: wrap;
@@ -187,9 +188,16 @@ html.course-editor-embedded .output-container {
   min-width: 0;
 }
 
+html.course-editor-embedded .editor-container {
+  display: flex;
+  flex-direction: column;
+}
+
 html.course-editor-embedded :is(#code-editor, .CodeMirror) {
+  flex: 1;
   width: 100%;
-  height: var(--editor-code-height);
+  height: 0;
+  min-height: 0;
   border: 0;
   background: var(--editor-surface);
   color: var(--editor-ink);
@@ -270,6 +278,7 @@ html.course-editor-embedded .CodeMirror-hint-active {
 }
 
 html.course-editor-embedded #editor-run-bar {
+  flex: none;
   margin: 0;
   padding: 0.5rem 0.75rem;
   border-top: 1px solid var(--editor-border);
@@ -337,7 +346,7 @@ html.course-editor-embedded #editor-draft-status {
 }
 
 html.course-editor-embedded .output-container {
-  min-height: 10rem;
+  min-height: 12rem;
 }
 
 html.course-editor-embedded #output {
@@ -414,13 +423,21 @@ html.course-editor-embedded #output .interactive-output input:focus-visible {
   outline-offset: 1px;
 }
 
-@media (max-width: 700px) {
-  html.course-editor-embedded {
-    --editor-code-height: clamp(16rem, 65vw, 20rem);
-  }
+html.course-editor-embedded.course-editor-fullscreen {
+  overscroll-behavior: contain;
+}
 
+html.course-editor-embedded.course-editor-fullscreen .compiler-container {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+html.course-editor-embedded.course-editor-fullscreen .output-container {
+  min-height: 0;
+}
+
+@media (max-width: 700px) {
   html.course-editor-embedded .compiler-container {
-    grid-template-columns: minmax(0, 1fr);
     padding: 0.5rem;
     gap: 0.5rem;
   }
@@ -440,38 +457,37 @@ html.course-editor-embedded #output .interactive-output input:focus-visible {
   html.course-editor-embedded .output-container {
     min-height: clamp(10rem, 48vw, 13rem);
   }
-}
-
-html.course-editor-embedded.course-editor-fullscreen {
-  --editor-code-height: 0;
-  overscroll-behavior: contain;
-}
-
-html.course-editor-embedded.course-editor-fullscreen .compiler-container {
-  grid-template-rows: minmax(0, 1fr);
-  height: 100vh;
-}
-
-html.course-editor-embedded.course-editor-fullscreen .output-container {
-  min-height: 0;
-}
-
-html.course-editor-embedded.course-editor-fullscreen .editor-container {
-  display: flex;
-  flex-direction: column;
-}
-
-html.course-editor-embedded.course-editor-fullscreen :is(#code-editor, .CodeMirror) {
-  flex: 1;
-  min-height: 0;
-}
-
-html.course-editor-embedded.course-editor-fullscreen #editor-run-bar {
-  flex: none;
-}
-
-@media (max-width: 700px) {
   html.course-editor-embedded.course-editor-fullscreen .compiler-container {
-    grid-template-rows: minmax(17rem, 2fr) minmax(9rem, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  html.course-editor-embedded.course-editor-fullscreen .output-container {
+    min-height: clamp(6rem, 16vh, 9rem);
+  }
+}
+
+@media (max-width: 350px) {
+  html.course-editor-embedded .editor-run-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 4fr);
+    column-gap: 0.375rem;
+  }
+
+  html.course-editor-embedded .editor-run-actions button {
+    font-size: 0.8125rem;
+  }
+
+  html.course-editor-embedded #editor-run-current {
+    padding: 0.375rem 0.5rem;
+  }
+
+  html.course-editor-embedded .section-header,
+  html.course-editor-embedded .console-controls button {
+    padding-inline: 0.5rem;
+  }
+
+  html.course-editor-embedded .console-controls {
+    column-gap: 0.375rem;
   }
 }

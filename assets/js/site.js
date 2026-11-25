@@ -78,13 +78,16 @@
     }
 
     lessonBadges.forEach(badge => {
-      badge.hidden = progress.get("lesson", badge.dataset.course, badge.dataset.lesson) !== true;
+      const completed = progress.get("lesson", badge.dataset.course, badge.dataset.lesson);
+      const label = completed === null ? "Прогресс недоступен" : completed ? "Пройден" : "Не пройден";
+      if (badge.textContent !== label) badge.textContent = label;
+      badge.toggleAttribute("data-completed", completed === true);
     });
 
     if (courseStart) {
       const courseBadges = [...lessonBadges].filter(badge => badge.dataset.course === courseStart.dataset.courseStart);
-      const nextLesson = courseBadges.find(badge => badge.hidden);
-      const hasProgress = courseBadges.some(badge => !badge.hidden);
+      const nextLesson = courseBadges.find(badge => !badge.hasAttribute("data-completed"));
+      const hasProgress = courseBadges.some(badge => badge.hasAttribute("data-completed"));
       courseStart.setAttribute("href", nextLesson?.closest(".lesson-card").getAttribute("href") ?? "#course-lessons");
       courseStart.textContent = !hasProgress ? "Начать с первого урока"
         : nextLesson ? `Продолжить с урока ${nextLesson.dataset.lesson}` : "К списку уроков";

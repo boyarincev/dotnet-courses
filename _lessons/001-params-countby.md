@@ -12,7 +12,7 @@ browser_snippets: browser-snippets.js
 browser_start_snippet: full-program
 ---
 ## Зачем это нужно
-Посчитаем, сколько раз встречается каждый HTTP-метод в учебной выгрузке. Метки `GET` и `get` здесь считаем одной категорией.
+Из учебной выгрузки берём метки HTTP-методов и считаем, сколько раз встретился каждый метод. В полном примере две метки `GET` и одна `get` дают общий итог — три запроса. `params` позволяет передать метки отдельными аргументами, а `CountBy` возвращает метки с числом их появлений.
 
 ## 1. C# 13: расширенный `params`
 До C# 13 тип параметра `params` ограничивался [одномерным массивом `T[]`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/method-parameters#params-modifier).

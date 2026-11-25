@@ -102,7 +102,7 @@ internal struct Order
 ~~~
 {: #snippet-allocations-copies-retention }
 
-Суммы разбираются и выводятся с [десятичной точкой инвариантной культуры](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/Globalization/CultureData.cs#L583-L590). В выводе `F2` [задаёт две цифры после десятичного разделителя](https://learn.microsoft.com/en-us/dotnet/standard/base-types/standard-numeric-format-strings#fixed-point-format-specifier-f).
+Суммы разбираются и выводятся с [десятичной точкой инвариантной культуры](https://learn.microsoft.com/en-us/dotnet/api/system.globalization.numberformatinfo.numberdecimalseparator?view=net-10.0#property-value). В выводе `F2` [задаёт две цифры после десятичного разделителя](https://learn.microsoft.com/en-us/dotnet/standard/base-types/standard-numeric-format-strings#fixed-point-format-specifier-f).
 
 Запусти программу командой `dotnet run` и сравни результат с ожидаемым.
 
@@ -115,11 +115,11 @@ After copy change: 1499.90
 
 ## Разберём три разных затраты
 
-**Аллокации.** Для строки `ORD-1042;paid;1499.90` вызов `row.Split(';')` в .NET 10 [создаёт массив `string[]`](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/String.Manipulation.cs#L1860-L1889) и [выделяет память под три новые подстроки](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/String.Manipulation.cs#L2238-L2291).
+**Аллокации.** Для строки `ORD-1042;paid;1499.90` вызов `row.Split(';')` в .NET 10 выделяет массив `string[]` и три строки для отдельных полей ([аллокации при вызове String.Split](https://learn.microsoft.com/en-us/dotnet/api/system.string.split?view=net-10.0#performance-considerations)).
 
 `new List<Order>()` [создаёт объект списка со ссылкой на общий пустой массив `Order[]`](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/List.cs#L29-L40). Первый `Add` [выделяет массив для элементов](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.list-1.add?view=net-10.0#remarks).
 
-**Копирование.** Внутренний массив списка хранит [сами значения `Order` в элементах](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/structs#1682-value-semantics). Индексатор `paid[0]` [читает первый элемент внутреннего массива списка и возвращает `Order` по значению](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/List.cs#L143-L153).
+**Копирование.** Внутренний массив списка хранит [сами значения `Order` в элементах](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/structs#1682-value-semantics). Индексатор `paid[0]` возвращает первый элемент списка по значению ([индексатор `List<T>` в документации .NET 10](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.list-1.item?view=net-10.0#definition)).
 
 `Order snapshot = paid[0]` сохраняет копию структуры в локальной переменной. После `snapshot.Amount = 0m` сумма в копии равна `0m`. В элементе массива она остаётся `1499.90m`. При копировании `Id` копируется ссылка, поэтому [оба поля указывают на одну и ту же строку](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/value-types).
 

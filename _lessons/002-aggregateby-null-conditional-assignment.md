@@ -19,7 +19,7 @@ browser_start_snippet: full-program
 
 `CountBy(keySelector)` возвращает пары «ключ, количество элементов». Если выбрать маршрут в качестве ключа, два запроса к `/orders` и один к `/health` дадут пары `(/orders, 2)` и `(/health, 1)`. `AggregateBy` накапливает **произвольное состояние для каждого ключа**. В этой сводке сравниваем маршруты без учёта регистра и накапливаем для каждого счётчик и сумму длительностей.
 
-В примере используем перегрузку с фиксированным начальным значением `seed`. [Сигнатура в исходнике .NET 9](https://github.com/dotnet/runtime/blob/v9.0.0/src/libraries/System.Linq/src/System/Linq/AggregateBy.cs#L11-L16)
+В примере используем перегрузку с фиксированным начальным значением `seed`. [Перегрузка AggregateBy с параметром seed в справочнике .NET 9](<https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.aggregateby?view=net-9.0#system-linq-enumerable-aggregateby-3(system-collections-generic-ienumerable((-0))-system-func((-0-1))-2-system-func((-2-0-2))-system-collections-generic-iequalitycomparer((-1)))>)
 
 ```csharp
 public static IEnumerable<KeyValuePair<TKey, TAccumulate>> AggregateBy<TSource, TKey, TAccumulate>(
@@ -56,9 +56,9 @@ var stats = calls.AggregateBy(
 ~~~
 {: #output-aggregateby }
 
-Если опустить `keyComparer`, применяется [сравнение по умолчанию для типа ключа](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/Dictionary.cs#L58-L82). Когда начальное значение зависит от ключа, используй [перегрузку с `seedSelector`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.aggregateby?view=net-9.0#overloads).
+Если опустить `keyComparer`, применяется [сравнение по умолчанию для типа ключа](<https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.dictionary-2.-ctor?view=net-9.0#system-collections-generic-dictionary-2-ctor(system-collections-generic-iequalitycomparer((-0)))>). Когда начальное значение зависит от ключа, используй [перегрузку с `seedSelector`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.aggregateby?view=net-9.0#overloads).
 
-Метод возвращает **`IEnumerable<KeyValuePair<TKey, TAccumulate>>`**. Как и в [`CountBy`](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/src/System/Linq/CountBy.cs#L22-L42), вычисление отложено. При перечислении `AggregateBy` [полностью читает вход до выдачи первой пары](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/src/System/Linq/AggregateBy.cs#L71-L99), а при повторном перечислении заново читает источник. Реализация .NET 9 для непустого входа [создаёт словарь с одним накопленным значением на ключ](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/src/System/Linq/AggregateBy.cs#L85-L99).
+Метод возвращает **`IEnumerable<KeyValuePair<TKey, TAccumulate>>`**. Как и в `CountBy`, вычисление отложено. Реализация .NET 9 для непустого входа читает весь источник и сохраняет в словаре одно накопленное значение на ключ перед выдачей первой пары. При повторном перечислении метод заново читает источник. [Итератор AggregateBy в .NET 9](https://github.com/dotnet/runtime/blob/v9.0.0/src/libraries/System.Linq/src/System/Linq/AggregateBy.cs#L66-L99)
 
 В полном примере ниже [`ToArray()` вычисляет сводку сразу и сохраняет её в массиве](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.toarray?view=net-10.0#remarks). И вывод в консоль, и отчёт читают этот массив.
 
@@ -196,7 +196,7 @@ Audit: /health=1/5; /orders=4/220
 ```
 {: #output-full-program }
 
-Фильтр пропустил только ответы со статусами 2xx. Запросы к `/orders` и `/ORDERS` вошли в один итог с [написанием первого встреченного ключа](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/Dictionary.cs#L1124-L1132) `/orders`.
+Фильтр пропустил только ответы со статусами 2xx. Запросы к `/orders` и `/ORDERS` вошли в один итог. В выводе примера остался ключ `/orders`, который встретился первым.
 
 `BuildSummary` вызван один раз, когда появился объект `Audit`. Попробуй убрать `StringComparer.OrdinalIgnoreCase` и предскажи, сколько ключей получится.
 

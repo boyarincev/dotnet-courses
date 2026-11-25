@@ -87,7 +87,7 @@ get: 1
 ~~~
 {: #output-groupby-count }
 
-Если нужны **только счётчики**, [`CountBy` в .NET 9](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-9/libraries#linq) вычисляет их без промежуточных групп строк. В .NET 9 у метода следующая сигнатура. [Сигнатура в исходнике .NET 9](https://github.com/dotnet/runtime/blob/v9.0.0/src/libraries/System.Linq/src/System/Linq/CountBy.cs#L11-L14)
+Если нужны **только счётчики**, [`CountBy` в .NET 9](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-9/libraries#linq) вычисляет их без промежуточных групп строк. В .NET 9 у метода следующая сигнатура. [Справочник CountBy для .NET 9](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.countby?view=net-9.0#definition)
 
 ```csharp
 public static IEnumerable<KeyValuePair<TKey, int>> CountBy<TSource, TKey>(
@@ -119,9 +119,9 @@ get: 1
 ~~~
 {: #output-countby }
 
-Вызов возвращает [`IEnumerable<KeyValuePair<TKey, int>>`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.countby?view=net-9.0#returns). Каждый элемент — пара из ключа и количества его вхождений. В .NET 9 [подсчёт начинается при перечислении](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/src/System/Linq/CountBy.cs#L27-L62). Перед выдачей первой пары `CountBy` читает весь источник и накапливает счётчики по ключам.
+Вызов возвращает [`IEnumerable<KeyValuePair<TKey, int>>`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.countby?view=net-9.0#returns). Каждый элемент — пара из ключа и количества его вхождений. В .NET 9 [подсчёт начинается при перечислении](https://github.com/dotnet/runtime/blob/v9.0.0/src/libraries/System.Linq/src/System/Linq/CountBy.cs#L27-L62). Перед выдачей первой пары `CountBy` читает весь источник и накапливает счётчики по ключам.
 
-При сравнении строк по умолчанию `"GET"` и `"get"` дают два ключа ([тесты `CountBy` в .NET 9](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Linq/tests/CountByTests.cs#L93-L113)). Для нашей выгрузки передадим [`StringComparer.OrdinalIgnoreCase`](https://learn.microsoft.com/en-us/dotnet/api/system.stringcomparer.ordinalignorecase?view=net-9.0), который сравнивает метки без учёта регистра.
+При сравнении строк по умолчанию `"GET"` и `"get"` дают два ключа ([правила сравнения строк](<https://learn.microsoft.com/en-us/dotnet/api/system.string.equals?view=net-9.0#system-string-equals(system-string)>)). Для нашей выгрузки передадим [`StringComparer.OrdinalIgnoreCase`](https://learn.microsoft.com/en-us/dotnet/api/system.stringcomparer.ordinalignorecase?view=net-9.0), который сравнивает метки без учёта регистра.
 ```csharp
 var counts = methods.CountBy(
     keySelector: method => method,

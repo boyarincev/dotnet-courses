@@ -113,9 +113,6 @@ async function verifyLessonExample(browser, lesson) {
     try {
         page.setDefaultTimeout(timeout);
         await page.goto(new URL(route, site).href, { waitUntil: "domcontentloaded" });
-        const reminder = page.locator("#previous-quiz-dialog[open]");
-        if (await reminder.isVisible()) await reminder.getByRole("button", { name: "Продолжить урок" }).click();
-
         const { examples, wrongPractice } = prepareLesson(lesson);
         const example = examples.find(item => item.id === startSnippet);
         const frame = await openLessonCompiler(page);
@@ -282,6 +279,8 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
         }, template);
         await installTemplate();
         const status = page.locator("#lesson-completion-status");
+        const lessonQuiz = page.locator("[data-lesson-quiz-link]");
+        assert.equal(await lessonQuiz.isVisible(), false);
         const solution = "static Number Solve() => 42;\n    static void AfterChecks() {}";
         const program = template.replace("// INSERT_SOLUTION_HERE", solution);
         const wrongProgram = program.replace("=> 42", "=> 41");
@@ -383,6 +382,17 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId) {
         assert.ok(await compiler.evaluate(code => window.DotnetBrowserEditor.setCode(code), program));
         await runCurrent.click();
         await page.waitForFunction(() => document.getElementById("lesson-completion-status").textContent === "Урок пройден.");
+        await lessonQuiz.waitFor();
+        await page.waitForFunction(async () => {
+            const status = document.getElementById("lesson-completion-status");
+            const engine = await window.DotnetQuizSRSReady;
+            const storage = window.DotnetQuizStorage.forCourse(status.dataset.course);
+            const bank = JSON.parse(document.getElementById("question-bank").textContent);
+            const ids = engine.eligible(bank, new Date()).filter(question =>
+                Number(question.lesson_number) === Number(status.dataset.lesson)).map(question => question.id);
+            const records = storage.records(ids);
+            return ids.every(id => records[id]?.card && records[id].history.length === 0);
+        });
         const verified = "using System;\nusing Number = System.Int32;\n\n    " + solution + "\n";
         assert.equal(await taskField.inputValue(), starter, "A passing run must preserve the starter");
         assert.ok(await verifiedField.isVisible() && !(await verifiedField.isEditable()), "The passing solution must be visible and read-only");

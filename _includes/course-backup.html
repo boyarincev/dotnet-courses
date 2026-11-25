@@ -1,0 +1,12 @@
+<details id="course-backup" class="quiz-backup" data-practice-lessons="{% for lesson in include.lessons %}{% if lesson.browser_runtime %}{{ lesson.lesson_number }},{% endif %}{% endfor %}">
+  <summary>Резервная копия курса</summary>
+  <p class="muted">В JSON входят история ответов и сроки повторения, черновики кода, успешные решения и отметки о выполненной практике.</p>
+  <div class="quiz-progress-actions">
+    <button type="button" id="quiz-export-progress" class="button" disabled>Скачать копию (.json)</button>
+    <button type="button" id="quiz-import-progress" class="button" disabled>Импортировать копию</button>
+    <button type="button" id="course-delete-progress" class="button" disabled>Удалить прогресс курса</button>
+    <input id="quiz-import-file" type="file" accept="application/json,.json" hidden>
+  </div>
+  <p id="quiz-backup-feedback" class="muted" role="status"></p>
+</details>
+<script defer src="{{ '/assets/js/course-backup.js' | relative_url }}?v={{ site.data.build.revision | default: 'dev' }}"></script>

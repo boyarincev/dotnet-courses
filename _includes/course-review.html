@@ -1,0 +1,5 @@
+<div class="notice course-review" data-course-review data-course="{{ include.course }}" data-lesson-numbers="{{ include.lessons | map: 'lesson_number' | join: ',' }}" hidden>
+  <strong data-course-review-status role="status"></strong>
+  <span data-course-review-action hidden><a class="button" href="{{ include.quiz | relative_url }}?review=today">Повторить сегодня</a></span>
+  <p class="muted" data-course-review-feedback role="status" hidden></p>
+</div>

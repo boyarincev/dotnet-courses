@@ -319,7 +319,7 @@ return Array.Empty<(string, int, long)>();
 
 ## 5. Повторение и официальные источники
 
-[Квиз по этому и предыдущим урокам]({{ '/courses/csharp-dotnet-9-11/quiz/' | relative_url }}?through={{ page.lesson_number }}) подбирает вопросы с постоянными Q-ID. Ответы и самооценки сохраняются в браузере.
+После зачёта практики нажми «Пройти квиз урока» рядом с редактором. Квиз по одному покажет вопросы этого урока, на которые ещё нет оценённого ответа. Самооценка сохраняет ответ в истории карточки.
 
 Microsoft Learn: [условное присваивание в C# 14](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14#null-conditional-assignment).
 

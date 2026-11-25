@@ -33,15 +33,17 @@
         return false;
       }
       refreshProgress();
+      window.dispatchEvent(new CustomEvent("dotnet-courses:progress-changed", {
+        detail: {kind, course, lesson}
+      }));
       return true;
     }
   };
 
   const lessonStatus = document.getElementById("lesson-completion-status");
+  const lessonQuizLink = document.querySelector("[data-lesson-quiz-link]");
   const lessonBadges = document.querySelectorAll("[data-lesson-completion-badge]");
   const courseStart = document.querySelector("[data-course-start]");
-  const previousQuiz = document.getElementById("previous-quiz-dialog");
-  let quizReminderShown = false;
 
   function refreshProgress() {
     if (lessonStatus) {
@@ -49,6 +51,7 @@
       const message = completed === null ? "Не удалось прочитать прогресс в этом браузере."
         : completed ? "Урок пройден." : "Урок ещё не пройден.";
       if (lessonStatus.textContent !== message) lessonStatus.textContent = message;
+      if (lessonQuizLink) lessonQuizLink.hidden = completed !== true;
     }
 
     lessonBadges.forEach(badge => {
@@ -63,20 +66,10 @@
       courseStart.textContent = !hasProgress ? "Начать с первого урока"
         : nextLesson ? `Продолжить с урока ${nextLesson.dataset.lesson}` : "К списку уроков";
     }
-
-    if (previousQuiz && typeof previousQuiz.showModal === "function") {
-      const completed = progress.get("quiz", previousQuiz.dataset.course, previousQuiz.dataset.lesson);
-      if (completed === false && !quizReminderShown) {
-        previousQuiz.showModal();
-        quizReminderShown = true;
-      } else if (completed !== false && previousQuiz.open) {
-        previousQuiz.close();
-      }
-    }
   }
 
-  window.DotnetLearning = {copy, download, progress};
-  if (lessonStatus || lessonBadges.length || previousQuiz) {
+  window.DotnetLearning = {copy, download, progress, refreshProgress};
+  if (lessonStatus || lessonBadges.length) {
     refreshProgress();
     window.addEventListener("pageshow", refreshProgress);
     window.addEventListener("storage", event => {

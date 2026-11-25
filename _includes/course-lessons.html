@@ -4,14 +4,12 @@
 {% if first_lesson %}
   <a class="button primary" data-course-start="{{ include.course }}" href="{{ first_lesson.url | relative_url }}">Начать с первого урока</a>
 {% endif %}
-  <a class="button" href="{{ include.quiz | relative_url }}">Квиз и повторение</a>
+  <a class="button" href="{{ include.quiz | relative_url }}">Банк вопросов</a>
   <a class="button" href="{{ include.related | relative_url }}">{{ include.related_label }}</a>
 </div>
-<div class="notice" data-course-review data-course="{{ include.course }}" data-lesson-numbers="{{ sorted_lessons | map: 'lesson_number' | join: ',' }}" hidden>
-  <strong data-course-review-status role="status"></strong>
-  <span data-course-review-action hidden><a class="button" href="{{ include.quiz | relative_url }}?review=today">Повторить сегодня</a></span>
-</div>
+{% include course-review.html course=include.course quiz=include.quiz lessons=sorted_lessons %}
 {% include course-quiz-assets.html questions=include.questions %}
+{% include course-backup.html lessons=sorted_lessons %}
 <h2 id="course-lessons">Уроки · {{ sorted_lessons.size }}</h2>
 <div class="lessons">
 {% for lesson in sorted_lessons %}

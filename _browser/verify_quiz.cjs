@@ -1,312 +1,579 @@
+"use strict";
+
 const assert = require("node:assert/strict");
-const {readFile} = require("node:fs/promises");
-const {chromium} = require("playwright");
+const { readFile } = require("node:fs/promises");
+const { chromium } = require("playwright");
 
 const site = new URL(process.argv[2] || "http://127.0.0.1:4173/dotnet-courses/");
-const course = "csharp-dotnet-9-11";
-const quizUrl = (courseId, query = "") => new URL("courses/" + courseId + "/quiz/" + query, site).href;
-const fields = page => page.locator("#quiz-root textarea");
-const lessonStatus = page => page.locator("#quiz-lesson-progress [role=status]");
-const question = (page, id) => page.locator(".question", {has: page.locator("textarea[id=" + JSON.stringify(id) + "]")});
-const ids = page => fields(page).evaluateAll(elements => elements.map(element => element.id));
+const mainCourse = "csharp-dotnet-9-11";
+const memoryCourse = "memory";
+const now = new Date("2030-01-01T12:00:00Z");
+const hour = 60 * 60 * 1000;
+const courseUrl = course => new URL("courses/" + course + "/", site).href;
+const quizUrl = (course, query = "") => new URL("quiz/" + query, courseUrl(course)).href;
+const quizCount = page => page.locator("#quiz-count");
+const quizResult = page => page.locator("#quiz-result");
+const questions = page => page.locator(".question[data-question-id]");
+const question = (page, id) => questions(page).and(page.locator("[data-question-id=" + JSON.stringify(id) + "]"));
+const questionIds = page => questions(page).evaluateAll(rows => rows.map(row => row.dataset.questionId));
+const skip = page => page.getByRole("button", { name: "Пропустить", exact: true });
+const grade = (row, name = "Легко") => row.getByRole("button", { name, exact: true });
+const courseReview = page => page.locator("[data-course-review]");
+const reviewStatus = page => courseReview(page).locator("[data-course-review-status]");
+const reviewLink = page => courseReview(page).getByRole("link", { name: "Повторить сегодня" });
+const practiceKey = (kind, course, lesson = 1) => "dotnet-courses:" + kind + ":" + course + ":" + lesson;
 
-async function openQuiz(page, courseId, query) {
-    await page.goto(quizUrl(courseId, query));
-    await fields(page).first().waitFor();
+async function openQuiz(page, course, query = "") {
+    await page.goto(quizUrl(course, query));
+    await page.waitForFunction(() => Boolean(document.getElementById("quiz-count")?.textContent ||
+        document.querySelector("#quiz-root > .notice")));
 }
 
-async function submitAnswer(page, id, answer) {
-    const card = question(page, id);
-    await card.getByRole("textbox").fill(answer);
-    await card.getByRole("button", {name: "Верно", exact: true}).click();
+async function getBank(page) {
+    return page.evaluate(async () => {
+        const engine = await window.DotnetQuizSRSReady;
+        const bank = JSON.parse(document.getElementById("question-bank").textContent);
+        const published = document.getElementById("quiz-root").dataset.lessonNumbers.split(",").map(Number);
+        return engine.eligible(bank, new Date()).filter(row => published.includes(Number(row.lesson_number)));
+    });
 }
 
-async function openBackup(page) {
+async function markPractice(page, course, ...lessons) {
+    await page.evaluate(({ course, lessons }) => {
+        for (const lesson of lessons) window.DotnetLearning.progress.mark("lesson", course, lesson);
+    }, { course, lessons });
+    await page.waitForFunction(async ({ course, lessons }) => {
+        const engine = await window.DotnetQuizSRSReady;
+        const bank = JSON.parse(document.getElementById("question-bank").textContent);
+        const storage = window.DotnetQuizStorage.forCourse(course);
+        return engine.eligible(bank, new Date()).filter(row => lessons.includes(Number(row.lesson_number)))
+            .every(row => storage.record(row.id)?.card);
+    }, { course, lessons });
+}
+
+async function submitAnswer(page, id, answer, rating = "Легко") {
+    const row = question(page, id);
+    await row.getByRole("textbox").fill(answer);
+    await grade(row, rating).click();
+}
+
+async function currentQuestion(page) {
+    const row = questions(page).first();
+    await row.waitFor();
+    assert.equal(await questions(page).count(), 1, "Show one question at a time");
+    return row.getAttribute("data-question-id");
+}
+
+async function assertEmptyAnswer(row) {
+    const input = row.getByRole("textbox");
+    assert.equal(await input.inputValue(), "");
+    await input.fill(" \n ");
+    const buttons = row.getByRole("button", { name: /^(Неверно|Частично|Верно|Легко)$/ });
+    assert.equal(await buttons.count(), 4);
+    assert.ok(await buttons.evaluateAll(elements => elements.every(button => button.disabled)),
+        "Whitespace cannot enable any grade");
+    await row.getByText("Сначала введи ответ", { exact: true }).waitFor();
+    await input.fill("");
+}
+
+async function readRecord(page, course, id) {
+    return page.evaluate(({ course, id }) => window.DotnetQuizStorage.forCourse(course).record(id),
+        { course, id });
+}
+
+async function failStorageWrite(page, key) {
+    await page.evaluate(denied => {
+        const setItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (entry, value) {
+            if (entry === denied) throw new DOMException("Test storage failure", "QuotaExceededError");
+            return setItem.call(this, entry, value);
+        };
+        window.restoreTestSetItem = () => { Storage.prototype.setItem = setItem; };
+    }, key);
+}
+
+async function download(page, selector) {
+    const nextDownload = page.waitForEvent("download");
+    await page.locator(selector).click();
+    return readFile(await (await nextDownload).path(), "utf8");
+}
+
+async function publishTestQuestion(page, pages, data) {
+    const paths = new Set(pages.map(url => new URL(url).pathname));
+    await page.route(url => paths.has(url.pathname), async route => {
+        const upstream = await route.fetch();
+        const original = await upstream.text();
+        const document = original.replace(
+            /(<script[^>]+id="question-bank"[^>]*>)([\s\S]*?)(<\/script>)/,
+            (_, opening, payload, closing) => opening + JSON.stringify([...JSON.parse(payload), data]) + closing);
+        assert.notEqual(document, original, "The lesson fixture must add a question");
+        const headers = upstream.headers();
+        delete headers["content-length"];
+        delete headers["content-encoding"];
+        await route.fulfill({ status: upstream.status(), headers, body: document });
+    });
+}
+
+async function verifyLessonQuiz(browser, course, lesson) {
+    const pageContext = await browser.newContext({ serviceWorkers: "block", permissions: ["clipboard-read", "clipboard-write"] });
+    try {
+        const page = await pageContext.newPage();
+        await page.clock.setFixedTime(now);
+        await page.goto(courseUrl(course));
+        const courseLessons = await page.locator(".lesson-card").evaluateAll(links => links.map(link => ({
+            number: Number(link.querySelector("[data-lesson-completion-badge]").dataset.lesson),
+            url: link.href,
+        })));
+        const otherLesson = courseLessons.find(item => item.number > lesson)
+            ?? courseLessons.find(item => item.number !== lesson);
+        if (course === mainCourse) assert.ok(otherLesson, "Cover acceptance of a different lesson");
+        const link = page.locator(".lesson-card").filter({
+            has: page.locator("[data-lesson-completion-badge][data-lesson=" + JSON.stringify(String(lesson)) + "]"),
+        });
+        await link.click();
+        const lessonUrl = page.url();
+        const startQuiz = page.locator("[data-lesson-quiz-link]");
+        assert.equal(await startQuiz.isVisible(), false);
+        await reviewStatus(page).waitFor();
+        await markPractice(page, course, lesson);
+        await startQuiz.waitFor();
+        assert.equal(await reviewLink(page).isVisible(), false,
+            "New cards seeded after practice are not due immediately");
+        await startQuiz.click();
+        assert.equal(new URL(page.url()).searchParams.get("through"), String(lesson));
+
+        const bank = await getBank(page);
+        const expected = bank.filter(row => Number(row.lesson_number) === lesson);
+        assert.ok(expected.length > 1);
+        await quizCount(page).filter({ hasText: "Отвечено 0 из " + expected.length }).waitFor();
+        assert.equal(await page.locator("#quiz-download").isVisible(), false);
+        assert.equal(await page.getByRole("button", { name: "Начать заново" }).count(), 0);
+
+        const first = await currentQuestion(page);
+        await assertEmptyAnswer(question(page, first));
+        await skip(page).click();
+        const next = await currentQuestion(page);
+        assert.notEqual(next, first, "Skipping puts the question behind the remaining queue");
+        await quizCount(page).filter({ hasText: "Отвечено 0 из " + expected.length }).waitFor();
+        const seeded = await readRecord(page, course, first);
+        assert.deepEqual(seeded.history, []);
+        assert.equal(seeded.card.dueAt, new Date(+now + 8 * hour).toISOString());
+
+        const answerFor = id => "Тестовый ответ " + id;
+        await submitAnswer(page, next, answerFor(next));
+        await quizCount(page).filter({ hasText: "Отвечено 1 из " + expected.length }).waitFor();
+        const unsubmitted = await currentQuestion(page);
+        await question(page, unsubmitted).getByRole("textbox").fill("Этот ответ не оценён");
+        await page.reload();
+        await quizCount(page).filter({ hasText: "Отвечено 1 из " + expected.length }).waitFor();
+        assert.equal(await question(page, next).count(), 0, "Graded question stays out of the lesson queue");
+
+        const pending = new Set(expected.map(row => row.id));
+        assert.ok(pending.delete(next));
+        while (pending.size) {
+            const id = await currentQuestion(page);
+            assert.ok(pending.delete(id), id + " must be a remaining question of the selected lesson");
+            assert.equal(await question(page, id).getByRole("textbox").inputValue(), "");
+            if (pending.size === 0) assert.equal(await skip(page).isVisible(), false);
+            await submitAnswer(page, id, answerFor(id));
+        }
+
+        await quizResult(page).waitFor();
+        if (bank.some(row => Number(row.lesson_number) > lesson)) {
+            await quizResult(page).getByRole("link", { name: "Следующий урок" }).waitFor();
+        } else {
+            await quizResult(page).getByRole("link", { name: "К списку уроков" }).waitFor();
+        }
+        const report = await download(page, "#quiz-download");
+        for (const row of expected) {
+            assert.ok(report.includes(row.id) && report.includes(row.prompt) && report.includes(answerFor(row.id)),
+                "The lesson report contains the full question and graded answer for " + row.id);
+        }
+        for (const row of bank.filter(row => Number(row.lesson_number) !== lesson)) {
+            assert.ok(!report.includes(row.id), "Lesson report excludes other lessons");
+        }
+        await page.locator("#quiz-copy").click();
+        await page.locator("#quiz-feedback").filter({ hasText: "Ответы скопированы." }).waitFor();
+        assert.match(await page.evaluate(() => navigator.clipboard.readText()), /Тестовый ответ/);
+
+        await page.reload();
+        await quizResult(page).waitFor();
+        assert.equal(await questions(page).count(), 0);
+        await openQuiz(page, course, "?filter=" + lesson);
+        const revisedAnswer = "Обновлённый ответ " + next;
+        await submitAnswer(page, next, revisedAnswer);
+        await openQuiz(page, course, "?through=" + lesson);
+        await quizResult(page).waitFor();
+
+        const added = { ...expected[0], id: "BROWSER-SMOKE-NEW", prompt: "Вопрос, добавленный после прохождения" };
+        const previousRecord = await readRecord(page, course, next);
+        const acceptanceLesson = otherLesson ?? { number: lesson, url: lessonUrl };
+        await publishTestQuestion(page, [lessonUrl, acceptanceLesson.url, quizUrl(course)], added);
+        await page.goto(lessonUrl);
+        await reviewStatus(page).waitFor();
+        assert.equal(await readRecord(page, course, added.id) ?? null, null,
+            "Publishing a new question does not seed a card just by viewing an already passed lesson");
+        const acceptanceTime = new Date(+now + hour);
+        await page.clock.setFixedTime(acceptanceTime);
+        await page.goto(acceptanceLesson.url);
+        await markPractice(page, course, acceptanceLesson.number);
+        const addedRecord = await readRecord(page, course, added.id);
+        assert.deepEqual(addedRecord.history, []);
+        assert.equal(addedRecord.card.dueAt, new Date(+acceptanceTime + 8 * hour).toISOString());
+        assert.deepEqual(await readRecord(page, course, next), previousRecord,
+            "Seeding after another accepted solution leaves existing cards unchanged");
+        await page.goto(lessonUrl);
+        await page.clock.setFixedTime(new Date(+acceptanceTime + hour));
+        await markPractice(page, course, lesson);
+        assert.deepEqual(await readRecord(page, course, added.id), addedRecord,
+            "Repeated acceptance does not reset the new card's due date");
+        await startQuiz.click();
+        assert.equal(await currentQuestion(page), added.id);
+        assert.equal(await quizResult(page).isVisible(), false);
+        assert.equal(await skip(page).isVisible(), false);
+        await quizCount(page).filter({ hasText: "Отвечено " + expected.length + " из " + (expected.length + 1) }).waitFor();
+        await submitAnswer(page, added.id, answerFor(added.id));
+        await quizResult(page).waitFor();
+        const updatedReport = await download(page, "#quiz-download");
+        assert.ok(updatedReport.includes(answerFor(added.id)) && updatedReport.includes(revisedAnswer) &&
+            !updatedReport.includes(answerFor(next)), "Export uses the latest graded answer for every question");
+
+        await page.goto(courseUrl(course));
+        await page.locator(".quiz-backup > summary").click();
+        const backup = JSON.parse(await download(page, "#quiz-export-progress"));
+        assert.equal(backup.format, "dotnet-courses-course-v2");
+        assert.equal(backup.course, course);
+        assert.equal(Object.hasOwn(backup, "drafts"), false);
+        assert.equal(Object.hasOwn(backup, "completedLessons"), false);
+        assert.ok(backup.practice.completedLessons.includes(lesson));
+        return backup;
+    } finally {
+        await pageContext.close();
+    }
+}
+
+async function verifyReviewToday(browser, course) {
+    const pageContext = await browser.newContext({ serviceWorkers: "block" });
+    try {
+        const page = await pageContext.newPage();
+        await page.clock.setFixedTime(now);
+        await page.goto(courseUrl(course));
+        await reviewStatus(page).waitFor();
+        assert.equal(await reviewLink(page).isVisible(), false);
+
+        const fixture = await page.evaluate(async ({ course, hour }) => {
+            const engine = await window.DotnetQuizSRSReady;
+            const bank = JSON.parse(document.getElementById("question-bank").textContent);
+            const today = new Date();
+            const published = document.querySelector("[data-course-review]").dataset.lessonNumbers.split(",").map(Number);
+            const nearby = engine.eligible(bank, today).filter(question => published.includes(Number(question.lesson_number)))
+                .slice(0, 5).map(question => question.id);
+            const [due, dueNow, dueSoon, dueLater, unseen] = nearby;
+            const offsets = [-hour, 0, 5 * 60 * 1000, hour];
+            const past = new Date(+today - 7 * 24 * hour);
+            const records = Object.fromEntries(nearby.slice(0, 4).map((id, index) => {
+                const row = engine.evaluate(null, id, "correct", "Предыдущий ответ", past);
+                row.card.dueAt = new Date(+today + offsets[index]);
+                return [id, row];
+            }));
+            localStorage.setItem(...window.DotnetQuizStorage.forCourse(course).prepareHistoryWrite(records));
+            return { due, dueNow, dueSoon, dueLater, unseen };
+        }, { course, hour });
+
+        await page.reload();
+        await reviewStatus(page).filter({ hasText: "Вопросов к повторению: 2" }).waitFor();
+        await reviewLink(page).waitFor();
+        await reviewLink(page).click();
+        assert.equal(new URL(page.url()).searchParams.get("review"), "today");
+        assert.equal(await page.locator("#quiz-download").isVisible(), false);
+        const initial = await currentQuestion(page);
+        const eligible = [fixture.due, fixture.dueNow];
+        assert.ok(eligible.includes(initial));
+        const oldRecord = await readRecord(page, course, initial);
+        await assertEmptyAnswer(question(page, initial));
+        await question(page, initial).locator(".question-answer-history summary").click();
+        await question(page, initial).getByText("Предыдущий ответ").waitFor();
+        await skip(page).click();
+        const skippedTo = await currentQuestion(page);
+        assert.notEqual(skippedTo, initial);
+        assert.deepEqual(await readRecord(page, course, initial), oldRecord,
+            "Skipping does not create an attempt or move the due date");
+        await question(page, skippedTo).getByRole("textbox").fill("Ответ ещё не оценён");
+        await page.reload();
+        await quizCount(page).filter({ hasText: "Осталось повторить: 2" }).waitFor();
+
+        const pending = new Set(eligible);
+        const firstRated = await currentQuestion(page);
+        assert.ok(pending.delete(firstRated));
+        assert.equal(await question(page, firstRated).getByRole("textbox").inputValue(), "");
+        await page.clock.setFixedTime(new Date(+now + 10 * 60 * 1000));
+        await submitAnswer(page, firstRated, "Ежедневный ответ " + firstRated);
+        pending.add(fixture.dueSoon);
+        while (pending.size) {
+            const id = await currentQuestion(page);
+            assert.ok(pending.delete(id), id + " must be due");
+            if (pending.size === 0) assert.equal(await skip(page).isVisible(), false);
+            await submitAnswer(page, id, "Ежедневный ответ " + id);
+        }
+        const empty = page.getByText("На сегодня больше вопросов нет", { exact: true }).first();
+        await empty.waitFor();
+        assert.equal(await questions(page).count(), 0);
+        assert.equal(await readRecord(page, course, fixture.unseen) ?? null, null);
+        assert.equal((await readRecord(page, course, fixture.dueLater)).history.length, 1);
+        for (const id of [...eligible, fixture.dueSoon]) {
+            const record = await readRecord(page, course, id);
+            assert.equal(record.history.at(-1).answer, "Ежедневный ответ " + id);
+            assert.ok(new Date(record.card.dueAt) > new Date(+now + 10 * 60 * 1000),
+                "A scheduled daily review increments history and sets a new due date");
+        }
+        await page.reload();
+        await empty.waitFor();
+    } finally {
+        await pageContext.close();
+    }
+}
+
+async function verifyQuestionBank(browser) {
+    const pageContext = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    try {
+        const page = await pageContext.newPage();
+        await page.clock.setFixedTime(now);
+        await openQuiz(page, mainCourse);
+        const filter = page.locator("#quiz-filter");
+        await filter.waitFor();
+        const bank = await getBank(page);
+        assert.equal(await filter.inputValue(), "all");
+        assert.deepEqual((await questionIds(page)).sort(), bank.map(row => row.id).sort());
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390,
+            "The quiz wraps without horizontal scrolling on mobile");
+
+        await page.goto(courseUrl(mainCourse));
+        await markPractice(page, mainCourse, 1, 3);
+        await openQuiz(page, mainCourse);
+        await filter.waitFor();
+        assert.equal(await filter.inputValue(), "completed");
+        const completed = bank.filter(row => [1, 3].includes(Number(row.lesson_number)));
+        assert.deepEqual((await questionIds(page)).sort(), completed.map(row => row.id).sort(),
+            "The completed filter respects the gap between passed lessons");
+        const seeded = question(page, completed[0].id);
+        await seeded.locator("[data-question-due]").filter({ hasText: "Следующий ответ:" }).waitFor();
+        await page.clock.setFixedTime(new Date(+now + 8 * hour));
+        await page.reload();
+        await seeded.locator("[data-question-due]").filter({ hasText: "Ждёт ответа" }).waitFor();
+        await page.goto(courseUrl(mainCourse));
+        await reviewStatus(page).filter({ hasText: "Вопросов к повторению: " + completed.length }).waitFor();
+        await reviewLink(page).waitFor();
+        await openQuiz(page, mainCourse);
+
+        await filter.selectOption("2");
+        await page.waitForURL(quizUrl(mainCourse, "?filter=2"));
+        const ofLessonTwo = bank.filter(row => Number(row.lesson_number) === 2);
+        const first = ofLessonTwo[0].id;
+        const row = question(page, first);
+        await row.waitFor();
+        assert.deepEqual((await questionIds(page)).sort(), ofLessonTwo.map(item => item.id).sort());
+        assert.match(await row.locator("[data-question-due]").textContent(), /Новый вопрос/);
+        await assertEmptyAnswer(row);
+
+        const failureKey = "dotnet-courses:quiz:v2:" + mainCourse + ":card:" + first;
+        await failStorageWrite(page, failureKey);
+        await submitAnswer(page, first, "Ответ сохранится после повторной попытки");
+        await row.getByText("Не удалось сохранить ответ. Текст остался в поле.").waitFor();
+        assert.equal(await row.getByRole("textbox").inputValue(), "Ответ сохранится после повторной попытки");
+        assert.equal(await readRecord(page, mainCourse, first) ?? null, null);
+        await page.evaluate(() => window.restoreTestSetItem());
+
+        await submitAnswer(page, first, "Ответ в банке");
+        await row.locator("[data-question-due]").filter({ hasText: "Следующий ответ:" }).waitFor();
+        assert.equal(await row.getByRole("textbox").inputValue(), "");
+        const before = await readRecord(page, mainCourse, first);
+        assert.equal(before.history.length, 1);
+        await page.clock.setFixedTime(new Date(+now + 8 * hour + 60 * 1000));
+        await page.reload();
+        await row.waitFor();
+        assert.equal(await row.getByRole("textbox").inputValue(), "");
+        await submitAnswer(page, first, "Уточнение раньше срока", "Верно");
+        const after = await readRecord(page, mainCourse, first);
+        assert.equal(after.history.length, 2);
+        assert.equal(after.history.at(-1).answer, "Уточнение раньше срока");
+        assert.equal(after.card.dueAt, before.card.dueAt, "Early bank rating preserves the FSRS due date");
+        const extendedHistory = await page.evaluate(async ({ course, id }) => {
+            const engine = await window.DotnetQuizSRSReady;
+            const storage = window.DotnetQuizStorage.forCourse(course);
+            for (let index = 1; index <= 6; index++) {
+                storage.grade(engine, id, "partial", "Длинная строка из теста " + index + "\n" + "x".repeat(160), {
+                    allowEarlyHistory: true,
+                    now: new Date(Date.now() + index * 60_000),
+                });
+            }
+            return storage.record(id).history.reverse();
+        }, { course: mainCourse, id: first });
+        await page.reload();
+        await row.waitFor();
+        assert.equal(await filter.inputValue(), "2");
+        assert.equal(await row.getByRole("textbox").inputValue(), "");
+        const history = row.locator(".question-answer-history");
+        const entries = history.locator("li");
+        const summary = history.locator("summary");
+        assert.equal(await summary.textContent(), "История ответов (8)");
+        assert.equal(await history.getAttribute("open"), null);
+        assert.equal(await entries.count(), 0, "Collapsed history is not rendered");
+        await summary.click();
+        await entries.nth(4).waitFor();
+        assert.deepEqual(await entries.locator("pre").allTextContents(), extendedHistory.slice(0, 5).map(row => row.answer));
+        await history.getByRole("button", { name: "Показать ещё" }).click();
+        assert.deepEqual(await entries.locator("pre").allTextContents(), extendedHistory.map(row => row.answer),
+            "History shows the newest answer first and older answers after expansion");
+        const dates = await page.evaluate(attempts => attempts.map(attempt =>
+            new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(new Date(attempt.at))),
+        extendedHistory);
+        const ratings = ["Частично", "Частично", "Частично", "Частично", "Частично", "Частично", "Верно", "Легко"];
+        assert.deepEqual(await entries.locator(".muted").allTextContents(),
+            dates.map((date, index) => date + " · " + ratings[index]));
+        assert.deepEqual(await entries.locator("time").evaluateAll(times => times.map(time => time.dateTime)),
+            extendedHistory.map(attempt => attempt.at));
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390);
+        assert.equal(await page.locator("#quiz-download").isVisible(), false);
+        await row.getByRole("textbox").fill("Неоцененный ответ");
+        await page.reload();
+        await row.waitFor();
+        assert.equal(await row.getByRole("textbox").inputValue(), "");
+        await filter.selectOption("all");
+        await page.waitForURL(quizUrl(mainCourse, "?filter=all"));
+        await question(page, first).waitFor();
+        assert.deepEqual((await questionIds(page)).sort(), bank.map(item => item.id).sort());
+        await openQuiz(page, mainCourse, "?through=2");
+        const outstanding = await currentQuestion(page);
+        assert.notEqual(outstanding, first, "An answer graded in the bank is counted on the lesson quiz");
+        await quizCount(page).filter({ hasText: "Отвечено 1 из " + ofLessonTwo.length }).waitFor();
+    } finally {
+        await pageContext.close();
+    }
+}
+
+async function openBackup(page, course) {
+    await page.goto(courseUrl(course));
+    await reviewStatus(page).waitFor();
     await page.locator(".quiz-backup > summary").click();
 }
-
-async function exportProgress(page) {
-    const downloadEvent = page.waitForEvent("download");
-    await page.locator("#quiz-export-progress").click();
-    const download = await downloadEvent;
-    return JSON.parse(await readFile(await download.path(), "utf8"));
-}
-
-const importPreview = page => page.locator("#quiz-import-preview");
-const applyImport = page => importPreview(page).getByRole("button", {name:"Импортировать", exact:true}).click();
 
 async function chooseBackup(page, data) {
     await page.locator("#quiz-import-file").setInputFiles({
         name: "progress.json",
         mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify(data))
+        buffer: Buffer.from(JSON.stringify(data)),
     });
 }
 
-async function importProgress(page, data, expectedFeedback, accept = true) {
-    await chooseBackup(page, data);
-    if (accept) await applyImport(page);
-    await page.locator("#quiz-backup-feedback").filter({hasText:expectedFeedback}).waitFor();
+async function confirmAction(page, run, accept) {
+    await Promise.all([
+        page.waitForEvent("dialog").then(async dialog => {
+            assert.equal(dialog.type(), "confirm");
+            if (accept) await dialog.accept();
+            else await dialog.dismiss();
+        }),
+        run(),
+    ]);
 }
 
-const lessonKey = (kind, courseId, number = 1) =>
-    "dotnet-courses:" + kind + ":" + courseId + ":" + number;
-const practice = {
-    editorDrafts: {1:"// Черновик Program.cs"},
-    taskDrafts: {1:"// Черновик метода"},
-    verifiedSolutions: {1:"// Последнее успешное решение"},
-    completedLessons: [1]
-};
-const draftEditor = lessonKey("compiler-draft", course);
-const draftTask = lessonKey("practice-draft", course);
-const verified = lessonKey("practice-verified", course);
-const completedLesson = lessonKey("progress:lesson", course);
-const otherCourse = lessonKey("compiler-draft", "memory");
-const lessonState = {
-    [draftEditor]: practice.editorDrafts[1],
-    [draftTask]: practice.taskDrafts[1],
-    [verified]: practice.verifiedSolutions[1],
-    [completedLesson]: "1"
-};
-
-async function verifyLessonQuiz(browser) {
-    const context = await browser.newContext();
+async function verifyBackup(browser, backup) {
+    const pageContext = await browser.newContext({ serviceWorkers: "block" });
     try {
-        const first = await context.newPage();
-        await openQuiz(first, course, "?through=1");
-        const selection = await ids(first);
-        assert.equal(selection.length, 5);
-        assert.equal(await first.locator("#quiz-next").isVisible(), false);
-
-        const second = await context.newPage();
-        await openQuiz(second, course, "?through=1");
-        assert.deepEqual(await ids(second), selection, "Both tabs resume the same question order");
-        await submitAnswer(first, selection[0], "Ответ из первой вкладки");
-        await submitAnswer(second, selection[1], "Ответ из второй вкладки");
-
-        await first.reload();
-        await fields(first).first().waitFor();
-        assert.deepEqual(await ids(first), selection, "Reload keeps the lesson selection");
-        assert.match(await lessonStatus(first).textContent(), /С самооценкой: 2 из 5/);
-        assert.equal(await fields(first).nth(0).inputValue(), "Ответ из первой вкладки");
-        assert.equal(await fields(first).nth(1).inputValue(), "Ответ из второй вкладки");
-
-        await first.locator("#quiz-show-all").click();
-        assert.ok(await fields(first).count() > selection.length);
-        assert.ok(await first.locator(".question-meta").evaluateAll(items =>
-            items.every(item => item.textContent.includes("Урок №1"))),
-            "The all-questions view of lesson one stays restricted to that lesson");
-        await first.locator("#quiz-show-all").click();
-        assert.deepEqual(await ids(first), selection);
-        assert.match(await lessonStatus(first).textContent(), /С самооценкой: 2 из 5/);
-
-        const revised = question(first, selection[0]);
-        await revised.getByRole("textbox").fill("Уточнённый ответ");
-        assert.match(await lessonStatus(first).textContent(), /С самооценкой: 1 из 5/);
-        await revised.getByRole("button", {name:"Верно", exact:true}).click();
-        assert.match(await lessonStatus(first).textContent(), /С самооценкой: 2 из 5/);
-
-        for (const id of selection.slice(2)) await submitAnswer(first, id, "Тестовый ответ");
-        assert.match(await lessonStatus(first).textContent(), /Квиз урока №1 пройден/);
-        await first.evaluate(items => {
-            for (const [key, value] of Object.entries(items)) localStorage.setItem(key, value);
-        }, {...lessonState, [otherCourse]:"// Другой курс", [lessonKey("practice-draft", course, 999)]:"// Неопубликованный урок"});
-        await openBackup(first);
-        const backup = await exportProgress(first);
-        assert.equal(backup.format, "dotnet-courses-course-v1");
-        assert.deepEqual(backup.practice, practice, "Include only practice keys from this course and published lessons");
-        assert.deepEqual(backup.completedLessons, [1]);
-        assert.equal(Object.keys(backup.progress).length, 5, "Both tabs kept every FSRS record");
-        assert.equal(backup.drafts[selection[0].slice(2)], "Уточнённый ответ");
-        assert.equal(backup.drafts[selection[1].slice(2)], "Ответ из второй вкладки");
-        assert.equal(backup.progress[selection[0].slice(2)].history.length, 1,
-            "Reassessing a revised answer in the same selection keeps the FSRS schedule");
-        return backup;
-    } finally {
-        await context.close();
-    }
-}
-
-async function verifyImport(browser, backup) {
-    const context = await browser.newContext();
-    try {
-        const page = await context.newPage();
-        await openQuiz(page, "memory");
-        assert.equal(await page.locator("#quiz-next").isVisible(), true);
-        assert.equal(await page.locator("#quiz-lesson-progress").isVisible(), false);
-        await openBackup(page);
-        await importProgress(page, backup, "Ошибка импорта: Это не файл прогресса данного курса.", false);
-
-        await openQuiz(page, course, "?through=1");
-        await page.evaluate(({id, answer, courseId}) => {
-            localStorage.setItem("dotnet-courses:quiz-drafts:v1:" + courseId, JSON.stringify({[id]:answer}));
-        }, {id:Object.keys(backup.drafts)[0], answer:"Черновик из прошлой версии", courseId:course});
-        await page.reload();
-        await fields(page).first().waitFor();
-        await page.locator("#quiz-show-all").click();
-        assert.equal(await question(page, "a-" + Object.keys(backup.drafts)[0]).getByRole("textbox").inputValue(),
-            "Черновик из прошлой версии");
-        await page.locator("#quiz-show-all").click();
-        await openBackup(page);
-        await importProgress(page, {...backup, format:"dotnet-courses-fsrs-v1", completedLessons:undefined}, "Копия импортирована.");
-        assert.doesNotMatch(await lessonStatus(page).textContent(), /Квиз урока №1 пройден/);
-        await importProgress(page, {...backup, format:"dotnet-courses-fsrs-v2", practice:undefined}, "Копия импортирована.");
-        assert.match(await lessonStatus(page).textContent(), /Квиз урока №1 пройден/);
-        assert.equal(await page.evaluate(key => localStorage.getItem(key), draftEditor), null,
-            "Legacy copies have no lesson data");
-
-        const otherLesson = lessonKey("compiler-draft", course, 2);
-        await page.evaluate(keys => {
-            for (const key of keys) localStorage.setItem(key,"// Существующий код");
-        }, [draftEditor, otherLesson, otherCourse]);
-
-        await importProgress(page, {...backup, practice:{...practice, editorDrafts:{999:"// Источник неизвестного урока"}}},
-            "Ошибка импорта: Некорректные данные", false);
+        const page = await pageContext.newPage();
+        await page.clock.setFixedTime(now);
+        const feedback = page.locator("#quiz-backup-feedback");
+        await openBackup(page, memoryCourse);
         await chooseBackup(page, backup);
-        const preview = importPreview(page);
-        await preview.waitFor();
-        assert.match(await preview.textContent(), /Файлы Program.cs · добавить 0, заменить 1/);
-        assert.match(await preview.textContent(), /Черновики заданий · добавить 1, заменить 0/);
-        await preview.getByText("Какие записи изменятся").click();
-        assert.match(await preview.locator("#quiz-import-records").textContent(), /Файлы Program.cs\. Заменятся урок №1/);
-        await preview.getByRole("button", {name:"Отмена", exact:true}).click();
-        assert.equal(await page.evaluate(key => localStorage.getItem(key), draftEditor), "// Существующий код");
+        await feedback.filter({ hasText: "Это не файл прогресса данного курса." }).waitFor();
+        const foreignHistory = await page.evaluate(async course => {
+            const engine = await window.DotnetQuizSRSReady;
+            const bank = JSON.parse(document.getElementById("question-bank").textContent);
+            const id = engine.eligible(bank, new Date())[0].id;
+            const storage = window.DotnetQuizStorage.forCourse(course);
+            storage.grade(engine, id, "correct", "Ответ другого курса");
+            return { id, record: storage.record(id) };
+        }, memoryCourse);
 
-        await chooseBackup(page, backup);
-        await preview.waitFor();
-        await page.evaluate(key => {
-            const setItem = Storage.prototype.setItem;
-            Storage.prototype.setItem = function (entry, value) {
-                if (entry === key) throw new DOMException("Fixture storage failure", "QuotaExceededError");
-                return setItem.call(this, entry, value);
-            };
-            window.restoreSetItem = () => { Storage.prototype.setItem = setItem; };
-        }, verified);
-        await applyImport(page);
-        await page.locator("#quiz-backup-feedback").filter({hasText:"Прежние данные сохранены"}).waitFor();
-        assert.deepEqual(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), [draftEditor, draftTask, verified, completedLesson]),
-            ["// Существующий код", null, null, null], "Rollback restores the previous value and removes additions");
-        await page.evaluate(() => window.restoreSetItem());
+        await openQuiz(page, mainCourse, "?filter=1");
+        const [existingId, dueId] = await questionIds(page);
+        await submitAnswer(page, existingId, "Другой вопрос в истории");
+        const existingRecord = await readRecord(page, mainCourse, existingId);
+        await page.evaluate(async ({ course, id, hour }) => {
+            const engine = await window.DotnetQuizSRSReady;
+            window.DotnetQuizStorage.forCourse(course).seed(engine, [id], new Date(Date.now() - 9 * hour));
+        }, { course: mainCourse, id: dueId, hour });
+        await openBackup(page, mainCourse);
+        await chooseBackup(page, { ...backup, format: "dotnet-courses-course-v1" });
+        await feedback.filter({ hasText: "Это не файл прогресса данного курса." }).waitFor();
+        const sourceDraft = practiceKey("compiler-draft", mainCourse, 2);
+        const unrelatedDraft = practiceKey("compiler-draft", mainCourse, 1);
+        const foreignDraft = practiceKey("compiler-draft", memoryCourse, 1);
+        const readDrafts = () => page.evaluate(keys => keys.map(key => localStorage.getItem(key)),
+            [sourceDraft, unrelatedDraft, foreignDraft]);
+        const oldValues = ["Прежний код", "Другой урок", "Другой курс"];
+        await page.evaluate(({ keys, values }) => {
+            keys.forEach((key, index) => localStorage.setItem(key, values[index]));
+        }, { keys: [sourceDraft, unrelatedDraft, foreignDraft], values: oldValues });
+        const imported = { ...backup, practice: { ...backup.practice, editorDrafts: { 2: "Новый код" } } };
+        const importCourse = () => chooseBackup(page, imported);
+        await confirmAction(page, importCourse, false);
+        assert.deepEqual(await readDrafts(), oldValues, "Cancelling import retains the original browser data");
+        const historyKey = await page.evaluate(course => window.DotnetQuizStorage.forCourse(course).importKey, mainCourse);
+        await failStorageWrite(page, historyKey);
+        await confirmAction(page, importCourse, true);
+        await feedback.filter({ hasText: "Прежние данные сохранены." }).waitFor();
+        assert.deepEqual(await readDrafts(), oldValues, "Failed import rolls back practice changes");
+        assert.equal(await page.evaluate(course => window.DotnetLearning.progress.get("lesson", course, 2), mainCourse), false);
+        await page.evaluate(() => window.restoreTestSetItem());
+        await confirmAction(page, importCourse, true);
+        await feedback.filter({ hasText: "Копия импортирована." }).waitFor();
+        assert.deepEqual(await readDrafts(), ["Новый код", ...oldValues.slice(1)], "Import preserves unrelated data");
+        assert.ok(await page.evaluate(course => window.DotnetLearning.progress.get("lesson", course, 2), mainCourse));
+        const id = Object.keys(backup.progress)[0];
+        assert.deepEqual(await readRecord(page, mainCourse, id), backup.progress[id]);
+        assert.deepEqual(await readRecord(page, mainCourse, existingId), existingRecord,
+            "Import preserves history for an unrelated question");
+        await openQuiz(page, mainCourse, "?through=2");
+        await quizResult(page).waitFor();
+        assert.equal(await questions(page).count(), 0, "Imported graded answers restore the lesson outcome");
 
-        await chooseBackup(page, backup);
-        await preview.waitFor();
-        await page.evaluate(key => localStorage.setItem(key, "// Изменение из соседней вкладки"), draftEditor);
-        await applyImport(page);
-        await preview.waitFor();
-        await preview.getByRole("status").filter({hasText:"Данные в браузере изменились"}).waitFor();
-        assert.equal(await page.evaluate(key => localStorage.getItem(key), draftEditor), "// Изменение из соседней вкладки");
-        await applyImport(page);
-        await page.locator("#quiz-backup-feedback").filter({hasText:"Копия импортирована."}).waitFor();
-        assert.deepEqual(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), Object.keys(lessonState)),
-            Object.values(lessonState), "The backup restores all lesson storage keys");
-        assert.deepEqual(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), [otherLesson, otherCourse]),
-            ["// Существующий код", "// Существующий код"], "The merge preserves unrelated lessons and other courses");
+        await openBackup(page, mainCourse);
+        const badge = page.locator('[data-lesson-completion-badge][data-lesson="2"]');
+        await badge.waitFor();
+        await reviewLink(page).waitFor();
+        const deleteCourse = () => page.locator("#course-delete-progress").click();
+        const legacyKeys = [mainCourse, memoryCourse].map(course => "dotnet-courses:fsrs-7:v1:" + course);
+        await page.evaluate(keys => keys.forEach(key => localStorage.setItem(key, "{}")), legacyKeys);
+        await confirmAction(page, deleteCourse, false);
+        assert.deepEqual(await readDrafts(), ["Новый код", "Другой урок", "Другой курс"]);
+        assert.deepEqual(await readRecord(page, mainCourse, id), backup.progress[id]);
+        assert.equal(await badge.isVisible(), true);
+        assert.equal(await reviewLink(page).isVisible(), true);
 
-        await page.locator("#quiz-show-all").click();
-        for (const [id, draft] of Object.entries(backup.drafts)) {
-            assert.equal(await question(page, "a-" + id).getByRole("textbox").inputValue(), draft);
-        }
-        console.log("Course backup: course isolation, legacy copies, preview, cancel, rollback, concurrent edits and lesson drafts verified");
+        await confirmAction(page, deleteCourse, true);
+        await feedback.filter({ hasText: "Прогресс курса удалён." }).waitFor();
+        await badge.waitFor({ state: "hidden" });
+        await reviewLink(page).waitFor({ state: "hidden" });
+        assert.deepEqual(await readDrafts(), [null, null, "Другой курс"]);
+        assert.equal(await readRecord(page, mainCourse, id) ?? null, null);
+        assert.equal(await readRecord(page, mainCourse, dueId) ?? null, null);
+        assert.deepEqual(await readRecord(page, memoryCourse, foreignHistory.id), foreignHistory.record);
+        assert.deepEqual(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), legacyKeys), [null, "{}"]);
     } finally {
-        await context.close();
-    }
-}
-
-async function verifyReviewToday(browser) {
-    const context = await browser.newContext();
-    try {
-        const page = await context.newPage();
-        const other = await context.newPage();
-        const summary = other.locator("[data-course-review-status]");
-        const startReview = other.getByRole("link", {name: "Повторить сегодня"});
-        const count = other.locator("#quiz-count");
-        const zero = "На сегодня повторений нет";
-
-        for (const [courseId, scheduled] of [[course, 6], ["memory", 2]]) {
-            const courseUrl = new URL("courses/" + courseId + "/", site).href;
-            await other.goto(courseUrl);
-            await summary.filter({hasText:zero}).waitFor();
-            assert.equal(await startReview.isVisible(), false, "Fresh course must have no scheduled reviews");
-
-            await openQuiz(page, courseId);
-            const expected = await page.evaluate(async ({courseId, scheduled}) => {
-                const engine = await window.DotnetQuizSRSReady;
-                const bank = JSON.parse(document.getElementById("question-bank").textContent);
-                const now = new Date();
-                const past = new Date(+now - 7 * 86_400_000);
-                const eligible = engine.eligible(bank, now, null);
-                const due = eligible.slice(0, scheduled).map(question => question.id);
-                const later = eligible[scheduled].id;
-                const records = Object.fromEntries(due.map(id => [id, engine.evaluate(null, id, "correct", "Ответ", past)]));
-                records[later] = engine.evaluate(null, later, "easy", "Ответ", now);
-                localStorage.setItem("dotnet-courses:fsrs-7:v1:" + courseId, JSON.stringify(records));
-                return due.map(id => "a-" + id);
-            }, {courseId, scheduled});
-            await summary.filter({hasText:"Вопросов к повторению: " + scheduled}).waitFor();
-            await startReview.click();
-            await count.filter({hasText:"Осталось повторить: " + scheduled}).waitFor();
-            assert.equal(new URL(other.url()).searchParams.get("review"), "today");
-            assert.equal(await other.locator("#quiz-show-all").isVisible(), false);
-            assert.equal(await other.locator("#quiz-lesson-progress").isVisible(), false);
-            await page.goto(courseUrl);
-            const remainingIds = new Set(expected);
-
-            while (remainingIds.size) {
-                const batch = await ids(other);
-                assert.equal(batch.length, Math.min(5, remainingIds.size), "Review uses short batches");
-                for (const id of batch) {
-                    assert.ok(remainingIds.delete(id), "Review excludes new, later and already answered questions");
-                    await submitAnswer(other, id, "Повторение");
-                    const remaining = remainingIds.size;
-                    await count.filter({hasText:remaining ? "Осталось повторить: " + remaining : zero}).waitFor();
-                    await page.locator("[data-course-review-status]")
-                        .filter({hasText:remaining ? "Вопросов к повторению: " + remaining : zero}).waitFor();
-                }
-                if (remainingIds.size) await other.locator("#quiz-next").click();
-            }
-            assert.equal(await other.locator("#quiz-next").isDisabled(), true);
-            await other.reload();
-            await count.filter({hasText:zero}).waitFor();
-            assert.equal(await fields(other).count(), 0);
-        }
-        console.log("Review today: both courses, scheduled cards only, short batches and live remaining count verified");
-    } finally {
-        await context.close();
-    }
-}
-
-async function verifyEmptyQuiz(browser) {
-    const context = await browser.newContext({viewport:{width:390,height:844}, isMobile:true, hasTouch:true});
-    try {
-        const page = await context.newPage();
-        await openQuiz(page, "memory");
-        const heading = await page.locator("#quiz-root h2").first().boundingBox();
-        assert.ok(heading && heading.y < 844, "The first question is visible on initial mobile view");
-        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390,
-            "The quiz wraps without horizontal scrolling on mobile");
-        do {
-            for (const id of await ids(page)) await submitAnswer(page, id, "Тестовый ответ");
-            await page.locator("#quiz-next").click();
-        } while (await fields(page).count());
-        assert.equal(await page.locator("#quiz-actions").isVisible(), false);
-        await openBackup(page);
-        const file = await exportProgress(page);
-        assert.ok(Object.keys(file.progress).length > 0);
-        assert.match(await page.locator("#quiz-backup-feedback").textContent(), /Копия скачана/);
-        await importProgress(page, {}, "Ошибка импорта: Это не файл прогресса данного курса.", false);
-    } finally {
-        await context.close();
+        await pageContext.close();
     }
 }
 
 async function verify() {
     const browser = await chromium.launch();
     try {
-        const backup = await verifyLessonQuiz(browser);
-        await verifyImport(browser, backup);
-        await verifyReviewToday(browser);
-        await verifyEmptyQuiz(browser);
-        console.log("Quiz: tab isolation, lesson reload, course filtering, legacy import, progress backup and empty state verified");
+        const backup = await verifyLessonQuiz(browser, mainCourse, 2);
+        await verifyLessonQuiz(browser, memoryCourse, 1);
+        await verifyReviewToday(browser, mainCourse);
+        await verifyReviewToday(browser, memoryCourse);
+        await verifyQuestionBank(browser);
+        await verifyBackup(browser, backup);
+        console.log("Quiz: verified lesson completion and export, daily queues, bank filters and course backup");
     } finally {
         await browser.close();
     }

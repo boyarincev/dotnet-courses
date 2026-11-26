@@ -591,6 +591,29 @@ async function verifyEmbeddedWorkspace(browser) {
         assert.ok((await editorPane.boundingBox()).height > 480,
             "The normal desktop code viewport must be taller than 480 px");
 
+        await editorPane.evaluate(wrapper => {
+            const editor = wrapper.CodeMirror;
+            editor.setValue([
+                "void Project(IEnumerable<Item> source)",
+                "{",
+                "    var result = source",
+                "        .Select(item => (item.Name, item.Value)",
+                "}"
+            ].join("\n"));
+            editor.setCursor(3, editor.getLine(3).length);
+            editor.focus();
+        });
+        await page.keyboard.press("Enter");
+        const currentLine = () => editorPane.evaluate(wrapper => {
+            const editor = wrapper.CodeMirror;
+            return editor.getLine(editor.getCursor().line);
+        });
+        const indentation = await currentLine();
+        assert.match(indentation, /^ {4,}$/);
+        await page.keyboard.press("Shift+Tab");
+        assert.equal(await currentLine(), indentation.slice(4),
+            "Shift+Tab must remove one indent even inside an unfinished call");
+
         const runWithShortcut = async source => {
             assert.ok(await iframe.evaluate((element, code) => {
                 const editor = element.contentWindow.DotnetBrowserEditor;

@@ -386,6 +386,7 @@
       tabSize: 4,
       lineWrapping: false,
       extraKeys: {
+        "Shift-Tab": "indentLess",
         "Ctrl-Space": cm => cm.showHint?.({hint,completeSingle:false}),
         "Ctrl-Enter": () => window.DotnetBrowserEditor.run(),
         "Cmd-Enter": () => window.DotnetBrowserEditor.run()

@@ -90,7 +90,10 @@
   tag: 'C# 14 · null-conditional assignment'
   type: сравнение
   available_from: '2026-11-21'
-  prompt: 'Чем audit?.Text = value отличается от text ??= value?'
+  prompt: >-
+    В каждом варианте audit ссылается на новый объект, а Text равен "".
+    Сравни audit?.Text = BuildSummary() и audit.Text ??= BuildSummary().
+    В каком варианте вызовется BuildSummary()? Каким будет Text в каждом варианте?
 - id: CS14-NCA-04
   lesson_number: 2
   topic: CS14-NULL-ASSIGN

@@ -103,10 +103,14 @@ Audit: ready
 
 При `audit == null` **[правая часть не вычисляется](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14#null-conditional-assignment)**. В этом примере вызов `BuildSummary()` и построение строки отчёта пропускаются.
 
-**Обновить текст или создать объект отчёта?** Рассмотрим два отдельных варианта для переменной `audit` типа `Audit?`.
+**Что проверяют `?.` и `??=`.** Сравним два присваивания в свойство `Text`.
 
-- `audit?.Text = BuildSummary()` проверяет ссылку в `audit`. Если `audit` указывает на объект, код вызывает `BuildSummary()` и записывает полученный текст в свойство `Text`, заменяя прежнее значение. При `audit == null` значение `audit` остаётся `null`, а вызов `BuildSummary()` пропускается.
-- [`audit ??= new Audit()`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/null-coalescing-operator) проверяет текущее значение переменной `audit`. При `audit == null` ссылка на новый объект с пустым `Text` записывается в переменную `audit`. Если объект уже есть, `audit` сохраняет ссылку на него, `Text` сохраняет своё значение, а выражение `new Audit()` пропускается.
+- `audit?.Text = BuildSummary()` проверяет ссылку `audit`. Если объект есть, выражение вызывает `BuildSummary()` и заменяет `Text` при любом исходном значении свойства.
+- [`audit.Text ??= BuildSummary()`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/null-coalescing-operator) читает `Text` у уже созданного объекта. Выражение вызывает `BuildSummary()` и записывает результат только при `Text == null`. Если `audit` равен `null`, обращение к `Text` приводит к `NullReferenceException`.
+
+`new Audit()` в полном примере задаёт `Text = ""`. Если выполнить каждую строку отдельно для нового объекта, первая сформирует отчёт, а вторая пропустит `BuildSummary()` и оставит пустую строку.
+
+Оператор `??=` появился в C# 8, который вышел вместе с .NET Core 3.0. [История C# 8](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-version-history#c-version-80)
 
 ## 3. Полностью запускаемый пример
 

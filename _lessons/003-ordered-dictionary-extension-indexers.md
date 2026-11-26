@@ -13,7 +13,7 @@ browser_start_snippet: full-program
 
 ## Зачем это нужно
 
-На панели состояния сервисы показываются в заранее заданном порядке. В нашем примере сначала идёт `worker`, затем `gateway` и `metrics`.
+На панели состояния сервисы показываются в заранее заданном порядке. В нашем примере сначала идёт `worker`, затем `gateway` и `metrics`. Счётчики ошибок собираются по интервалам. Для сводки сложим счётчики каждого сервиса за два интервала.
 
 - По имени `gateway` получаем число ошибок этого сервиса — 5.
 - По позиции первой строки получаем сразу имя и число ошибок — `worker` и 2.
@@ -32,15 +32,24 @@ public KeyValuePair<TKey, TValue> GetAt(int index);
 var first = entries.GetAt(index: 0); // Первая пара в порядке словаря.
 ```
 
-## 2. C# 15: расширяющий индексатор
+## 2. C# 14–15: блок `extension` и расширяющий индексатор
 
-Расширяющий индексатор добавляет возможность обращаться к упорядоченному словарю по позиции через квадратные скобки. В примере со строковыми ключами `entries[0]` работает так же, как `entries.GetAt(index: 0)`, и возвращает первую пару — `worker` и `2`. По ключу `gateway` выражение `entries["gateway"]` возвращает число ошибок `5`.
+Блок `extension(OrderedDictionary<string, int> entries)` объявляем в статическом классе верхнего уровня без параметров типа. Блок задаёт расширяемый тип. `entries` обозначает словарь, с которым работают метод, свойство и индексатор. Оператор `+` получает оба словаря через параметры `left` и `right`.
 
-Расширяющий индексатор объявляем в блоке `extension` внутри отдельного статического класса. Параметр `entries` в объявлении блока обозначает экземпляр словаря слева от квадратных скобок. Параметр `position` в объявлении `this[int position]` получает число из скобок. Индексатор передаёт это число в `GetAt`.
+В C# 14 в блоке `extension` можно объявлять методы, свойства и операторы расширения. В C# 15 добавились индексаторы. В программе ниже все четыре объявления работают с одним типом. [Справочник по блоку `extension`](https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/extension)
 
-Компилятор сначала ищет подходящий индексатор самого типа. Поэтому у словаря с ключами `int` выражение `entries[0]` обращается к словарю по ключу `0`. Для доступа по позиции в таком словаре используй `GetAt`. [Расширяющие индексаторы в C# 15](https://learn.microsoft.com/dotnet/csharp/whats-new/csharp-15#extension-indexers)
+| Член | Пример обращения | Результат |
+| --- | --- | --- |
+| Метод | `entries.ErrorsFor(service: "auth")` | Число ошибок сервиса `auth`. В первом интервале `auth` отсутствует, поэтому метод возвращает `0`. |
+| Свойство | `entries.TotalErrors` | Сумма ошибок по всем сервисам за первый интервал — `8`. |
+| Оператор | `entries + nextInterval` | Новый словарь со счётчиками за два интервала. Для `gateway` получаем `5 + 3 = 8`. |
+| Индексатор | `entries[0]` | Первая пара словаря — `worker` и `2`. |
 
-Для доступа относительно конца C# использует `System.Index`. В выражении `^1` единица означает «одна позиция от конца», то есть последний элемент. `^0` обозначает позицию сразу после последнего элемента. `Index.GetOffset(length)` переводит индекс в позицию с начала: при длине 3 индекс `^1` даёт 2. Метод вычисляет позицию, а её допустимость для словаря проверяет `GetAt`. [Индексы с конца](https://learn.microsoft.com/dotnet/csharp/tutorials/ranges-indexes), [Сигнатура Index.GetOffset(int length)](https://learn.microsoft.com/dotnet/api/system.index.getoffset?view=net-9.0)
+### Как работает доступ по позиции
+
+Вызов `entries.GetAt(index: 0)` возвращает первую пару словаря. Расширяющий индексатор позволяет получить ту же пару через `entries[0]`. Параметр `position` в объявлении `this[int position]` получает число из квадратных скобок. Индексатор передаёт это число в `GetAt`.
+
+Компилятор сначала ищет подходящий индексатор самого типа. Для `entries["gateway"]` подходит индексатор по строковому ключу, который возвращает `5`. Для `entries[0]` компилятор выбирает объявленный нами индексатор с параметром `int`. Если у словаря целочисленные ключи, индексатор самого словаря выбирается первым даже при наличии подходящего расширения. В таком случае `entries[0]` ищет ключ `0`, а `GetAt(index: 0)` возвращает первую пару. [Правила выбора индексатора](https://learn.microsoft.com/dotnet/csharp/language-reference/proposals/csharp-15.0/extension-indexers#indexer-access)
 
 ## Запусти пример
 
@@ -49,6 +58,7 @@ var first = entries.GetAt(index: 0); // Первая пара в порядке 
 ```csharp
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 public static class Program
 {
@@ -64,6 +74,16 @@ public static class Program
         Console.WriteLine($"Ошибки gateway: {entries["gateway"]}");
         var first = entries[0];
         Console.WriteLine($"Первая строка: {first.Key} = {first.Value}");
+        Console.WriteLine($"Ошибки auth за первый интервал: {entries.ErrorsFor(service: "auth")}");
+        Console.WriteLine($"Всего ошибок за первый интервал: {entries.TotalErrors}");
+
+        var nextInterval = new OrderedDictionary<string, int>
+        {
+            { "gateway", 3 },
+            { "auth", 4 }
+        };
+        var combined = entries + nextInterval;
+        Console.WriteLine($"За два интервала: gateway={combined["gateway"]}, auth={combined["auth"]}");
     }
 }
 
@@ -71,9 +91,33 @@ public static class ServiceBoardExtensions
 {
     extension(OrderedDictionary<string, int> entries)
     {
+        // Для сервиса, которого нет в словаре, возвращаем ноль.
+        public int ErrorsFor(string service) =>
+            entries.TryGetValue(service, out var errors) ? errors : 0;
+
+        public int TotalErrors => entries.Values.Sum();
+
         // position — номер строки с нуля в текущем порядке словаря.
         public KeyValuePair<string, int> this[int position] =>
             entries.GetAt(index: position);
+
+        public static OrderedDictionary<string, int> operator +(
+            OrderedDictionary<string, int> left,
+            OrderedDictionary<string, int> right)
+        {
+            // Начинаем с копии первого словаря и используем то же сравнение ключей.
+            var combined = new OrderedDictionary<string, int>(
+                dictionary: left,
+                comparer: left.Comparer);
+
+            foreach (var (service, errors) in right)
+            {
+                // Для нового сервиса ErrorsFor возвращает ноль.
+                combined[service] = combined.ErrorsFor(service) + errors;
+            }
+
+            return combined;
+        }
     }
 }
 ```
@@ -84,6 +128,9 @@ public static class ServiceBoardExtensions
 ```text
 Ошибки gateway: 5
 Первая строка: worker = 2
+Ошибки auth за первый интервал: 0
+Всего ошибок за первый интервал: 8
+За два интервала: gateway=8, auth=4
 ```
 {: #output-full-program }
 
@@ -98,7 +145,7 @@ cd ServiceBoard
 
 ## Напиши код сам · TASK-003 {#lesson-task}
 
-В задании объявим индексатор, который получает `Index` напрямую. `Index middle = 1` задаёт позицию с начала, а `^1` — позицию с конца. [Спецификация System.Index](https://learn.microsoft.com/dotnet/csharp/language-reference/language-specification/ranges#182-the-index-type)
+Параметр индексатора в этом задании имеет тип `Index`. Для непустого словаря `^1` указывает на последнюю пару, а `^0` — на позицию сразу за ней. `Index middle = 1` задаёт позицию 1 с начала, то есть вторую пару, если в словаре есть хотя бы две пары. [Спецификация System.Index](https://learn.microsoft.com/dotnet/csharp/language-reference/language-specification/ranges#182-the-index-type)
 
 Реализуй расширяющий индексатор с параметром `Index` для `OrderedDictionary<string, int>`. Он должен вернуть пару «имя сервиса, число ошибок» на указанной позиции. Поддержи позиции с начала и с конца и получай пару через `GetAt`. Сохрани обычный поиск по строковому ключу. При недопустимой позиции, в том числе при `^0` и при `^1` на пустом словаре, ожидается `ArgumentOutOfRangeException`.
 
@@ -193,7 +240,7 @@ return entries.GetAt(index: position.Value);
 
 <details>
 <summary>Подсказка</summary>
-<p>Свяжи три величины: индекс из квадратных скобок, количество элементов в словаре и позицию с начала, которую принимает GetAt.</p>
+<p><code>GetAt</code> принимает позицию с начала. Посмотри, как <a href="https://learn.microsoft.com/dotnet/api/system.index.getoffset?view=net-9.0"><code>Index.GetOffset(int length)</code></a> переводит индекс с конца в позицию с начала. Подумай, какую длину передать методу.</p>
 </details>
 
 На повторении раздели три случая: доступ по строковому ключу, доступ по позиции с начала и доступ относительно конца. Для каждого назови тип результата.

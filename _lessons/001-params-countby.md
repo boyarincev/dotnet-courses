@@ -12,7 +12,7 @@ browser_snippets: browser-snippets.js
 browser_start_snippet: full-program
 ---
 ## Зачем это нужно
-Из учебной выгрузки берём метки HTTP-методов и считаем, сколько раз встретился каждый метод. В полном примере две метки `GET` и одна `get` дают общий итог — три запроса. `params` позволяет передать метки отдельными аргументами, а `CountBy` возвращает метки с числом их появлений.
+Из учебной выгрузки берём метки HTTP-методов и считаем, сколько раз встретился каждый метод. В полном примере игнорируем регистр при подсчёте и получаем три запроса для `GET`. `params` позволяет передать метки отдельными аргументами, а `CountBy` возвращает метки с числом их появлений.
 
 ## 1. C# 13: расширенный `params`
 До C# 13 тип параметра `params` ограничивался [одномерным массивом `T[]`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/method-parameters#params-modifier).
@@ -99,7 +99,7 @@ public static IEnumerable<KeyValuePair<TKey, int>> CountBy<TSource, TKey>(
 
 - `source` — элементы для подсчёта. В вызове метода расширения последовательность `methods` стоит перед точкой.
 - `keySelector` — функция, которая получает один элемент и возвращает ключ. Здесь `method => method` берёт саму метку.
-- `keyComparer` — необязательный компаратор ключей. Если его опустить, применяется `EqualityComparer<TKey>.Default`.
+- `keyComparer` — необязательный параметр, который определяет, какие ключи считать равными при подсчёте. Если его не передать, применяется `EqualityComparer<TKey>.Default`.
 
 ```csharp
 var counts = methods.CountBy(
@@ -206,7 +206,7 @@ Sum = 60
 
 Для `["get", "POST", "GET", "put", "post", "DELETE", "delete", "GET"]` ожидаются `GET: 3`, `DELETE: 2`, `POST: 2` в этом порядке. Здесь имена записаны прописными буквами для наглядности.
 
-<details><summary>Необязательная подсказка</summary><p>После <code>CountBy</code> используй <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.orderbydescending?view=net-9.0#system-linq-enumerable-orderbydescending-2(system-collections-generic-ienumerable((-0))-system-func((-0-1)))"><code>OrderByDescending</code></a> для основной сортировки, <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.thenby?view=net-9.0#system-linq-enumerable-thenby-2(system-linq-iorderedenumerable((-0))-system-func((-0-1))-system-collections-generic-icomparer((-1)))"><code>ThenBy</code></a> с компаратором для равных частот и <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.take?view=net-9.0#system-linq-enumerable-take-1(system-collections-generic-ienumerable((-0))-system-int32)"><code>Take(int count)</code></a> для ограничения числа пар.</p></details>
+<details><summary>Необязательная подсказка</summary><p>После <code>CountBy</code> используй <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.orderbydescending?view=net-9.0#system-linq-enumerable-orderbydescending-2(system-collections-generic-ienumerable((-0))-system-func((-0-1)))"><code>OrderByDescending</code></a> для основной сортировки, <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.thenby?view=net-9.0#system-linq-enumerable-thenby-2(system-linq-iorderedenumerable((-0))-system-func((-0-1))-system-collections-generic-icomparer((-1)))"><code>ThenBy</code></a> с <code>StringComparer.OrdinalIgnoreCase</code> для сравнения названий методов при одинаковом числе запросов и <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.take?view=net-9.0#system-linq-enumerable-take-1(system-collections-generic-ienumerable((-0))-system-int32)"><code>Take(int count)</code></a> для ограничения числа пар.</p></details>
 
 ~~~csharp
 using System;
@@ -281,7 +281,7 @@ return Array.Empty<(string, int)>();
 </script>
 
 ## 5. Что запомнить
-- C# 13 `params` может принимать коллекционные типы помимо массива, в том числе `ReadOnlySpan<T>`.
+- В C# 13 для параметра с модификатором `params` доступны и другие типы коллекций помимо массива, например `ReadOnlySpan<T>`.
 - `CountBy` в .NET 9 непосредственно считает частоты по ключу.
 - `StringComparer.OrdinalIgnoreCase` позволяет игнорировать регистр.
 

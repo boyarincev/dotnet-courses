@@ -19,9 +19,9 @@ browser_start_snippet: allocations-copies-retention
 
 На примере разбора строк посмотрим, какие объекты создаются, почему изменение суммы в копии заказа оставляет исходную сумму в списке прежней и какие данные остаются в памяти, пока вызывающий код хранит список.
 
-- **Аллокация** — выделение места в памяти. В этом уроке разбираем выделения в управляемой куче. В примере `Split` создаёт массив и отдельную строку для каждого поля записи. Память можно выделить и на стеке. Например, `Span<byte> buffer = stackalloc byte[16];` [выделяет 16 байт на время выполнения метода](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/stackalloc).
+- **Аллокация** — выделение места в памяти. В этом уроке разбираем выделения в управляемой куче. При разборе `ORD-1042;paid;1499.90` вызов `Split` создаёт массив и три строки с содержимым полей. Память можно выделить и на стеке. Например, `Span<byte> buffer = stackalloc byte[16];` [выделяет 16 байт на время выполнения метода](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/stackalloc).
 - **Копирование** — запись уже существующего значения в другое место. Если место уже есть, новое выделение не нужно. Например, `source.AsSpan().CopyTo(destination);` [копирует байты из `source` в уже выделенный массив `destination`](https://learn.microsoft.com/en-us/dotnet/api/system.span-1.copyto?view=net-10.0). В массиве назначения должно быть достаточно места. В примере ниже `Order snapshot = paid[0]` копирует значение структуры из списка в локальную переменную без создания отдельного объекта в управляемой куче.
-- **Удержание** — данные остаются достижимыми через ссылки и поэтому продолжают занимать память. Пример: сохранённый надолго `List<Order>`.
+- **Удержание** — данные остаются достижимыми через ссылки и поэтому продолжают занимать память. Например, строки с номерами заказов остаются достижимыми, пока вызывающий код хранит список `List<Order>`.
 
 Выделение и копирование могут встретиться вместе. Строка `byte[] destination = new byte[source.Length];` создаёт массив. Следующая строка, `source.AsSpan().CopyTo(destination);`, записывает в него байты из исходного массива.
 
@@ -54,7 +54,7 @@ public static class Program
 
         List<Order> paid = ParsePaid(rows);
         Console.WriteLine($"Paid orders: {paid.Count}");
-        // F2 показывает две цифры после точки. InvariantCulture сохраняет точку при любой локали.
+        // F2 выводит две цифры после десятичного разделителя. InvariantCulture задаёт точку.
         Console.WriteLine($"First amount: {paid[0].Amount.ToString(format: "F2", provider: CultureInfo.InvariantCulture)}");
 
         Order snapshot = paid[0];
@@ -74,9 +74,9 @@ public static class Program
             if (!decimal.TryParse(
                     // Третье поле содержит сумму заказа.
                     s: fields[2],
-                    // Разрешаем пробелы по краям, знак, десятичный разделитель и разделитель групп.
+                    // Разрешаем пробелы по краям, знак, десятичный разделитель и разделитель групп разрядов.
                     style: NumberStyles.Number,
-                    // Разбираем точку как десятичный разделитель при любой локали.
+                    // InvariantCulture задаёт точку как десятичный разделитель.
                     provider: CultureInfo.InvariantCulture,
                     // При успехе разобранная сумма попадёт в amount.
                     result: out decimal amount))
@@ -104,7 +104,7 @@ internal struct Order
 ~~~
 {: #snippet-allocations-copies-retention }
 
-Суммы разбираются и выводятся с [десятичной точкой инвариантной культуры](https://learn.microsoft.com/en-us/dotnet/api/system.globalization.numberformatinfo.numberdecimalseparator?view=net-10.0#property-value). В выводе `F2` [задаёт две цифры после десятичного разделителя](https://learn.microsoft.com/en-us/dotnet/standard/base-types/standard-numeric-format-strings#fixed-point-format-specifier-f).
+При разборе и выводе суммы `CultureInfo.InvariantCulture` [задаёт точку как десятичный разделитель](https://learn.microsoft.com/en-us/dotnet/api/system.globalization.numberformatinfo.numberdecimalseparator?view=net-10.0#property-value). В выводе `F2` [задаёт две цифры после десятичного разделителя](https://learn.microsoft.com/en-us/dotnet/standard/base-types/standard-numeric-format-strings#fixed-point-format-specifier-f).
 
 Запусти программу командой `dotnet run` и сравни результат с ожидаемым.
 
@@ -125,7 +125,7 @@ After copy change: 1499.90
 
 `Order snapshot = paid[0]` сохраняет копию структуры в локальной переменной. После `snapshot.Amount = 0m` сумма в копии равна `0m`. В элементе массива она остаётся `1499.90m`. При копировании `Id` копируется ссылка, поэтому [оба поля указывают на одну и ту же строку](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/value-types).
 
-Схема показывает состояние после присваивания.
+Схема показывает состояние после `snapshot.Amount = 0m`.
 
 ~~~text
 Локальные переменные              Управляемая куча
@@ -149,9 +149,9 @@ snapshot.Id ------------------------------------------+
 
 **Задача на 12 минут.** Реализуй `SummarizePaid`: на входе — строки формата `ID;status;amount`. Верни количество записей со статусом `paid` и сумму их полей `amount` **без создания списка заказов**.
 
-Сравнивай статус с `paid` с учётом регистра, как при [сравнении строк оператором `==`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/equality-operators#string-equality). Пропускай строки с неверным числом полей или суммой, которую [`decimal.TryParse` с числовым форматом и культурой](<https://learn.microsoft.com/en-us/dotnet/api/system.decimal.tryparse?view=net-10.0#system-decimal-tryparse(system-string-system-globalization-numberstyles-system-iformatprovider-system-decimal@>) не смог разобрать. Используй [`NumberStyles.Number`](https://learn.microsoft.com/en-us/dotnet/api/system.globalization.numberstyles?view=net-10.0#fields) и `CultureInfo.InvariantCulture`, как в примере. Для разбиения строки можно использовать [`Split(char separator, StringSplitOptions options)`](<https://learn.microsoft.com/en-us/dotnet/api/system.string.split?view=net-10.0#system-string-split(system-char-system-stringsplitoptions>). Не сохраняй промежуточные записи в коллекции.
+Сравнивай статус с `paid` с учётом регистра, как при [сравнении строк оператором `==`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/equality-operators#string-equality). При разбиении учитывай пустые поля. Пропускай строки, если в них не ровно три поля или [`decimal.TryParse` с числовым форматом и культурой](<https://learn.microsoft.com/en-us/dotnet/api/system.decimal.tryparse?view=net-10.0#system-decimal-tryparse(system-string-system-globalization-numberstyles-system-iformatprovider-system-decimal@>) возвращает `false` при разборе суммы. Используй [`NumberStyles.Number`](https://learn.microsoft.com/en-us/dotnet/api/system.globalization.numberstyles?view=net-10.0#fields) и `CultureInfo.InvariantCulture`, как в примере. Для разбиения строки можно использовать [`Split(char separator, StringSplitOptions options)`](<https://learn.microsoft.com/en-us/dotnet/api/system.string.split?view=net-10.0#system-string-split(system-char-system-stringsplitoptions>). Не сохраняй промежуточные записи в коллекции.
 
-**Проверка:**
+**Входные данные**
 
 ~~~text
 ORD-1042;paid;1499.90
@@ -160,8 +160,9 @@ ORD-1044;paid;80.00
 broken
 ORD-1045;paid;not-a-number
 ORD-1046;PAID;30.00
-→ Paid: 2, Total: 1579.90
 ~~~
+
+Для этих строк метод возвращает `(2, 1579.90m)`.
 
 **Пограничный случай:** пустая последовательность должна вернуть `(0, 0m)`. Метод принимает `IEnumerable<string>` и проходит его только один раз.
 
@@ -185,7 +186,8 @@ public static class Program
         // и сложи их поля amount. Верни (PaidCount, Total).
         // Разбирай суммы через decimal.TryParse с NumberStyles.Number
         // и CultureInfo.InvariantCulture.
-        // Пропускай строки с неверным числом полей или нечисловой суммой.
+        // При разбиении учитывай пустые поля. Пропускай строку, если полей не три
+        // или decimal.TryParse вернул false.
         // Разобранные записи не сохраняй в коллекции.
 
         throw new NotImplementedException();

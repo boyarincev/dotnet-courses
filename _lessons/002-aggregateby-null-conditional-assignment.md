@@ -2,7 +2,7 @@
 lesson_number: 2
 lesson_date: '21 ноября 2026'
 title: 'Сводка по маршрутам HTTP-запросов: AggregateBy и условное присваивание'
-summary: 'Считаем число запросов и их суммарную длительность по маршрутам. Формируем отчёт, если задан получатель.'
+summary: 'Считаем число запросов и их суммарную длительность по маршрутам. Формируем текст отчёта, только если есть объект для записи.'
 csharp_feature: 'C# 14 · условное присваивание через ?.'
 dotnet_feature: '.NET 9 · AggregateBy'
 series: 'Коллекции и LINQ'
@@ -13,15 +13,15 @@ browser_start_snippet: full-program
 ---
 ## Зачем это нужно
 
-В [уроке №1]({{ '/courses/csharp-dotnet-9-11/lessons/001-params-countby/' | relative_url }}) мы считали частоты HTTP-методов. Теперь в каждой записи есть маршрут, статус ответа и длительность в миллисекундах. Для сводки нужны количество запросов и суммарная длительность по каждому маршруту. `AggregateBy` накапливает оба значения.
+В [уроке №1]({{ '/courses/csharp-dotnet-9-11/lessons/001-params-countby/' | relative_url }}) мы считали запросы по HTTP-методам. Теперь в каждой записи есть маршрут запроса, код ответа и длительность в миллисекундах. Для сводки нужны количество запросов и суммарная длительность по каждому маршруту. `AggregateBy` накапливает оба значения.
 
-В полном примере берём только успешные ответы (2xx) и считаем `/orders` и `/ORDERS` одним маршрутом. По нему получаем четыре запроса общей длительностью 220 мс. Сводку строим всегда. Присваивание через `?.` позволяет сформировать текст из готовой сводки и записать его только при наличии объекта отчёта.
+В полном примере учитываем только запросы с кодами ответа 2xx и считаем `/orders` и `/ORDERS` одним маршрутом. По нему получаем четыре запроса общей длительностью 220 мс. Сводку строим всегда. Если `audit` указывает на объект отчёта, присваивание через `?.` вызывает `BuildSummary()` и записывает полученный текст в свойство `Text`.
 
 ## 1. .NET 9: Enumerable.AggregateBy
 
-`CountBy(keySelector)` возвращает пары «ключ, количество элементов». Если выбрать маршрут в качестве ключа, два запроса к `/orders` и один к `/health` дадут пары `(/orders, 2)` и `(/health, 1)`. `AggregateBy` накапливает **произвольное состояние для каждого ключа**. В этой сводке сравниваем маршруты без учёта регистра и накапливаем для каждого счётчик и сумму длительностей.
+`CountBy(keySelector)` возвращает пары «ключ, количество элементов». Если выбрать маршрут в качестве ключа, два запроса к `/orders` и один к `/health` дадут пары `(/orders, 2)` и `(/health, 1)`. `AggregateBy` хранит одно накопленное значение для каждого ключа и обновляет его для каждой записи с этим ключом. В этой сводке для каждого маршрута накапливаем пару из числа запросов и суммы их длительностей. Маршруты сравниваем без учёта регистра.
 
-В примере используем перегрузку с фиксированным начальным значением `seed`. [Перегрузка AggregateBy с параметром seed в справочнике .NET 9](<https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.aggregateby?view=net-9.0#system-linq-enumerable-aggregateby-3(system-collections-generic-ienumerable((-0))-system-func((-0-1))-2-system-func((-2-0-2))-system-collections-generic-iequalitycomparer((-1)))>)
+В примере используем перегрузку с параметром `seed`, который задаёт одно начальное значение для всех ключей. [Перегрузка AggregateBy с параметром seed в справочнике .NET 9](<https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.aggregateby?view=net-9.0#system-linq-enumerable-aggregateby-3(system-collections-generic-ienumerable((-0))-system-func((-0-1))-2-system-func((-2-0-2))-system-collections-generic-iequalitycomparer((-1)))>)
 
 ```csharp
 public static IEnumerable<KeyValuePair<TKey, TAccumulate>> AggregateBy<TSource, TKey, TAccumulate>(
@@ -33,32 +33,32 @@ public static IEnumerable<KeyValuePair<TKey, TAccumulate>> AggregateBy<TSource, 
     where TKey : notnull;
 ```
 
-В вызове ниже `source` — это `calls` перед точкой, а `TAccumulate` — тип пары из счётчика и суммы.
+В вызове ниже `source` — это `calls` перед точкой, а `TAccumulate` — `(int Count, int TotalMs)`, тип кортежа с числом запросов и суммой их длительностей в миллисекундах.
 
 ```csharp
 var stats = calls.AggregateBy(
-    // Ключ группы — маршрут запроса.
+    // Используем маршрут запроса как ключ сводки.
     keySelector: call => call.Route,
 
     // Для каждого нового маршрута счётчик и сумма начинаются с нуля.
     seed: (Count: 0, TotalMs: 0),
 
-    // Берём накопленный итог и добавляем к нему текущий запрос.
+    // Увеличиваем счётчик на один и прибавляем длительность текущего запроса к сумме.
     func: (acc, call) => (acc.Count + 1, acc.TotalMs + call.DurationMs),
 
-    // "/orders" и "/ORDERS" попадут в одну группу.
+    // Для "/orders" и "/ORDERS" ведём общий счётчик и общую сумму.
     keyComparer: StringComparer.OrdinalIgnoreCase);
 ```
 {: #snippet-aggregateby }
 
-На входе три запроса к `/orders` и `/ORDERS` длительностью 40, 90 и 60 мс. Вывод показывает число запросов и суммарное время в миллисекундах.
+На входе три запроса к `/orders` и `/ORDERS` длительностью 40, 90 и 60 мс. В выводе `3` — число запросов, а `190` — сумма их длительностей в миллисекундах.
 
 ~~~text
 /orders: 3/190
 ~~~
 {: #output-aggregateby }
 
-Если опустить `keyComparer`, применяется [сравнение по умолчанию для типа ключа](<https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.dictionary-2.-ctor?view=net-9.0#system-collections-generic-dictionary-2-ctor(system-collections-generic-iequalitycomparer((-0)))>). Когда начальное значение зависит от ключа, используй [перегрузку с `seedSelector`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.aggregateby?view=net-9.0#overloads).
+Если опустить `keyComparer`, для определения равенства ключей применяется [компаратор по умолчанию для их типа](<https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.dictionary-2.-ctor?view=net-9.0#system-collections-generic-dictionary-2-ctor(system-collections-generic-iequalitycomparer((-0)))>). Когда начальное значение зависит от ключа, используй [перегрузку с `seedSelector`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.aggregateby?view=net-9.0#overloads).
 
 Метод возвращает **`IEnumerable<KeyValuePair<TKey, TAccumulate>>`**. Как и в `CountBy`, вычисление отложено. Реализация .NET 9 для непустого входа читает весь источник и сохраняет в словаре одно накопленное значение на ключ перед выдачей первой пары. При повторном перечислении метод заново читает источник. [Итератор AggregateBy в .NET 9](https://github.com/dotnet/runtime/blob/v9.0.0/src/libraries/System.Linq/src/System/Linq/AggregateBy.cs#L66-L99)
 
@@ -66,9 +66,9 @@ var stats = calls.AggregateBy(
 
 **Когда пригодится `GroupBy`.** Если нужно перечислить отдельные запросы по маршруту, например посмотреть статус и длительность каждого запроса к `/orders`, используй `GroupBy`. В результате `GroupBy` для каждого маршрута доступны ключ группы и входящие в неё записи `HttpCall`. В результате этого вызова `AggregateBy` для каждого маршрута доступны ключ и накопленный итог `(Count, TotalMs)`.
 
-## 2. C# 14: null-conditional assignment
+## 2. C# 14: присваивание через `?.`
 
-**Как читать `Audit?`.** [Знак `?` после имени ссылочного типа](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/nullable-reference-types) отмечает, что переменная может содержать ссылку на объект или `null`. В примере `Audit? audit` может содержать объект `Audit` или `null`. В задании `AuditReport?` означает то же самое для типа `AuditReport`. При включённом nullable-анализе компилятор использует аннотацию, чтобы предупреждать о возможном обращении к `null`. Оператор `?.` проверяет значение ссылки во время выполнения.
+**Как читать `Audit?`.** [Аннотация `?` после имени ссылочного типа](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/nullable-reference-types) означает, что ссылка может иметь значение `null`. Например, переменная `audit` типа `Audit?` может содержать ссылку на объект `Audit` или значение `null`. В задании `AuditReport?` означает то же для ссылок на объект `AuditReport`. При включённом анализе nullable-ссылок компилятор использует аннотацию, чтобы предупреждать о возможном обращении к члену объекта через ссылку со значением `null`. Оператор `?.` проверяет значение ссылки во время выполнения.
 
 Раньше:
 
@@ -78,7 +78,7 @@ if (audit is not null)
 ```
 {: #snippet-explicit-null-check }
 
-Вывод при заданном `audit`
+Вывод, когда `audit` указывает на объект `Audit`
 
 ~~~text
 Audit: ready
@@ -105,8 +105,8 @@ Audit: ready
 
 **Обновить текст или создать объект отчёта?** Рассмотрим два отдельных варианта для переменной `audit` типа `Audit?`.
 
-- `audit?.Text = BuildSummary()` проверяет ссылку в `audit`. Если объект есть, результат `BuildSummary()` записывается в его свойство `Text`, заменяя любой прежний текст. При `audit == null` значение `audit` остаётся `null`, а вызов `BuildSummary()` пропускается.
-- [`audit ??= new Audit()`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/null-coalescing-operator) проверяет текущее значение переменной `audit`. При `audit == null` новый объект с пустым `Text` записывается в саму переменную `audit`. Если объект уже есть, `audit` сохраняет ссылку на него, `Text` сохраняет своё значение, а выражение `new Audit()` пропускается.
+- `audit?.Text = BuildSummary()` проверяет ссылку в `audit`. Если `audit` указывает на объект, код вызывает `BuildSummary()` и записывает полученный текст в свойство `Text`, заменяя прежнее значение. При `audit == null` значение `audit` остаётся `null`, а вызов `BuildSummary()` пропускается.
+- [`audit ??= new Audit()`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/null-coalescing-operator) проверяет текущее значение переменной `audit`. При `audit == null` ссылка на новый объект с пустым `Text` записывается в переменную `audit`. Если объект уже есть, `audit` сохраняет ссылку на него, `Text` сохраняет своё значение, а выражение `new Audit()` пропускается.
 
 ## 3. Полностью запускаемый пример
 
@@ -198,26 +198,26 @@ Audit: /health=1/5; /orders=4/220
 ```
 {: #output-full-program }
 
-Фильтр пропустил только ответы со статусами 2xx. Запросы к `/orders` и `/ORDERS` вошли в один итог. В выводе примера остался ключ `/orders`, который встретился первым.
+В сводку вошли запросы с кодами ответа 2xx. Запросы к `/orders` и `/ORDERS` учтены в одной строке сводки. В выводе примера остался ключ `/orders`, который встретился первым.
 
 `BuildSummary` вызван один раз, когда появился объект `Audit`. Попробуй убрать `StringComparer.OrdinalIgnoreCase` и предскажи, сколько ключей получится.
 
 ## 4. Напиши код сам · TASK-002 {#lesson-task}
 
-**15–20 минут.** Реализуй `GetNoisiestClients` для записей HTTP-вызовов. Оставь ответы со статусом `400` и выше. Сгруппируй их через `AggregateBy` по имени клиента с `StringComparer.OrdinalIgnoreCase`.
+**15–20 минут.** Реализуй `GetNoisiestClients` для записей HTTP-запросов. Учитывай только записи с кодом ответа `400` и выше. С помощью `AggregateBy` посчитай для каждого клиента число таких ответов и их суммарный размер. Имена клиентов сравнивай с помощью `StringComparer.OrdinalIgnoreCase`.
 
-- **Результат метода.** Верни до двух клиентов с наибольшей суммой байтов в виде `(Client, Count, TotalBytes)`. `Count` — число ошибочных ответов клиента. `TotalBytes` — сумма их полей `ResponseBytes` в байтах, тип суммы `long`. Сортируй по `TotalBytes` по убыванию. При равной сумме порядок клиентов свободный. Для `Client` допустим любой регистр.
-- **Текст отчёта.** Если `audit` задан, через `?.` запиши в `audit.Text` значения `Client` и `TotalBytes` из результата в том же порядке. Формат записи — `клиент=сумма_байтов`, разделитель — `"; "`.
+- **Результат метода.** Верни до двух клиентов с наибольшим суммарным размером ответов. Каждый элемент результата — кортеж `(Client, Count, TotalBytes)`. `Count` — число ответов с кодом `400` и выше. `TotalBytes` — сумма значений `ResponseBytes` для этих ответов в байтах, тип суммы `long`. Отсортируй результат по убыванию `TotalBytes`. При равных суммах порядок клиентов произвольный. Для `Client` допустим любой регистр.
+- **Текст отчёта.** Если `audit` указывает на объект, сформируй текст из `Client` и `TotalBytes` и запиши его в `audit.Text`. Выполни обе операции одним присваиванием через `?.`. Порядок записей в отчёте должен совпадать с порядком в результате. Формат записи — `клиент=сумма_байтов`, разделитель — `"; "`.
 
 Кнопка «Открыть заготовку» загрузит в редактор полный `Program.cs` с типами `Failure` и `AuditReport`, сигнатурой `GetNoisiestClients` и примером входа в `Main`.
 
-**Ожидаемый результат.** Сначала клиент `api-c` с двумя ошибками на 400 байт суммарно, затем клиент `api-b` с одной ошибкой на 390 байт. Регистр имён может отличаться. Если метод вернул имена `API-c` и `api-b`, в `audit.Text` должна быть строка `API-c=400; api-b=390`.
+**Ожидаемый результат.** В результате первым идёт `api-c` (`Count = 2`, `TotalBytes = 400`), затем `api-b` (`Count = 1`, `TotalBytes = 390`). Регистр имён может отличаться. Если метод вернул имена `API-c` и `api-b`, в `audit.Text` должна быть строка `API-c=400; api-b=390`.
 
-**Критерии готовности:** фильтр статусов до агрегации; `long` для суммы; объединение `Api-C` и `API-c` в одну группу; выбор двух клиентов с наибольшей суммой байтов; при `audit == null` не создавать текст отчёта. **Пограничный случай:** пустой вход возвращает пустую коллекцию. Если `audit` не равен `null`, в `audit.Text` записывается пустая строка.
+**Критерии готовности.** Отбери записи по коду ответа перед вызовом `AggregateBy`. Сумму размеров считай в `long`. Ответы для `Api-C` и `API-c` учитывай в одном итоге. Верни до двух клиентов с наибольшим суммарным размером ответов. При `audit == null` пропусти построение текста отчёта. **Пограничный случай.** Для пустого входа верни пустой результат. Если `audit` указывает на объект, запиши в `audit.Text` пустую строку.
 
 При ревью метода отдельно проверь, когда вычисляется строка отчёта. При `audit == null` построение строки должно пропускаться, даже если сводка возвращается правильно.
 
-<details><summary>Необязательная подсказка</summary><p>После <code>AggregateBy</code> используй <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.orderbydescending?view=net-10.0#system-linq-enumerable-orderbydescending-2(system-collections-generic-ienumerable((-0))-system-func((-0-1)))"><code>OrderByDescending</code></a> по сумме байтов и <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.take?view=net-10.0#system-linq-enumerable-take-1(system-collections-generic-ienumerable((-0))-system-int32)"><code>Take(int count)</code></a>, чтобы оставить до двух клиентов. Сначала сохрани результат через <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.toarray?view=net-10.0"><code>ToArray</code></a>, затем формируй строку только внутри условного присваивания.</p></details>
+<details><summary>Необязательная подсказка</summary><p>После <code>AggregateBy</code> используй <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.orderbydescending?view=net-10.0#system-linq-enumerable-orderbydescending-2(system-collections-generic-ienumerable((-0))-system-func((-0-1)))"><code>OrderByDescending</code></a> по сумме байтов и <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.take?view=net-10.0#system-linq-enumerable-take-1(system-collections-generic-ienumerable((-0))-system-int32)"><code>Take(int count)</code></a>, чтобы оставить до двух клиентов. Сначала сохрани результат через <a href="https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.toarray?view=net-10.0"><code>ToArray</code></a>, затем вычисляй текст отчёта в правой части присваивания через <code>?.</code>.</p></details>
 
 ~~~csharp
 using System;
@@ -230,15 +230,16 @@ public static class Program
     static IReadOnlyList<(string Client, int Count, long TotalBytes)> GetNoisiestClients(
         IEnumerable<Failure> calls, AuditReport? audit)
     {
-        // Реализуй GetNoisiestClients для записей HTTP-вызовов.
-        // Оставь ответы со StatusCode >= 400 и сгруппируй их через AggregateBy
-        // по имени клиента с StringComparer.OrdinalIgnoreCase. Count — число таких ответов.
-        // TotalBytes (long) — сумма их ResponseBytes в байтах.
-        // Верни до двух клиентов с наибольшей суммой байтов по убыванию TotalBytes.
+        // На входе записи HTTP-запросов. Учитывай только записи со StatusCode >= 400.
+        // Через AggregateBy посчитай для каждого клиента число таких ответов (Count)
+        // и сумму их размеров ResponseBytes в байтах (TotalBytes, тип long).
+        // Сравнивай имена клиентов через StringComparer.OrdinalIgnoreCase.
+        // Верни до двух клиентов с наибольшим TotalBytes в виде кортежей
+        // (Client, Count, TotalBytes) по убыванию TotalBytes.
         // При равных суммах порядок любой. Для Client допустим любой регистр.
-        // Если audit задан, через ?. запиши в audit.Text пары "клиент=сумма_байтов"
-        // из результата в том же порядке, разделяя пары через "; ". Для пустого
-        // результата запиши пустую строку. При audit == null отчёт не формируй.
+        // Присваиванием через ?. запиши в audit.Text пары "клиент=сумма_байтов"
+        // из результата в том же порядке с разделителем "; ". Для пустого результата
+        // запиши пустую строку. При audit == null пропусти форматирование и запись.
 
         throw new NotImplementedException();
     }
@@ -335,6 +336,6 @@ return Array.Empty<(string, int, long)>();
 
 После зачёта практики нажми «Пройти квиз урока» рядом с редактором. Квиз по одному покажет вопросы этого урока, на которые ещё нет оценённого ответа. Самооценка сохраняет ответ в истории карточки.
 
-Microsoft Learn: [условное присваивание в C# 14](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14#null-conditional-assignment).
+Microsoft Learn: [присваивание через `?.` в C# 14](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14#null-conditional-assignment).
 
 *Примеры этого урока проверяются на .NET 10 при сборке сайта; браузерный компилятор использует C# 14 и .NET 10.*

@@ -13,11 +13,15 @@ browser_start_snippet: full-program
 
 ## Зачем это нужно
 
-Сервис хранит лимиты запросов в словаре со строковыми ключами. Например, для `/orders` задан лимит 120. Из строки `GET /ORDERS HTTP/1.1` мы уже получили срез `/ORDERS` и хотим найти лимит без учёта регистра. `GetAlternateLookup` позволяет искать по срезу, не создавая из него строку. Чтобы передать срез в свой обобщённый метод поиска, понадобится `allows ref struct`. Если ключ уже получен в виде `string`, хватит обычного `Dictionary.TryGetValue`.
+При разборе журналов и входных сообщений часто извлекают идентификаторы и ищут их в словаре со строковыми ключами. Если идентификатор уже представлен срезом `ReadOnlySpan<char>`, `GetAlternateLookup` позволяет выполнить поиск без создания временной строки. Для этого нужен компаратор, который поддерживает сравнение среза со строкой. Для готового строкового ключа достаточно `Dictionary.TryGetValue`.
+
+Например, одну обобщённую обёртку для замера времени можно использовать с парсером строк и с парсером срезов. `allows ref struct` позволяет такому обобщённому методу принимать и `ReadOnlySpan<char>`.
 
 ## 1. Что передаём в словарь
 
-В [уроке №1]({{ '/courses/csharp-dotnet-9-11/lessons/001-params-countby/' | relative_url }}) мы передавали в метод `ReadOnlySpan<int>`. Теперь `ReadOnlySpan<char>` указывает на символы внутри исходной строки. В `line.AsSpan(start: 4, length: 7)` отсчёт начинается с нуля. Позиция 4 указывает на `/`, а длина 7 захватывает `/ORDERS` целиком. [Перегрузка AsSpan с начальной позицией и длиной](<https://learn.microsoft.com/en-us/dotnet/api/system.memoryextensions.asspan?view=net-9.0#system-memoryextensions-asspan(system-string-system-int32-system-int32)>)
+В примере словарь хранит лимит `120` для `/orders` и сравнивает ключи без учёта регистра. Путь для поиска берём из строки запроса `GET /ORDERS HTTP/1.1`.
+
+В [уроке №1]({{ '/courses/csharp-dotnet-9-11/lessons/001-params-countby/' | relative_url }}) мы передавали в метод `ReadOnlySpan<int>`. Здесь `ReadOnlySpan<char>` указывает на символы внутри исходной строки. В `line.AsSpan(start: 4, length: 7)` отсчёт начинается с нуля. Позиция 4 указывает на `/`, а длина 7 захватывает `/ORDERS` целиком. [Перегрузка AsSpan с начальной позицией и длиной](<https://learn.microsoft.com/en-us/dotnet/api/system.memoryextensions.asspan?view=net-9.0#system-memoryextensions-asspan(system-string-system-int32-system-int32)>)
 
 ## 2. .NET 9 и C# 13 · Поиск по ключу другого типа
 
@@ -38,6 +42,8 @@ public bool TryGetValue(TAlternateKey key, out TValue value);
 По умолчанию `ref struct` нельзя подставить вместо обобщённого параметра типа. `allows ref struct` разрешает подставить такой тип, в том числе `ReadOnlySpan<char>`. Правила безопасности такого значения продолжают действовать. Например, его нельзя упаковать в `object`. В своём обобщённом методе повторим `where TAlternateKey : notnull, allows ref struct`, чтобы передать параметр в `GetAlternateLookup`. `notnull` указывает, что ожидается тип ключа, который не допускает `null`. `allows ref struct` ставится последним. [Ограничения параметров типа](https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/generics/constraints-on-type-parameters#allows-ref-struct)
 
 ## Запусти пример
+
+В программе два поиска. Для `/ORDERS` ожидаем лимит 120, а ключа `/status` в словаре нет.
 
 Нажми «Запустить этот пример» под программой. Для локального запуска нужен SDK .NET 9. Проект `net9.0` по умолчанию использует C# 13. [Версии языка по умолчанию](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-versioning#defaults)
 

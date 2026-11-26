@@ -279,3 +279,57 @@
     Ошибочный BuildRows оставляет только первую сводку каждого клиента.
     Придумай вход, на котором это меняет отчёт. Укажи ожидаемые строки
     и их порядок.
+- id: CS13-RSG-01
+  lesson_number: 5
+  topic: CS13-REF-STRUCT-GENERICS
+  tag: 'C# 13 · allows ref struct'
+  type: анализ кода
+  available_from: '2026-11-26'
+  prompt: >-
+    Обобщённый метод принимает TAlternateKey key и объявляет ограничение
+    where TAlternateKey : notnull. Почему вызов с аргументом
+    ReadOnlySpan<char> не компилируется? Что нужно добавить в ограничение
+    и где это должно стоять?
+- id: CS13-RSG-02
+  lesson_number: 5
+  topic: CS13-REF-STRUCT-GENERICS
+  tag: 'C# 13 · allows ref struct'
+  type: понимание
+  available_from: '2026-11-26'
+  prompt: >-
+    Метод с allows ref struct получил ReadOnlySpan<char> как аргумент
+    обобщённого параметра. Можно ли присвоить этот аргумент переменной
+    типа object? Объясни, что именно разрешает allows ref struct.
+- id: N9-AL-01
+  lesson_number: 5
+  topic: NET9-DICTIONARY-ALTERNATE-LOOKUP
+  tag: '.NET 9 · Dictionary.GetAlternateLookup'
+  type: прогноз результата
+  available_from: '2026-11-26'
+  prompt: >-
+    В словаре со StringComparer.OrdinalIgnoreCase хранится ключ "/orders"
+    со значением 120. Какую пару из результата bool и значения out int
+    дадут поиски по срезам "/OrDeRs" и "/status" через
+    GetAlternateLookup<ReadOnlySpan<char>>()?
+- id: N9-AL-02
+  lesson_number: 5
+  topic: NET9-DICTIONARY-ALTERNATE-LOOKUP
+  tag: '.NET 9 · Dictionary.GetAlternateLookup'
+  type: сравнение
+  available_from: '2026-11-26'
+  prompt: >-
+    Что различает два случая: компаратор словаря не поддерживает
+    ReadOnlySpan<char> и компаратор совместим, но в словаре нет
+    искомого ключа? На каком вызове можно обнаружить каждый случай?
+- id: N9-AL-03
+  lesson_number: 5
+  topic: NET9-DICTIONARY-ALTERNATE-LOOKUP
+  tag: '.NET 9 · Dictionary.GetAlternateLookup'
+  type: проектирование проверки
+  available_from: '2026-11-26'
+  prompt: >-
+    В TryReadLimit основной маршрут имеет приоритет. Нулевой лимит считается
+    найденным. Ошибочная реализация переходит к резервному маршруту,
+    когда limit равен нулю. Придумай словарь и два ключа, на которых
+    эта версия вернёт другой лимит. Укажи ожидаемые bool и limit
+    для корректной реализации.

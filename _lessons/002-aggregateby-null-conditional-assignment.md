@@ -230,6 +230,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+sealed record Failure(string Client, int StatusCode, long ResponseBytes);
+sealed class AuditReport
+{
+    public string Text { get; set; } = "";
+}
+
 public static class Program
 {
     // BEGIN TASK-002
@@ -323,12 +329,6 @@ public static class Program
     {
         if (!condition) throw new InvalidOperationException("❌ TASK-002: " + failureMessage);
     }
-}
-
-sealed record Failure(string Client, int StatusCode, long ResponseBytes);
-sealed class AuditReport
-{
-    public string Text { get; set; } = "";
 }
 ~~~
 {: #practice-program }

@@ -133,6 +133,11 @@ using System.Linq;
 
 #nullable enable
 
+public sealed record class ClientSummary(string Client, int Requests);
+public closed record class ClientRow(string Client);
+public sealed record class WithSummary(string Client, int Requests) : ClientRow(Client);
+public sealed record class WithoutSummary(string Client) : ClientRow(Client);
+
 public static class Program
 {
     // BEGIN TASK-004
@@ -198,11 +203,6 @@ public static class Program
             throw new InvalidOperationException("❌ TASK-004: " + failureMessage);
     }
 }
-
-public sealed record class ClientSummary(string Client, int Requests);
-public closed record class ClientRow(string Client);
-public sealed record class WithSummary(string Client, int Requests) : ClientRow(Client);
-public sealed record class WithoutSummary(string Client) : ClientRow(Client);
 ```
 {: #practice-program }
 

@@ -180,8 +180,10 @@
       const history = box.querySelector(".question-answer-history");
 
       box.dataset.questionId = question.id;
-      box.querySelector(".question-meta").textContent =
-        "Урок №" + question.lesson_number + " · " + question.id + " · " + question.tag;
+      const lessonLabel = "Урок №" + question.lesson_number;
+      const lessonLink = lessons.find(link => Number(link.dataset.lesson) === Number(question.lesson_number))?.cloneNode();
+      if (lessonLink) lessonLink.textContent = lessonLabel;
+      box.querySelector(".question-meta").append(lessonLink ?? lessonLabel, " · " + question.id + " · " + question.tag);
       title.textContent = question.prompt;
       input.id = "answer-" + question.id;
       label.htmlFor = input.id;

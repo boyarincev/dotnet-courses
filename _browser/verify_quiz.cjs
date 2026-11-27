@@ -74,6 +74,14 @@ async function currentQuestion(page) {
     return row.getAttribute("data-question-id");
 }
 
+async function assertQuestionLessonLink(row, lesson, lessonUrl) {
+    const link = row.locator(".question-meta").getByRole("link", { name: "Урок №" + lesson, exact: true });
+    await link.waitFor();
+    const { href, target } = await link.evaluate(anchor => ({ href: anchor.href, target: anchor.target }));
+    assert.equal(href, lessonUrl, "The question must link to its published lesson in the same course");
+    assert.ok(!target || target === "_self", "The lesson link must use the current tab");
+}
+
 async function assertEmptyAnswer(page, row) {
     const input = row.getByRole("textbox");
     assert.equal(await input.inputValue(), "");
@@ -165,6 +173,7 @@ async function verifyLessonQuiz(browser, course, lesson) {
         assert.equal(await page.getByRole("button", { name: "Начать заново" }).count(), 0);
 
         const first = await currentQuestion(page);
+        await assertQuestionLessonLink(question(page, first), lesson, lessonUrl);
         await assertEmptyAnswer(page, question(page, first));
         await skip(page).click();
         const next = await currentQuestion(page);
@@ -216,6 +225,7 @@ async function verifyLessonQuiz(browser, course, lesson) {
         await quizResult(page).waitFor();
         assert.equal(await questions(page).count(), 0);
         await openQuiz(page, course, "?filter=" + lesson);
+        await assertQuestionLessonLink(question(page, next), lesson, lessonUrl);
         const revisedAnswer = "Обновлённый ответ " + next;
         await submitAnswer(page, next, revisedAnswer);
         await openQuiz(page, course, "?through=" + lesson);

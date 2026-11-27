@@ -27,7 +27,7 @@ h1,h2,h3{line-height:1.2;letter-spacing:-.045em}h1{font-size:clamp(35px,6vw,60px
 .course-meta{font-size:13px;color:var(--muted);margin-top:auto}
 .course-card strong{color:var(--primary);margin-top:14px}
 .course-nav{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:20px 0 32px}
-.eyebrow a{color:var(--primary);text-decoration:underline;text-underline-offset:3px}
+.eyebrow a,.question-meta a{color:var(--primary);text-decoration:underline;text-underline-offset:3px}
 @media(max-width:750px){.course-grid{grid-template-columns:1fr}.course-card{padding:18px 20px}.course-nav{gap:4px 8px}}
 
 .course-overview .features{margin-bottom:16px}

@@ -1,7 +1,7 @@
 ---
 lesson_number: 1
 lesson_date: '20 ноября 2026'
-title: 'Коллекции без лишней работы: params и CountBy'
+title: 'Подсчёт частот HTTP-методов: params-коллекции и CountBy'
 summary: 'Принимаем произвольное число аргументов и считаем частоты элементов на одном практическом примере.'
 csharp_feature: 'C# 13 · params collections'
 dotnet_feature: '.NET 9 · CountBy'
@@ -15,7 +15,7 @@ browser_start_snippet: full-program
 
 При анализе журнала событий часто нужно понять, какие категории встречаются чаще всего. `CountBy` ведёт по одному счётчику на категорию. Если для разбора нужны сами записи каждой категории, подойдёт `GroupBy`.
 
-При экспорте отчёта `params` позволяет перечислить нужные колонки отдельными аргументами. В C# 13 метод с `params ReadOnlySpan<T>` может принять и отдельные аргументы, и готовый срез массива колонок. Для передачи среза не нужно копировать его в отдельный массив.
+Когда метод принимает произвольное число значений, `params` позволяет передать их отдельными аргументами. Если значения уже лежат в массиве, параметр `params ReadOnlySpan<T>` также принимает готовый срез — выбранный диапазон элементов массива. Такой срез можно передать без копирования элементов.
 
 ## 1. C# 13: расширенный `params`
 До C# 13 тип параметра `params` ограничивался [одномерным массивом `T[]`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/method-parameters#params-modifier).
@@ -51,9 +51,11 @@ Console.WriteLine(Sum(10, 20, 30)); // 60. Три числа образуют о
 ~~~
 {: #output-params-span }
 
-Для вызова `Sum(10, 20, 30)` с `ReadOnlySpan<int>` компилятор из .NET 9 SDK [сохраняет константы в данных сборки](https://github.com/dotnet/roslyn/blob/f3348c2a2be16ec6525cb3df7be12952c3e2de9d/src/Compilers/CSharp/Portable/CodeGen/EmitArrayInitializer.cs#L606-L623). На .NET 9 x64 `ReadOnlySpan<int>` [ссылается на эти данные](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Private.CoreLib/src/System/Runtime/CompilerServices/RuntimeHelpers.cs#L148-L149), поэтому вызов обходится без выделения массива для аргументов. Элементы удобно обработать сразу в `foreach`.
+Для вызова `Sum(10, 20, 30)` с `ReadOnlySpan<int>` компилятор из .NET 9 SDK [сохраняет константы в данных сборки](https://github.com/dotnet/roslyn/blob/f3348c2a2be16ec6525cb3df7be12952c3e2de9d/src/Compilers/CSharp/Portable/CodeGen/EmitArrayInitializer.cs#L606-L623). На .NET 9 x64 `ReadOnlySpan<int>` [ссылается на эти данные](https://github.com/dotnet/runtime/blob/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/src/libraries/System.Private.CoreLib/src/System/Runtime/CompilerServices/RuntimeHelpers.cs#L148-L149), поэтому вызов обходится без выделения массива для аргументов.
 
-Заголовок можно передать отдельным аргументом, а метки собрать в `IEnumerable<string>`.
+Тот же `Sum` принимает готовый срез. Открой в браузерном редакторе пример с `ReadOnlySpan<int>`. В `Main` объяви массив `int[] values = [99, 10, 20, 30, 100];`. Замени три аргумента `Sum` одним срезом `values.AsSpan(start: 1, length: 3)`. Срез начинается со второго элемента и содержит три числа. После повторного запуска сумма по-прежнему будет `60`. [Сигнатура AsSpan для массива](<https://learn.microsoft.com/en-us/dotnet/api/system.memoryextensions.asspan?view=net-9.0#system-memoryextensions-asspan-1(-0()-system-int32-system-int32)>)
+
+В следующем примере `Analyze` принимает два вида данных. Заголовок передаём отдельным аргументом, а последующие метки входят в один параметр `params IEnumerable<string>`.
 
 ```csharp
 // "HTTP" — заголовок. Оставшиеся три аргумента образуют коллекцию methods.
@@ -74,14 +76,14 @@ HTTP: 3
 {: #output-params-enumerable }
 
 ## 2. .NET 9: `Enumerable.CountBy()`
-[`GroupBy`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.groupby?view=net-9.0) собирает строки с одинаковым ключом. Из каждой группы `Select` берёт ключ и число элементов. Во всех трёх коротких примерах `methods` содержит `["GET", "POST", "GET", "get"]`.
+Теперь посчитаем, сколько раз встречается каждая метка HTTP-метода. Во всех трёх коротких примерах `methods` содержит `["GET", "POST", "GET", "get"]`. [`GroupBy`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.groupby?view=net-9.0) собирает метки с одинаковым ключом. Из каждой группы `Select` берёт ключ и число элементов.
 ```csharp
 var counts = methods.GroupBy(keySelector: method => method)
     .Select(group => new { Method = group.Key, Count = group.Count() });
 ```
 {: #snippet-groupby-count }
 
-Вывод
+При запуске в браузере `foreach` перечисляет результат и печатает каждую пару «метка, количество».
 
 ~~~text
 GET: 2
@@ -133,7 +135,7 @@ var counts = methods.CountBy(
 ```
 {: #snippet-countby-comparer }
 
-Вывод
+При запуске в браузере `foreach` печатает общий счётчик для `GET` и `get`.
 
 ~~~text
 GET: 3
@@ -141,7 +143,7 @@ POST: 1
 ~~~
 {: #output-countby-comparer }
 
-Используй `GroupBy`, когда нужно обработать записи внутри каждой группы, например вывести все записи для отдельного метода.
+Используй `GroupBy`, когда в результате нужны записи каждого ключа, например все запросы с выбранным методом.
 
 ## 3. Полностью запускаемый пример
 Выполни команды с **.NET 9 SDK**. `dotnet --version` должен показать версию `9.0.x`. Если установлено несколько SDK, версию для рабочего каталога можно закрепить в [`global.json`](https://learn.microsoft.com/en-us/dotnet/core/tools/global-json#version). [Шаблон `console`](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-new-sdk-templates#console) создаст проект с целевым фреймворком `net9.0`, для которого по умолчанию используется [C# 13](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-versioning#defaults).

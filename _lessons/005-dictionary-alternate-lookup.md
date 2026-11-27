@@ -15,7 +15,7 @@ browser_start_snippet: full-program
 
 При разборе журналов и входных сообщений часто извлекают идентификаторы и ищут их в словаре со строковыми ключами. Если идентификатор уже представлен срезом `ReadOnlySpan<char>`, `GetAlternateLookup` позволяет выполнить поиск без создания временной строки. Для этого нужен компаратор, который поддерживает сравнение среза со строкой. Для готового строкового ключа достаточно `Dictionary.TryGetValue`.
 
-Например, одну обобщённую обёртку для замера времени можно использовать с парсером строк и с парсером срезов. `allows ref struct` позволяет такому обобщённому методу принимать и `ReadOnlySpan<char>`.
+Если одну логику поиска используют с несколькими типами ключей, её можно вынести в обобщённый метод. `allows ref struct` позволяет передавать в такой метод срез `ReadOnlySpan<char>`. Для поиска по одному заранее известному типу достаточно параметра этого типа.
 
 ## 1. Что передаём в словарь
 
@@ -37,7 +37,7 @@ public bool TryGetValue(TAlternateKey key, out TValue value);
 
 `TryGetValue` возвращает `true`, если ключ найден, и записывает значение в `value`. При отсутствии ключа получаем `false` и значение по умолчанию, для `int` это `0`. Значение `0` само по себе не сообщает, был ли ключ найден. [Документация TryGetValue](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.dictionary-2.alternatelookup-1.trygetvalue?view=net-9.0)
 
-Для поиска по срезу компаратор словаря должен уметь сравнивать срез со строковым ключом. `StringComparer.OrdinalIgnoreCase` поддерживает `ReadOnlySpan<char>` и сравнивает без учёта регистра. При несовместимом компараторе вызов `GetAlternateLookup` выбросит `InvalidOperationException`. Если совместимость заранее неизвестна, её можно проверить через `TryGetAlternateLookup`. [Поиск по срезу в .NET 9](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-9/libraries#collection-lookups-with-spans) · [Исключения GetAlternateLookup](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.dictionary-2.getalternatelookup?view=net-9.0#exceptions) · [Документация TryGetAlternateLookup](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.dictionary-2.trygetalternatelookup?view=net-9.0)
+Для поиска по срезу компаратор словаря должен уметь сравнивать срез со строковым ключом. `StringComparer.OrdinalIgnoreCase` поддерживает `ReadOnlySpan<char>` как альтернативный ключ и сравнивает без учёта регистра. Когда ключ уже имеет тип `string`, вызывай обычный `Dictionary.TryGetValue`. При несовместимом компараторе вызов `GetAlternateLookup` выбросит `InvalidOperationException`. Если совместимость заранее неизвестна, её можно проверить через `TryGetAlternateLookup`. [Поиск по срезу в .NET 9](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-9/libraries#collection-lookups-with-spans) · [Исключения GetAlternateLookup](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.dictionary-2.getalternatelookup?view=net-9.0#exceptions) · [Документация TryGetAlternateLookup](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.dictionary-2.trygetalternatelookup?view=net-9.0)
 
 По умолчанию `ref struct` нельзя подставить вместо обобщённого параметра типа. `allows ref struct` разрешает подставить такой тип, в том числе `ReadOnlySpan<char>`. Правила безопасности такого значения продолжают действовать. Например, его нельзя упаковать в `object`. В своём обобщённом методе повторим `where TAlternateKey : notnull, allows ref struct`, чтобы передать параметр в `GetAlternateLookup`. `notnull` указывает, что ожидается тип ключа, который не допускает `null`. `allows ref struct` ставится последним. [Ограничения параметров типа](https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/generics/constraints-on-type-parameters#allows-ref-struct)
 
@@ -103,7 +103,9 @@ static bool TryReadRoute<TAlternateKey>(
 - Если `route` отсутствует, ищи `fallback`. При совпадении верни `true` и его лимит.
 - Если в словаре нет ни одного из ключей, верни `false` и установи `limit` в `0`.
 
-Используй `GetAlternateLookup<TAlternateKey>()` и показанный выше `TryGetValue`. Правила сравнения задаёт готовый словарь. Его компаратор в каждом тесте поддерживает переданный тип ключа. Открой заготовку, заполни метод и нажми «Запустить текущий код». Для локальной проверки скопируй заготовку в `RouteLookup/Program.cs` и выполни `dotnet run` в каталоге проекта.
+Используй `GetAlternateLookup<TAlternateKey>()` и показанный выше `TryGetValue`. Правила сравнения задаёт готовый словарь, его компаратор совместим с типом обоих ключей. `Assert` проверяют результат поиска. При ревью кода проверь, что резервный ключ запрашивается только при отсутствии основного.
+
+Открой заготовку, заполни метод и нажми «Запустить текущий код». Для локальной проверки нажми «Скачать Program.cs» под редактором, замени файл в проекте `RouteLookup` и выполни `dotnet run`.
 
 ~~~csharp
 using System;

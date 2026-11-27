@@ -1,7 +1,7 @@
 ---
 lesson_number: 1
 lesson_date: '21 ноября 2026'
-title: 'Аллокации, копирование и удержание памяти'
+title: 'Сводка оплаченных заказов: аллокации, копирование и удержание памяти'
 summary: 'Учимся замечать, где C#-код создаёт объекты, копирует значения и удерживает данные в памяти.'
 topic_id: 'ALLOC-001'
 csharp_feature: 'C# · значения и ссылки'
@@ -25,7 +25,7 @@ browser_start_snippet: allocations-copies-retention
 
 - **Аллокация** — выделение места в памяти. Разбор ниже касается управляемой кучи. Память можно выделить и на стеке. Например, `Span<byte> buffer = stackalloc byte[16];` выделяет 16 байт на время выполнения метода. [Документация stackalloc](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/stackalloc)
 - **Копирование** — запись существующего значения в другое место. Вызов `source.AsSpan().CopyTo(destination);` копирует байты из `source` в уже выделенный массив `destination`. Длина `destination` должна быть как минимум равна длине `source`. [Документация Span.CopyTo](https://learn.microsoft.com/en-us/dotnet/api/system.span-1.copyto?view=net-10.0)
-- **Удержание памяти** — объект продолжает занимать память, пока он достижим от корня GC по цепочке сильных ссылок.
+- **Удержание памяти** связано с тем, какие ссылки мешают сборщику мусора (GC) освободить объект. Сборщик начинает обход с известных ему ссылок, например из статических полей. Такие ссылки называют корнями GC. Если от корня к объекту ведёт цепочка обычных (сильных) ссылок, объект остаётся достижимым. [Как GC определяет достижимость](https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/fundamentals#memory-release)
 
 Выделение и копирование могут идти последовательно. Если перед `CopyTo` выполнить `byte[] destination = new byte[source.Length];`, сначала будет выделена память для массива, а затем в неё скопируются байты.
 
@@ -147,7 +147,7 @@ snapshot.Amount = 0m                                  |
 snapshot.Id ------------------------------------------+
 ~~~
 
-**Удержание.** Пока вызывающий код хранит ссылку на возвращённый `List<Order>`, его внутренний массив `Order[]` и строки из полей `Id` [остаются достижимыми через список](https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/fundamentals#memory-release). Если нужны только количество заказов и сумма, достаточно накапливать эти два значения. При таком изменении `Split` по-прежнему выделяет память для разбора строк.
+**Удержание.** На схеме `paid` указывает на список, список — на массив, а поле `Id` в элементе массива — на строку. Пока эта цепочка существует и `paid` остаётся доступной, она удерживает строку. Если для результата нужны только число заказов и сумма, сохрани эти два значения вместо списка. `Split` по-прежнему создаст строки полей при разборе. Когда все достижимые ссылки на эти строки исчезнут, GC сможет освободить их память.
 
 По одному примеру нельзя судить о выигрыше в производительности: на следующем занятии измерим варианты с BenchmarkDotNet.
 
@@ -155,7 +155,7 @@ snapshot.Id ------------------------------------------+
 
 **Задача на 12 минут.** Реализуй `SummarizePaid`: на входе — строки формата `ID;status;amount`. Верни количество записей со статусом `paid` и сумму их полей `amount` **без создания списка заказов**.
 
-Сравнивай статус с `paid` с учётом регистра, как при [сравнении строк оператором `==`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/equality-operators#string-equality). При разбиении учитывай пустые поля. Пропускай строки, если в них не ровно три поля или [`decimal.TryParse` с числовым форматом и культурой](<https://learn.microsoft.com/en-us/dotnet/api/system.decimal.tryparse?view=net-10.0#system-decimal-tryparse(system-string-system-globalization-numberstyles-system-iformatprovider-system-decimal@>) возвращает `false` при разборе суммы. Используй [`NumberStyles.Number`](https://learn.microsoft.com/en-us/dotnet/api/system.globalization.numberstyles?view=net-10.0#fields) и `CultureInfo.InvariantCulture`, как в примере. Для разбиения строки можно использовать [`Split(char separator, StringSplitOptions options)`](<https://learn.microsoft.com/en-us/dotnet/api/system.string.split?view=net-10.0#system-string-split(system-char-system-stringsplitoptions>). Не сохраняй промежуточные записи в коллекции.
+Сравнивай статус с `paid` с учётом регистра, как при [сравнении строк оператором `==`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/equality-operators#string-equality). При разбиении сохраняй пустые поля на их местах. Поле `ID` в подсчёте не используется, поэтому строка `;paid;4` тоже входит в сводку. Пропускай строки, если в них не ровно три поля или [`decimal.TryParse` с числовым форматом и культурой](<https://learn.microsoft.com/en-us/dotnet/api/system.decimal.tryparse?view=net-10.0#system-decimal-tryparse(system-string-system-globalization-numberstyles-system-iformatprovider-system-decimal@>) возвращает `false` при разборе суммы. Используй [`NumberStyles.Number`](https://learn.microsoft.com/en-us/dotnet/api/system.globalization.numberstyles?view=net-10.0#fields) и `CultureInfo.InvariantCulture`, как в примере. Для разбиения строки можно использовать [`Split(char separator, StringSplitOptions options)`](<https://learn.microsoft.com/en-us/dotnet/api/system.string.split?view=net-10.0#system-string-split(system-char-system-stringsplitoptions>). Не сохраняй промежуточные записи в коллекции.
 
 **Входные данные**
 

@@ -216,3 +216,5 @@ return clients.Select(client => (ClientRow)new WithoutSummary(client)).ToArray()
 </details>
 
 На повторении объясни, какую строку создаёт `LeftJoin` для сервиса без проверок и о чём предупредит компилятор, если у `Check` появится ещё один прямой наследник, для которого в выражении `switch` нет подходящей ветви.
+
+В [уроке №6]({{ '/courses/csharp-dotnet-9-11/lessons/006-http-route-counts/' | relative_url }}) используем `LeftJoin` для сводки по всем HTTP-маршрутам, включая маршруты без запросов.

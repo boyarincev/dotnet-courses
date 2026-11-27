@@ -293,3 +293,5 @@ return Array.Empty<(string, int)>();
 В [уроке № 2]({{ '/courses/csharp-dotnet-9-11/lessons/002-aggregateby-null-conditional-assignment/' | relative_url }}) вместо одного счётчика накопим количество запросов и суммарное время по каждому маршруту. В [первом уроке курса по памяти]({{ '/courses/memory/lessons/001-allocations-copies-retention/' | relative_url }}) разберём, как отличать выделение памяти от копирования значений и удержания объектов.
 
 В [уроке №5]({{ '/courses/csharp-dotnet-9-11/lessons/005-dictionary-alternate-lookup/' | relative_url }}) передадим символьный срез в обобщённый поиск по словарю.
+
+В [уроке №6]({{ '/courses/csharp-dotnet-9-11/lessons/006-http-route-counts/' | relative_url }}) совместим `CountBy` с каталогом маршрутов, чтобы сохранить в сводке и нулевые счётчики.

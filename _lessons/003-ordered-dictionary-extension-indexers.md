@@ -31,7 +31,9 @@ var first = entries.GetAt(index: 0); // Первая пара в порядке 
 
 ## 2. C# 14–15: блок `extension` и расширяющий индексатор
 
-Блок `extension(OrderedDictionary<string, int> entries)` объявляем в статическом классе верхнего уровня без параметров типа. Блок задаёт расширяемый тип. `entries` обозначает словарь, с которым работают метод, свойство и индексатор. Оператор `+` получает оба словаря через параметры `left` и `right`.
+В классической записи `public static int ErrorsFor(this OrderedDictionary<string, int> entries, string service)` словарь объявлен первым параметром с `this`. В записи свойства `public int TotalErrors => ...` указываются тип результата, имя свойства и вычисление значения. Чтобы дать свойству доступ к словарю, команда C# вынесла тип и имя `entries` в заголовок `extension`. Так один заголовок задаёт словарь для всех членов экземпляра внутри блока. [Объяснение команды C#](https://devblogs.microsoft.com/dotnet/csharp-exploring-extension-members/#receivers)
+
+В этом примере `extension(OrderedDictionary<string, int> entries)` объявляем в статическом классе верхнего уровня без параметров типа. Метод `ErrorsFor` в обеих формах вызывается как `entries.ErrorsFor(service: "auth")`. Оператор `+` получает оба словаря через параметры `left` и `right`.
 
 В C# 14 в блоке `extension` можно объявлять методы, свойства и операторы расширения. В C# 15 добавились индексаторы. В программе ниже все четыре объявления работают с одним типом. [Справочник по блоку `extension`](https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/extension)
 

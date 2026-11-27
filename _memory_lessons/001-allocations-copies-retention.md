@@ -31,7 +31,7 @@ browser_start_snippet: allocations-copies-retention
 
 ## Запускаемый пример
 
-На вход поступают строки с номером заказа, статусом и суммой. Поля разделены `;`. Из строки `ORD-1042;paid;1499.90` программа извлекает номер `ORD-1042` и сумму `1499.90` и сохраняет их в списке оплаченных заказов. После разбора программа меняет сумму в копии первого заказа и снова выводит сумму из списка.
+Метод `ParsePaid` в [примере](#snippet-allocations-copies-retention) принимает строки с номером заказа, статусом и суммой. Поля разделены `;`. Из строки `ORD-1042;paid;1499.90` программа извлекает номер `ORD-1042` и сумму `1499.90` и сохраняет их в списке оплаченных заказов. После разбора `Main` меняет сумму в копии первого заказа и снова выводит сумму из списка.
 
 Создай консольный проект с **SDK .NET 10**. Для `net10.0` SDK по умолчанию [выбирает C# 14](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-versioning#defaults).
 
@@ -110,9 +110,9 @@ internal struct Order
 ~~~
 {: #snippet-allocations-copies-retention }
 
-При разборе и выводе суммы `CultureInfo.InvariantCulture` [задаёт точку как десятичный разделитель](https://learn.microsoft.com/en-us/dotnet/api/system.globalization.numberformatinfo.numberdecimalseparator?view=net-10.0#property-value). В выводе `F2` [задаёт две цифры после десятичного разделителя](https://learn.microsoft.com/en-us/dotnet/standard/base-types/standard-numeric-format-strings#fixed-point-format-specifier-f).
+В [примере](#snippet-allocations-copies-retention) `ParsePaid` передаёт `CultureInfo.InvariantCulture` в `decimal.TryParse`, а `Main` передаёт ту же культуру в `paid[0].Amount.ToString(...)`. Она [задаёт точку как десятичный разделитель](https://learn.microsoft.com/en-us/dotnet/api/system.globalization.numberformatinfo.numberdecimalseparator?view=net-10.0#property-value). Формат `F2` в вызове `ToString` [задаёт две цифры после точки](https://learn.microsoft.com/en-us/dotnet/standard/base-types/standard-numeric-format-strings#fixed-point-format-specifier-f).
 
-Запусти программу командой `dotnet run` и сравни результат с ожидаемым.
+Нажми «Запустить этот пример» под программой. Для локального запуска выполни `dotnet run` и сравни результат с ожидаемым.
 
 ~~~text
 Paid orders: 2
@@ -123,13 +123,13 @@ After copy change: 1499.90
 
 ## Разберём три разных затраты
 
-**Аллокации.** Для первой строки вызов `row.Split(';')` в .NET 10 выделяет массив `string[]` и три строки для отдельных полей ([аллокации при вызове String.Split](https://learn.microsoft.com/en-us/dotnet/api/system.string.split?view=net-10.0#performance-considerations)).
+**Аллокации.** Найди метод [`ParsePaid` в программе](#snippet-allocations-copies-retention). Для первой строки вызов `row.Split(separator: ';')` в .NET 10 выделяет массив `string[]` и три строки для отдельных полей ([аллокации при вызове String.Split](https://learn.microsoft.com/en-us/dotnet/api/system.string.split?view=net-10.0#performance-considerations)).
 
-`new List<Order>()` [создаёт объект списка со ссылкой на общий пустой массив `Order[]`](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/List.cs#L29-L40). Первый `Add` [выделяет массив для элементов](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.list-1.add?view=net-10.0#remarks).
+В начале `ParsePaid` выражение `new List<Order>()` [создаёт список со ссылкой на общий пустой массив `Order[]`](https://github.com/dotnet/runtime/blob/60629d14374c56f1cb51819049ad1fa529307f8d/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/List.cs#L29-L40). Первый вызов `result.Add(...)` [выделяет массив для элементов](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.list-1.add?view=net-10.0#remarks).
 
 **Копирование.** Внутренний массив списка хранит [сами значения `Order` в элементах](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/structs#1682-value-semantics). Индексатор `paid[0]` возвращает первый элемент списка по значению ([индексатор `List<T>` в документации .NET 10](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.list-1.item?view=net-10.0#definition)).
 
-При `Order snapshot = paid[0]` значение структуры копируется в локальную переменную без выделения отдельного объекта в управляемой куче. После `snapshot.Amount = 0m` сумма в копии равна `0m`. В элементе массива она остаётся `1499.90m`. При копировании `Id` копируется ссылка, поэтому [оба поля указывают на одну и ту же строку](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/value-types).
+В методе [`Main` из примера](#snippet-allocations-copies-retention) при `Order snapshot = paid[0]` значение структуры копируется в локальную переменную без выделения отдельного объекта в управляемой куче. После `snapshot.Amount = 0m` сумма в копии равна `0m`. Следующий `Console.WriteLine` читает `paid[0].Amount`, где остаётся `1499.90m`. При копировании `Id` копируется ссылка, поэтому [оба поля указывают на одну и ту же строку](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/value-types).
 
 Схема показывает состояние после `snapshot.Amount = 0m`.
 
@@ -147,7 +147,7 @@ snapshot.Amount = 0m                                  |
 snapshot.Id ------------------------------------------+
 ~~~
 
-**Удержание.** На схеме `paid` указывает на список, список — на массив, а поле `Id` в элементе массива — на строку. Пока эта цепочка существует и `paid` остаётся доступной, она удерживает строку. Если для результата нужны только число заказов и сумма, сохрани эти два значения вместо списка. `Split` по-прежнему создаст строки полей при разборе. Когда все достижимые ссылки на эти строки исчезнут, GC сможет освободить их память.
+**Удержание.** На схеме `paid` указывает на список, список — на массив, а поле `Id` в элементе массива — на строку. Пока эта цепочка существует и `paid` остаётся доступной, она удерживает строку. В [задании `SummarizePaid`](#lesson-task) понадобятся только число заказов и сумма. Эти два значения можно накапливать без списка `result` из `ParsePaid`. `Split` по-прежнему создаст строки полей при разборе. Когда все достижимые ссылки на эти строки исчезнут, GC сможет освободить их память.
 
 По одному примеру нельзя судить о выигрыше в производительности: на следующем занятии измерим варианты с BenchmarkDotNet.
 
@@ -155,7 +155,7 @@ snapshot.Id ------------------------------------------+
 
 **Задача на 12 минут.** Реализуй `SummarizePaid`: на входе — строки формата `ID;status;amount`. Верни количество записей со статусом `paid` и сумму их полей `amount` **без создания списка заказов**.
 
-Сравнивай статус с `paid` с учётом регистра, как при [сравнении строк оператором `==`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/equality-operators#string-equality). При разбиении сохраняй пустые поля на их местах. Поле `ID` в подсчёте не используется, поэтому строка `;paid;4` тоже входит в сводку. Пропускай строки, если в них не ровно три поля или [`decimal.TryParse` с числовым форматом и культурой](<https://learn.microsoft.com/en-us/dotnet/api/system.decimal.tryparse?view=net-10.0#system-decimal-tryparse(system-string-system-globalization-numberstyles-system-iformatprovider-system-decimal@>) возвращает `false` при разборе суммы. Используй [`NumberStyles.Number`](https://learn.microsoft.com/en-us/dotnet/api/system.globalization.numberstyles?view=net-10.0#fields) и `CultureInfo.InvariantCulture`, как в примере. Для разбиения строки можно использовать [`Split(char separator, StringSplitOptions options)`](<https://learn.microsoft.com/en-us/dotnet/api/system.string.split?view=net-10.0#system-string-split(system-char-system-stringsplitoptions>). Не сохраняй промежуточные записи в коллекции.
+Сравнивай статус с `paid` с учётом регистра, как при [сравнении строк оператором `==`](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/equality-operators#string-equality). При разбиении сохраняй пустые поля на их местах. Поле `ID` в подсчёте не используется, поэтому строка `;paid;4` тоже входит в сводку. Пропускай строки, если в них не ровно три поля или [`decimal.TryParse` с числовым форматом и культурой](<https://learn.microsoft.com/en-us/dotnet/api/system.decimal.tryparse?view=net-10.0#system-decimal-tryparse(system-string-system-globalization-numberstyles-system-iformatprovider-system-decimal@>) возвращает `false` при разборе суммы. Используй [`NumberStyles.Number`](https://learn.microsoft.com/en-us/dotnet/api/system.globalization.numberstyles?view=net-10.0#fields) и `CultureInfo.InvariantCulture`. В [программе примера](#snippet-allocations-copies-retention) найди метод `ParsePaid` и посмотри аргументы `style` и `provider` в вызове `decimal.TryParse`. Для разбиения строки можно использовать [`Split(char separator, StringSplitOptions options)`](<https://learn.microsoft.com/en-us/dotnet/api/system.string.split?view=net-10.0#system-string-split(system-char-system-stringsplitoptions>). Не сохраняй промежуточные записи в коллекции.
 
 **Входные данные**
 
@@ -166,15 +166,16 @@ ORD-1044;paid;80.00
 broken
 ORD-1045;paid;not-a-number
 ORD-1046;PAID;30.00
+;paid;4
 ~~~
 
-Для этих строк метод возвращает `(2, 1579.90m)`.
+Для этих строк метод возвращает `(3, 1583.90m)`. В результат входит запись `;paid;4` с пустым ID.
 
 **Пограничный случай:** пустая последовательность должна вернуть `(0, 0m)`. Метод принимает `IEnumerable<string>` и проходит его только один раз.
 
 <details><summary>Необязательная подсказка</summary><p>Достаточно двух локальных переменных: счётчика и суммы. Для каждой строки проверь длину массива полей, статус и результат TryParse. Подумай, какие данные после обработки не нужно сохранять.</p></details>
 
-В `Program.cs` проверки `Assert` охватывают обычный, пустой и пограничный ввод, а также проверяют один проход по входным строкам. Отсутствие промежуточной коллекции проверяется при ревью кода.
+Кнопкой под заготовкой открой код задания в редакторе. Замени `throw new NotImplementedException();` в `SummarizePaid` своей реализацией и нажми «Запустить текущий код». В `Main` заготовки есть обычные и пограничные проверки `Assert`. Сценарий с `EnumerateRows()` и счётчиком `enumerations` проверяет один проход по входным строкам. Отсутствие промежуточной коллекции проверяется при ревью кода.
 
 ~~~csharp
 using System;
@@ -206,12 +207,13 @@ public static class Program
         [
             "ORD-1042;paid;1499.90", "ORD-1043;new;250.00",
             "ORD-1044;paid;80.00", "broken",
-            "ORD-1045;paid;not-a-number", "ORD-1046;PAID;30.00"
+            "ORD-1045;paid;not-a-number", "ORD-1046;PAID;30.00",
+            ";paid;4"
         ];
         var summary = SummarizePaid(rows);
-        Assert(summary.PaidCount == 2 && summary.Total == 1579.90m,
+        Assert(summary.PaidCount == 3 && summary.Total == 1583.90m,
             FormattableString.Invariant(
-                $"Ожидались два оплаченных заказа на сумму 1579.90. Получено ({summary.PaidCount}, {summary.Total})."));
+                $"Ожидались три оплаченные записи на сумму 1583.90, включая запись с пустым ID. Получено ({summary.PaidCount}, {summary.Total})."));
 
         var empty = SummarizePaid(Array.Empty<string>());
         Assert(empty.PaidCount == 0 && empty.Total == 0m,
@@ -274,7 +276,7 @@ return (0, 0m);
 
 Перед оптимизацией разберись, где метод выделяет память, какие значения копирует и какие объекты остаются достижимыми по ссылкам после вызова. Если вызывающему коду нужны только количество и сумма, в этом примере можно обойтись без списка заказов. Эффект изменения затем проверяем измерением.
 
-**Связь с другим курсом:** в [уроке о `params ReadOnlySpan<T>` и `CountBy`]({{ '/courses/csharp-dotnet-9-11/lessons/001-params-countby/' | relative_url }}) мы уже видели способ избежать некоторых временных массивов. Позже вернёмся к нему с измерениями.
+**Связь с другим курсом.** В [примере из урока о `params`]({{ '/courses/csharp-dotnet-9-11/lessons/001-params-countby/' | relative_url }}#snippet-params-span) вызов `Sum(10, 20, 30)` показывает способ избежать временного массива аргументов. Позже вернёмся к нему с измерениями.
 
 **Следующий урок:** `ALLOC-002` — BenchmarkDotNet, `MemoryDiagnoser` и сравнение аллокаций.
 

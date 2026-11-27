@@ -19,6 +19,8 @@ browser_start_snippet: full-program
 
 ## 1. .NET 10 · Соединение с LeftJoin
 
+В .NET 10 появился метод `Enumerable.LeftJoin`. Раньше левое соединение записывали через `join … into` и `from … in …DefaultIfEmpty()`. В синтаксисе методов для этого сочетали `GroupJoin`, `SelectMany` и `DefaultIfEmpty()`. [Левое соединение в LINQ до .NET 10](https://learn.microsoft.com/en-us/dotnet/csharp/linq/standard-query-operators/join-operations#emulate-a-left-outer-join)
+
 Ниже сигнатура перегрузки с пятью параметрами, которую используем в уроке. `outer` и `inner` — левая и правая последовательности. Две функции `outerKeySelector` и `innerKeySelector` определяют, по каким ключам искать совпадения. Перегрузка использует компаратор по умолчанию. [Документация Enumerable.LeftJoin](https://learn.microsoft.com/dotnet/api/system.linq.enumerable.leftjoin?view=net-10.0#overloads)
 
 ```csharp
@@ -29,16 +31,17 @@ public static IEnumerable<TResult> LeftJoin<TOuter, TInner, TKey, TResult>(
     Func<TInner, TKey> innerKeySelector,
     Func<TOuter, TInner?, TResult> resultSelector);
 ```
+{: #leftjoin-signature }
 
 `resultSelector` формирует элемент результата из совпавшей пары. `LeftJoin` сохраняет каждый левый элемент. Если справа совпадений несколько, селектор вызывается для каждой пары. Если совпадений нет, он вызывается один раз с левым элементом и `default(TInner)` справа. Внутреннее соединение `Join` возвращает только пары с совпадающими ключами.
 
 ## 2. C# 15 · Закрытая иерархия
 
-Модификатор `closed` делает базовый класс абстрактным и требует объявлять его прямых наследников в той же сборке и в том же модуле. Компилятор видит набор прямых наследников и может проверить, обрабатывает ли выражение `switch` каждый из них. Если вход допускает `null`, нужно обработать и это значение. [Модификатор closed](https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/closed)
+Модификатор `closed` делает базовый класс абстрактным и требует объявлять его прямых наследников в той же сборке и в том же модуле. Компилятор видит набор прямых наследников и может проверить, обрабатывает ли выражение `switch` каждый из них. Если вход допускает `null`, нужно обработать и это значение. [Модификатор closed](https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/closed) В [полном примере](#snippet-full-program) найди объявление `closed Check` в конце файла и метод `Describe`.
 
 ## Запусти пример
 
-Составим отчёт по всем сервисам из каталога. Для каждой проведённой проверки выведем результат, а для сервиса без проверок — строку «нет проверки». Нажми «Запустить этот пример» под программой.
+В примере ниже `services` — каталог имён сервисов, а `checks` — результаты проведённых проверок. Программа выводит результат каждой проверки. Для сервиса без проверок она выводит строку «нет проверки». Нажми «Запустить этот пример» под программой.
 
 ```csharp
 using System;
@@ -95,7 +98,7 @@ worker: нет проверки
 
 ### Как получились строки отчёта
 
-В программе `services` — каталог имён, а `checks` — результаты проверок. `LeftJoin` сопоставляет имя из каталога со свойством `Check.Service`. Компаратор по умолчанию для строк учитывает регистр. `resultSelector` формирует строку из имени и результата `Describe(check)`. [Сравнение строк на равенство](https://learn.microsoft.com/dotnet/csharp/language-reference/operators/equality-operators#string-equality)
+В методе [`Main` из примера](#snippet-full-program) вызов `services.LeftJoin(...)` сопоставляет имя из каталога со свойством `Check.Service`. Компаратор по умолчанию для строк учитывает регистр. `resultSelector` формирует строку из имени и результата `Describe(check)`. [Сравнение строк на равенство](https://learn.microsoft.com/dotnet/csharp/language-reference/operators/equality-operators#string-equality)
 
 `api` идёт первым в каталоге. У него две проверки, поэтому получаем две строки в порядке записей в `checks`. У `worker` совпадений нет, и вторым аргументом в `resultSelector` приходит `null`, значение по умолчанию для ссылочного типа `Check`. Поэтому `Describe` возвращает «нет проверки». [Порядок обхода в LeftJoin для .NET 10](https://github.com/dotnet/runtime/blob/v10.0.0/src/libraries/System.Linq/src/System/Linq/LeftJoin.cs#L241-L265)
 
@@ -103,15 +106,15 @@ worker: нет проверки
 
 ### Как `closed` помогает проверить `switch`
 
-`Check` — общий тип для `Healthy` и `Issue`. В `Describe` шаблон `Healthy` выбирает строку «в норме». Шаблон `Issue issue` связывает найденный объект с переменной `issue`, чтобы прочитать его сообщение. Ветка `null` описывает отсутствие проверки. [Выражение switch](https://learn.microsoft.com/dotnet/csharp/language-reference/operators/switch-expression)
+`Check` — общий тип для `Healthy` и `Issue`. В методе [`Describe` из примера](#snippet-full-program) шаблон `Healthy` выбирает строку «в норме». Шаблон `Issue issue` связывает найденный объект с переменной `issue`, чтобы прочитать его сообщение. Ветка `null` описывает отсутствие проверки. [Выражение switch](https://learn.microsoft.com/dotnet/csharp/language-reference/operators/switch-expression)
 
 `Check` объявлен с `closed`. Если добавить ещё одного прямого наследника, текущий `switch` перестанет покрывать все варианты и компилятор предупредит о пропущенном случае. Общая ветвь `_` подошла бы и для нового типа. [Проверка полноты switch для closed](https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/closed#exhaustive-switch-expressions)
 
-Для короткой проверки открой пример в редакторе и добавь новый вариант результата `public sealed record class Skipped(string Service) : Check(Service);`. Какой ветви теперь не хватает в `Describe`? Добавь эту ветвь и запись `new Skipped("worker")` в `checks`. Запусти программу и проверь, что для `worker` появилась строка с твоим описанием.
+Нажми «Запустить этот пример» под [программой](#snippet-full-program). В редакторе после объявления `Issue` добавь `public sealed record class Skipped(string Service) : Check(Service);`. Добавь ветвь для `Skipped` в методе `Describe`, а в массив `checks` внутри `Main` добавь `new Skipped("worker")`. Нажми «Запустить текущий код» и проверь, что для `worker` появилась строка с твоим описанием.
 
 ### Локальный запуск
 
-Для запуска локально нужен SDK .NET 11 (11.0.100 или новее). В проекте `net11.0` по умолчанию используется C# 15. Создай проект, замени `Program.cs` полным примером выше и выполни `dotnet run`. [Что нового в C# 15](https://learn.microsoft.com/dotnet/csharp/whats-new/csharp-15#closed-hierarchies)
+Для запуска локально нужен SDK .NET 11 (11.0.100 или новее). В проекте `net11.0` по умолчанию используется C# 15. Создай проект, замени `Program.cs` [полным примером](#snippet-full-program) и выполни `dotnet run`. [Что нового в C# 15](https://learn.microsoft.com/dotnet/csharp/whats-new/csharp-15#closed-hierarchies)
 
 ```sh
 dotnet new console -f net11.0 -o ServiceChecks
@@ -213,9 +216,9 @@ return clients.Select(client => (ClientRow)new WithoutSummary(client)).ToArray()
 
 <details>
 <summary>Подсказка</summary>
-<p>Селектор результата можно оформить методом <code>static ClientRow Project(string client, ClientSummary? summary)</code>. В <code>client</code> поступает имя из <code>clients</code>, в <code>summary</code> — найденная по этому имени сводка или <code>null</code>. Явный тип результата <code>ClientRow</code> позволяет вернуть из <code>Project</code> любой из двух вариантов строки, <code>WithSummary</code> или <code>WithoutSummary</code>. Передай <code>Project</code> в параметр <code>resultSelector</code>.</p>
+<p>В <code>BuildRows</code> селектор результата можно оформить локальной функцией <code>static ClientRow Project(string client, ClientSummary? summary)</code>. В <code>client</code> поступает имя из <code>clients</code>, в <code>summary</code> — найденная по этому имени сводка или <code>null</code>. Явный тип результата <code>ClientRow</code> позволяет вернуть из <code>Project</code> любой из двух вариантов строки, <code>WithSummary</code> или <code>WithoutSummary</code>. Передай <code>Project</code> в параметр <code>resultSelector</code> в <a href="#leftjoin-signature">показанной перегрузке <code>LeftJoin</code></a>.</p>
 </details>
 
-На повторении объясни, какую строку создаёт `LeftJoin` для сервиса без проверок и о чём предупредит компилятор, если у `Check` появится ещё один прямой наследник, для которого в выражении `switch` нет подходящей ветви.
+На повторении вернись к [программе](#snippet-full-program). В `Main` найди `resultSelector` и объясни, откуда берётся строка для сервиса без проверок. Затем посмотри на `switch` в `Describe`. О чём предупредит компилятор, если у `Check` появится ещё один прямой наследник без подходящей ветви?
 
 В [уроке №6]({{ '/courses/csharp-dotnet-9-11/lessons/006-http-route-counts/' | relative_url }}) используем `LeftJoin` для сводки по всем HTTP-маршрутам, включая маршруты без запросов.

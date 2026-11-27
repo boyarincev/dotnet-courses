@@ -21,7 +21,7 @@ browser_start_snippet: full-program
 - В [уроке №1]({{ '/courses/csharp-dotnet-9-11/lessons/001-params-countby/' | relative_url }}) считали частоты через `CountBy`. Метод возвращает пары `KeyValuePair<TKey, int>`. `Key` — ключ, `Value` — число вхождений. Ключа, которого нет во входной последовательности, среди этих пар не будет. [Сигнатура CountBy](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.countby?view=net-9.0#definition)
 - В [уроке №4]({{ '/courses/csharp-dotnet-9-11/lessons/004-closed-hierarchies-leftjoin/' | relative_url }}) соединяли каталог с результатами проверок через `LeftJoin`. Селектор результата получает элемент слева и совпавший элемент справа. Если пары нет, второй аргумент получает `default(TInner)`. Порядок элементов слева сохраняется. [Документация LeftJoin](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.leftjoin?view=net-10.0) · [Порядок и результат без совпадения в .NET 10](https://github.com/dotnet/runtime/blob/v10.0.0/src/libraries/System.Linq/src/System/Linq/LeftJoin.cs#L241-L266)
 
-В примере ниже используем такие сигнатуры.
+Для подсчёта используем `CountBy` с необязательным компаратором, а для соединения — перегрузку `LeftJoin` с пятью параметрами.
 
 ~~~csharp
 public static IEnumerable<KeyValuePair<TKey, int>> CountBy<TSource, TKey>(
@@ -37,12 +37,11 @@ public static IEnumerable<TResult> LeftJoin<TOuter, TInner, TKey, TResult>(
     Func<TInner, TKey> innerKeySelector,
     Func<TOuter, TInner?, TResult> resultSelector);
 ~~~
+{: #countby-leftjoin-signatures }
 
 В сигнатуре `TInner?` учитывает, что совпадение может отсутствовать. Для ссылочного типа справа `default(TInner)` даёт `null`. Когда `TInner` — структура, селектор получает значение этой структуры. Например, для `int` это `0`. [Значения по умолчанию для типов C#](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/default-values)
 
 ## Запусти пример
-
-Программа строит две короткие сводки о сервисах. В первой `CountBy` считает перезапуски по журналу. `gateway` встречается дважды, а `worker` один раз. Во второй `LeftJoin` сопоставляет каталог сервисов с назначениями команд. У `worker` команда пока отсутствует, и в сводке об этом будет отдельная строка.
 
 Нажми «Запустить этот пример» под программой. Для локального запуска используй SDK .NET 10. В проекте `net10.0` по умолчанию доступен C# 14. [Версии языка по умолчанию](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-versioning#defaults)
 
@@ -52,6 +51,8 @@ cd RouteCounts
 ~~~
 
 Замени содержимое `Program.cs` кодом ниже и выполни `dotnet run`.
+
+В примере ниже программа строит две сводки о сервисах. В `counts` вызов `CountBy` считает перезапуски. В `contacts` вызов `LeftJoin` сопоставляет каталог с назначениями команд. У `worker` команда пока отсутствует, и в сводке об этом будет отдельная строка.
 
 ~~~csharp
 using System;
@@ -99,7 +100,9 @@ gateway: платформа
 ~~~
 {: #output-full-program }
 
-Первые две строки показывают счётчики `gateway → 2` и `worker → 1`. В двух следующих строках порядок берётся из каталога. `worker` остаётся в отчёте без записи справа. Чтобы связать эти шаги в одной сводке, передай счётчики из `CountBy` в правую часть `LeftJoin`. Слева будет полный каталог, который определит состав и порядок отчёта.
+В [методе `Main`](#snippet-full-program) первые две строки вывода печатает цикл по `counts`. Вызов `OrderBy` упорядочивает счётчики по имени сервиса. Следующие две строки печатает цикл по `contacts`. Их порядок задаёт каталог `services` в вызове `LeftJoin`. `worker` остаётся в отчёте без записи справа.
+
+Чтобы связать эти шаги в одной сводке, передай счётчики из `CountBy` в правую часть `LeftJoin`. Слева будет полный каталог, который определит состав и порядок отчёта.
 
 ## Напиши код сам · TASK-006 {#lesson-task}
 
@@ -109,7 +112,12 @@ gateway: платформа
 - Маршруты сравнивай с учётом регистра. Каталог содержит уникальные имена, например `/orders` и `/ORDERS` могут быть разными маршрутами. Запросы к маршрутам вне каталога в отчёт не попадают.
 - При пустом каталоге верни пустой массив. При пустом журнале верни все маршруты каталога с нулевыми счётчиками.
 
-В первом тесте журнал начинается с `/orders`. В отчёте ожидаются `("/users", 1)`, `("/health", 0)`, `("/orders", 3)` и `("/ORDERS", 1)` именно в порядке каталога.
+В первом сценарии проверки `Main` вызывает `Check` со следующими данными.
+
+- `catalog` — `["/users", "/health", "/orders", "/ORDERS"]`.
+- `requests` — `["/orders", "/unknown", "/users", "/ORDERS", "/orders", "/orders"]`.
+
+В отчёте ожидаются `("/users", 1)`, `("/health", 0)`, `("/orders", 3)` и `("/ORDERS", 1)` в порядке каталога.
 
 Попробуй посчитать запросы через `CountBy` и сопоставить счётчики с каталогом через `LeftJoin`. Открой заготовку, заполни метод и нажми «Запустить текущий код». После запуска объясни, что задаёт порядок отчёта и откуда берутся нули. Для локальной проверки нажми «Скачать Program.cs» под редактором, замени файл в проекте `RouteCounts` и выполни `dotnet run`.
 
@@ -182,12 +190,12 @@ return requests.GroupBy(route => route)
 
 <details>
 <summary>Подсказка</summary>
-<p>Сначала получи счётчики из журнала через <code>CountBy</code>. Затем используй показанную выше перегрузку <code>LeftJoin</code> с пятью параметрами. С какой стороны должен стоять каталог, чтобы маршруты без запросов остались в отчёте?</p>
+<p>Сначала получи счётчики из журнала через <code>CountBy</code>. Затем используй <a href="#countby-leftjoin-signatures">перегрузку <code>LeftJoin</code> с пятью параметрами</a>. С какой стороны должен стоять каталог, чтобы маршруты без запросов остались в отчёте?</p>
 </details>
 
 <details>
 <summary>Разбор после попытки</summary>
-<p><code>CountBy</code> даёт одну пару на каждый маршрут из журнала. В <code>LeftJoin</code> каталог идёт слева, а эти пары справа. Ключ слева — сам маршрут, ключ справа — <code>Key</code> пары. Селектор результата берёт имя маршрута слева и счётчик справа.</p>
+<p><code>CountBy</code> даёт одну пару на каждый маршрут из журнала. В <code>LeftJoin</code> каталог идёт слева, а эти пары справа. Ключ слева — сам маршрут, ключ справа — <code>Key</code> пары. В <code>CountRequests</code> функция <code>resultSelector</code> берёт имя маршрута слева и счётчик справа.</p>
 <p>Если совпадения нет, второй аргумент селектора получает <code>default(KeyValuePair&lt;string, int&gt;)</code>. Пара является структурой, и её <code>Value</code> в этом случае равен <code>0</code>. Для имени маршрута используй левый элемент, который присутствует в каждом результате. <a href="https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/default-values">Значения по умолчанию для типов C#</a></p>
 </details>
 

@@ -258,7 +258,11 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId, v
         const starterActions = page.locator('[data-practice-actions="' + taskId + '"]');
         assert.equal(await starterActions.getByRole("button").count(), 1, "The starter has only one action");
         const openDraft = page.getByRole("button", {name: "Открыть черновик", exact: true});
+        const goToPractice = page.getByRole("button", {name: "К коду задания", exact: true});
+        const updateTaskFile = page.getByRole("button", {name: "Обновить файл задания", exact: true});
+        const downloadPrevious = page.getByRole("button", {name: "Скачать прежний Program.cs", exact: true});
         assert.equal(await openDraft.count(), 0, "A fresh task does not have a saved practice draft");
+        assert.ok(await updateTaskFile.isHidden(), "A fresh task does not need a file update");
 
         // Use the real editor, lesson runner and storage, with a synthetic task.
         const template = [
@@ -277,6 +281,7 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId, v
             "    // END " + taskId,
             "}"
         ].join("\n");
+        const setTemplate = code => practiceProgram.evaluate((element, text) => { element.textContent = text; }, code);
         const installTemplate = () => practiceProgram.evaluate((element, code) => {
             element.textContent = code;
             document.documentElement.dataset.practiceRunSignals = "0";
@@ -287,6 +292,17 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId, v
                 }
             });
         }, template);
+        const watchEditorRuns = () => compiler.evaluate(() => {
+            const editor = window.DotnetBrowserEditor;
+            const run = editor.run;
+            document.documentElement.dataset.fixtureRunCount = "0";
+            editor.run = () => {
+                document.documentElement.dataset.fixtureRunCount =
+                    String(Number(document.documentElement.dataset.fixtureRunCount) + 1);
+                return run();
+            };
+        });
+        const fixtureRunCount = () => compiler.evaluate(() => document.documentElement.dataset.fixtureRunCount);
         await installTemplate();
         const status = page.locator("#lesson-completion-status");
         const headerBadge = page.locator(".eyebrow [data-lesson-completion-badge]");
@@ -303,7 +319,7 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId, v
         assert.equal(await lessonQuiz.isVisible(), false);
         const solution = "static Number Solve() => 42;\n    static void AfterChecks() {}";
         const program = template.replace("// INSERT_SOLUTION_HERE", solution);
-        const wrongProgram = program.replace("=> 42", "=> 41");
+        const wrongProgram = "using LearnerAlias = System.String;\n" + program.replace("=> 42", "=> 41");
         const unrelatedProgram = 'Console.WriteLine("Modified example");';
 
         const inViewport = locator => locator.evaluate(element => {
@@ -322,6 +338,7 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId, v
         await waitForStarterFocus();
         const openedStarter = await compiler.evaluate(() => window.DotnetBrowserEditor.getCode());
         assert.match(openedStarter, /throw new NotImplementedException\(\)/, "Opening the starter installs the unfinished method");
+        await goToPractice.waitFor();
         assert.ok(!(await compiler.evaluate(() => window.DotnetBrowserEditor.busy())), "Opening the starter must not start the compiler");
         assert.ok(await verifiedField.isHidden(), "Opening the starter must not count as practice completion");
 
@@ -331,13 +348,47 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId, v
         assert.equal(await compiler.evaluate(() => window.DotnetBrowserEditor.getCode()), unrelatedProgram);
 
         assert.ok(await compiler.evaluate(code => window.DotnetBrowserEditor.setCode(code), wrongProgram));
-        await openStarter.click();
+        await goToPractice.click();
+        await waitForStarterFocus();
         assert.equal(await compiler.evaluate(() => window.DotnetBrowserEditor.getCode()), wrongProgram,
             "Opening a task must preserve the existing lower editor code");
         await runCurrent.click();
         await waitForOutput(compiler, "synthetic Assert failed");
         assert.equal(await taskField.inputValue(), starter, "The starter must remain unchanged on failure");
         assert.ok(await verifiedField.isHidden(), "A failed run must not show a solution");
+        const separateDraft = await page.locator("#course-compiler").evaluate(frame =>
+            localStorage.getItem("dotnet-courses:practice-draft:" + frame.dataset.course + ":" + frame.dataset.lesson));
+        assert.equal(separateDraft, null, "The full editor file must be the only saved task draft in this scenario");
+
+        // Reload while the old task file is still in the editor. On reload, the
+        // real lesson source takes precedence over the synthetic fixture above.
+        await page.reload({waitUntil: "domcontentloaded"});
+        compiler = await getCompiler();
+        assert.equal(await compiler.evaluate(() => window.DotnetBrowserEditor.getCode()), wrongProgram,
+            "The full editor file must be restored as saved");
+        await updateTaskFile.waitFor();
+        await downloadPrevious.waitFor();
+        await watchEditorRuns();
+        await goToPractice.click();
+        await waitForStarterFocus();
+        assert.equal(await compiler.evaluate(() => window.DotnetBrowserEditor.getCode()), wrongProgram,
+            "Going to the old task file must wait for an explicit update before changing the source");
+        assert.equal(await fixtureRunCount(), "0", "Going to the restored file must not run the compiler");
+
+        const updatedTemplate = template.replace("synthetic Assert failed", "updated Assert diagnostic");
+        await setTemplate(updatedTemplate);
+        await updateTaskFile.click();
+        assert.equal(await compiler.evaluate(() => window.DotnetBrowserEditor.getCode()),
+            wrongProgram.replace("synthetic Assert failed", "updated Assert diagnostic") + "\n",
+            "An explicit update installs the new template and keeps the learner's method and imports");
+        assert.ok(await updateTaskFile.isHidden(), "The updated task file does not need another update");
+        assert.equal(await fixtureRunCount(), "0", "Updating the task file must not auto-run");
+        const [previousDownload] = await Promise.all([page.waitForEvent("download"), downloadPrevious.click()]);
+        assert.equal(previousDownload.suggestedFilename(), "Program.previous.cs");
+        assert.equal(readFileSync(await previousDownload.path(), "utf8"), wrongProgram,
+            "The complete old file can still be exported after the update");
+        await setTemplate(template);
+        assert.ok(await compiler.evaluate(code => window.DotnetBrowserEditor.setCode(code), wrongProgram));
 
         const example = page.locator(".snippet-actions button[data-example-id]").first();
         page.once("dialog", dialog => dialog.accept());
@@ -354,16 +405,7 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId, v
         compiler = await getCompiler();
         assert.equal(await compiler.evaluate(() => window.DotnetBrowserEditor.getCode()), demoSource);
         await installTemplate();
-        await compiler.evaluate(() => {
-            const editor = window.DotnetBrowserEditor;
-            const run = editor.run;
-            document.documentElement.dataset.fixtureRunCount = "0";
-            editor.run = () => {
-                document.documentElement.dataset.fixtureRunCount =
-                    String(Number(document.documentElement.dataset.fixtureRunCount) + 1);
-                return run();
-            };
-        });
+        await watchEditorRuns();
         page.once("dialog", dialog => dialog.accept());
         await openDraft.click();
         await waitForStarterFocus();
@@ -374,32 +416,11 @@ async function verifyLessonCompletion(browser, coursePath, lessonPath, taskId, v
 
         const latest = recovered.replace("=> 41;", "=> 40;");
         assert.ok(await compiler.evaluate(code => window.DotnetBrowserEditor.setCode(code), latest));
-        await openDraft.click();
+        await goToPractice.click();
+        await waitForStarterFocus();
         assert.equal(await compiler.evaluate(() => window.DotnetBrowserEditor.getCode()), latest,
             "Reopening must retain newer edits already in the editor");
-        assert.equal(await compiler.evaluate(() => document.documentElement.dataset.fixtureRunCount), "0",
-            "Opening a draft must not run the compiler");
-
-        const updatedTemplate = template.replace("synthetic Assert failed", "updated Assert diagnostic");
-        const setTemplate = code => practiceProgram.evaluate((element, text) => { element.textContent = text; }, code);
-        await setTemplate(updatedTemplate);
-        await openDraft.click();
-        assert.equal(await compiler.evaluate(() => window.DotnetBrowserEditor.getCode()), latest,
-            "Opening an old draft must wait for an explicit update");
-        const updateChecks = page.getByRole("button", { name: "Обновить проверки", exact: true });
-        const downloadPrevious = page.getByRole("button", { name: "Скачать прежний Program.cs", exact: true });
-        await updateChecks.click();
-        assert.equal(await compiler.evaluate(() => window.DotnetBrowserEditor.getCode()),
-            latest.replace("synthetic Assert failed", "updated Assert diagnostic"),
-            "An explicit update replaces only the checks and keeps the learner's method and imports");
-        assert.equal(await compiler.evaluate(() => document.documentElement.dataset.fixtureRunCount), "0",
-            "Updating checks must not auto-run");
-        const [previousDownload] = await Promise.all([page.waitForEvent("download"), downloadPrevious.click()]);
-        assert.equal(previousDownload.suggestedFilename(), "Program.previous.cs");
-        assert.equal(readFileSync(await previousDownload.path(), "utf8"), latest,
-            "The complete old file can still be exported after the update");
-        await setTemplate(template);
-        assert.ok(await compiler.evaluate(code => window.DotnetBrowserEditor.setCode(code), latest));
+        assert.equal(await fixtureRunCount(), "0", "Opening a draft must not run the compiler");
 
         await runCurrent.click();
         await waitForOutput(compiler, "synthetic Assert failed");

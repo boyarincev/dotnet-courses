@@ -95,7 +95,6 @@
   const taskId = (course === "memory" ? "ALLOC-TASK-" : "TASK-") + String(lesson).padStart(3, "0");
   const practiceDraftKey = "dotnet-courses:practice-draft:" + course + ":" + lesson;
   let lastLoadedCode = null;
-  let practiceButton = null;
   const provider = window.DotnetLessonSnippets;
 
   function bridge() {
@@ -142,12 +141,6 @@
     }
   }
 
-  function refreshPracticeButton() {
-    if (practiceButton) {
-      practiceButton.textContent = readPracticeDraft() ? "Открыть черновик" : "Открыть заготовку";
-    }
-  }
-
   function send(button, prepareCode, {run = true, replaceConfirmed = false} = {}) {
     const api = bridge();
     if (!api) {
@@ -179,7 +172,6 @@
       if (workingMethod) {
         try {
           localStorage.setItem(practiceDraftKey, workingMethod);
-          refreshPracticeButton();
           savedPractice = true;
         } catch {
           show(button, "Браузер не смог сохранить черновик задания. Код остался в редакторе. Для резервной копии скачай Program.cs.");
@@ -275,8 +267,6 @@
 
     const open = document.createElement("button");
     open.type = "button"; open.className = "button primary";
-    practiceButton = open;
-    refreshPracticeButton();
     actions.append(open);
 
     const migration = document.createElement("div");
@@ -286,42 +276,72 @@
     const migrationNote = document.createElement("span");
     migrationNote.className = "practice-feedback";
     migrationNote.setAttribute("role", "status");
-    const updateChecks = document.createElement("button");
-    updateChecks.type = "button";
-    updateChecks.className = "button";
-    updateChecks.textContent = "Обновить проверки";
+    const updateFile = document.createElement("button");
+    updateFile.type = "button";
+    updateFile.className = "button";
+    updateFile.textContent = "Обновить файл задания";
     const downloadPrevious = document.createElement("button");
     downloadPrevious.type = "button";
     downloadPrevious.className = "button";
     downloadPrevious.textContent = "Скачать прежний Program.cs";
-    migrationActions.append(updateChecks, downloadPrevious, migrationNote);
+    migrationActions.append(downloadPrevious, migrationNote);
     migration.append(migrationActions);
     actions.insertAdjacentElement("afterend", migration);
 
     let previousProgram = null;
+
+    function needsUpdate(source) {
+      return !matchesPracticeSource(templateElement.textContent, source, taskId);
+    }
+
+    function refreshPracticeActions(current = bridge()?.getCode()) {
+      const taskOpen = !!current && !!extractTaskSource(current, taskId);
+      const label = taskOpen ? "К коду задания" : readPracticeDraft() ? "Открыть черновик" : "Открыть заготовку";
+      if (open.textContent !== label) open.textContent = label;
+
+      const showUpdate = taskOpen && needsUpdate(current);
+      if (showUpdate && !updateFile.isConnected) {
+        migrationActions.prepend(updateFile);
+        migrationNote.textContent = "Файл в редакторе отличается от актуального задания. Обновление перенесёт твой метод и директивы using в новый Program.cs.";
+      } else if (!showUpdate && updateFile.isConnected) {
+        updateFile.remove();
+        migrationNote.textContent = "";
+      }
+      migration.hidden = !showUpdate && previousProgram === null;
+    }
+
+    function onEditorInput(event) {
+      if (event.target.id === "code-editor") refreshPracticeActions(event.target.value);
+    }
+
+    function connectPracticeEditor() {
+      frame.contentDocument?.addEventListener("input", onEditorInput);
+      refreshPracticeActions();
+    }
+
     downloadPrevious.addEventListener("click", () => {
       const current = bridge()?.getCode();
-      if (current && extractTaskSource(current, taskId) &&
-          !matchesPracticeSource(templateElement.textContent, current, taskId)) previousProgram = current;
-      if (previousProgram) {
-        window.DotnetLearning.download("Program.previous.cs", previousProgram);
+      const file = current && extractTaskSource(current, taskId) && needsUpdate(current) ? current : previousProgram;
+      if (file) {
+        window.DotnetLearning.download("Program.previous.cs", file);
         show(downloadPrevious, "Прежний файл сохранён в Program.previous.cs.");
       }
     });
-    updateChecks.addEventListener("click", () => {
-      if (send(updateChecks, current => {
+    updateFile.addEventListener("click", () => {
+      let replacedProgram;
+      if (send(updateFile, current => {
         const currentMethod = extractTaskSource(current, taskId);
         if (!currentMethod) {
-          show(updateChecks, "Открой черновик задания, чтобы обновить проверки.");
+          show(updateFile, "Открой черновик, чтобы обновить файл задания.");
           return null;
         }
-        const template = templateElement.textContent;
-        if (matchesPracticeSource(template, current, taskId)) return current;
-        previousProgram = current;
-        return buildTaskProgram(template, currentMethod, taskId);
-      }, {run: false, replaceConfirmed: true})) {
-        updateChecks.remove();
-        show(downloadPrevious, "Актуальные проверки загружены. Запусти текущий код для проверки.");
+        if (!needsUpdate(current)) return current;
+        replacedProgram = current;
+        return buildTaskProgram(templateElement.textContent, currentMethod, taskId);
+      }, {run: false, replaceConfirmed: true}) && replacedProgram) {
+        previousProgram = replacedProgram;
+        refreshPracticeActions();
+        show(downloadPrevious, "Файл задания обновлён. Запусти текущий код для проверки.");
       }
     });
 
@@ -382,26 +402,22 @@
 
     open.addEventListener("click", () => {
       send(open, current => {
-        if (extractTaskSource(current, taskId)) {
-          if (matchesPracticeSource(templateElement.textContent, current, taskId)) return current;
-          previousProgram = current;
-          migrationActions.prepend(updateChecks);
-          migration.hidden = false;
-          show(updateChecks, "Проверки в открытом файле отличаются от версии урока. При обновлении сохранятся метод и директивы using.");
-          return null;
-        }
+        if (extractTaskSource(current, taskId)) return current;
         const source = readPracticeDraft() ?? task.defaultValue;
         return buildTaskProgram(templateElement.textContent, source, taskId);
       }, {run: false});
     });
 
+    frame.addEventListener("load", connectPracticeEditor);
+    connectPracticeEditor();
     window.addEventListener("storage", event => {
-      if (event.key === null || event.key === practiceDraftKey) refreshPracticeButton();
+      if (event.key === null || event.key === practiceDraftKey) refreshPracticeActions();
     });
     window.addEventListener("message", event => {
+      if (event.origin !== location.origin || event.source !== frame.contentWindow) return;
       const result = event.data;
-      if (event.origin !== location.origin || event.source !== frame.contentWindow ||
-          result?.type !== "dotnet-courses:practice-run-success") return;
+      if (result?.type === "dotnet-courses:compiler-state" && result.state === "ready") connectPracticeEditor();
+      if (result?.type !== "dotnet-courses:practice-run-success") return;
       if (!isSuccessfulPracticeRun(templateElement.textContent, result.source, result.output, taskId)) {
         if (typeof result.source === "string" && result.source.includes("// BEGIN " + taskId) &&
             window.DotnetLearning.progress.get("lesson", course, lesson) !== true) {
